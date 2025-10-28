@@ -1,7 +1,7 @@
-import OutletLoginScreen from "./views/screens/OutletLoginScreen";
+import MediaScreen from "./views/screens/MediaScreen";
 
 export default function Index() {
   return (
-    <OutletLoginScreen/>
+    <MediaScreen/>
   );
 }
