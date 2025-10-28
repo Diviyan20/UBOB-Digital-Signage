@@ -1,0 +1,8 @@
+{
+  "outlets": [
+    { "code": "1234", "name": "Outlet One" },
+    { "code": "5678", "name": "Outlet Two" },
+    { "code": "9012", "name": "Outlet Three" },
+    { "code": "3456", "name": "Outlet Four" }
+  ]
+}
