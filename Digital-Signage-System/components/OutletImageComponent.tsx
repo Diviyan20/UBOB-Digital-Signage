@@ -7,7 +7,7 @@ interface ImageItem {
 }
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
-  endpoint = "http://127.0.0.1:5000/outlet_image",
+  endpoint = "http://10.0.2.2:5000/outlet_image",
 }) => {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
