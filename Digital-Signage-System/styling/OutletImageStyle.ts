@@ -1,26 +1,24 @@
 import { Dimensions, StyleSheet } from "react-native";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 export const OutletImageStyle = StyleSheet.create({
   container: {
-    width: "100%",
-    height: "30%",
+    width: width,
+    height: "20%",
     justifyContent: "center",
-    alignItems: "center",
+    alignItems: "center"
   },
 
   cardFrame: {
-    width: "95%",
-    height: "100%",
-    borderRadius: 16,
+    width: "100%",
+    height: "90%",
     backgroundColor: "#fff",
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8,
   },
 
   marqueeWrapper: {
