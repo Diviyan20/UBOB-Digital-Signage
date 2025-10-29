@@ -12,7 +12,7 @@ interface MediaItem {
 }
 
 const ImageComponent: React.FC<{ endpoint?: string }> = ({
-  endpoint = "http://127.0.0.1:5000/current_media",
+  endpoint = "http://10.0.2.2:5000/current_media",
 }) => {
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [nextMedia, setNextMedia] = useState<MediaItem | null>(null);

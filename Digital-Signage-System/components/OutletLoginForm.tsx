@@ -18,7 +18,7 @@ const OutletLoginForm: React.FC = () => {
 
         try {
             setLoading(true);
-            const response = await fetch("http://127.0.0.1:5000/get_outlets", {
+            const response = await fetch("http://10.0.2.2:5000/get_outlets", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ outlet_id: outletId })

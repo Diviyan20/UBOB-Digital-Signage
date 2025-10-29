@@ -3,7 +3,7 @@
     "name": "Digital-Signage-System",
     "slug": "Digital-Signage-System",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "icon": "./assets/images/icon.png",
     "scheme": "digitalsignagesystem",
     "userInterfaceStyle": "automatic",
