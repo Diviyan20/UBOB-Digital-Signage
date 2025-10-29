@@ -1,45 +1,27 @@
 import { Dimensions, StyleSheet } from "react-native";
 
-const { width } = Dimensions.get("window");
-const isLargeScreen = width > 1000;
-
-// Flexible columns — 4 per row on large screens, 2 per row on smaller
-const cardWidth = isLargeScreen ? Math.min(900, width * 0.6) : width * 0.92;
-
-const imageHeight = Math.min(800, cardWidth * 0.66);
+const { width, height } = Dimensions.get("window");
 
 export const MediaStyles = StyleSheet.create({
   
-container :{
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 10,
-    backgroundColor: "#fff",
-},
-
   card: {
-    width: cardWidth,
-    maxWidth: "40%",
-    alignSelf: "center",
+    width: '40%', // Reduced from 70%
+    maxWidth: 700, // Reduced from 800
     backgroundColor: "#fff",
-    borderRadius: 16,
-    margin: 12,
-    paddingBottom: 12,
-    overflow: "hidden",
-    alignItems: "stretch",
+    borderRadius: 20,
+    padding: 3, // Reduced from 20
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 
   image: {
     width: "100%",
-    height: imageHeight,
+    height: height * 0.58, // Increased from 0.35 to 0.4
     resizeMode: "contain",
-    backgroundColor: "#f2f2f2",
+    marginBottom: 5,
   },
 
   placeholderText: {
@@ -51,31 +33,29 @@ container :{
 
   textContainer: {
     width: "100%",
-    padding: 10,
+    alignItems: "center",
   },
 
   title: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 22,
+    fontWeight: "700",
     color: "#111",
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: "center",
   },
 
   category: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#007AFF",
-    marginBottom: 6,
+    marginBottom: 4,
   },
 
   description: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#444",
-    marginBottom: 6,
-  },
-
-  date: {
-    fontSize: 13,
-    color: "#777",
+    marginBottom: 2,
+    textAlign: "center",
+    lineHeight: 15,
   },
 
   emptyContainer: {
@@ -83,6 +63,7 @@ container :{
     justifyContent: "center",
     alignItems: "center",
   },
+  
   emptyText: {
     fontSize: 16,
     color: "#777",

@@ -10,7 +10,6 @@ const OutletLoginForm: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(false);
     const [errorVisible, setErrorVisible] = useState(false);
 
-
     const handleLogin = async () => {
         if (!outletId.trim()) {
             console.warn("Missing Field", "Please enter your Outlet ID.");
@@ -28,7 +27,7 @@ const OutletLoginForm: React.FC = () => {
             const data = await response.json() as { is_valid: boolean}; // Read JSON output for 'is_valid'
             if (response.ok) {
                 if (data.is_valid) {
-                    router.navigate('/screens/MediaScreen')
+                    router.replace('/screens/MediaScreen')
                 }
                 else {
                     setErrorVisible(true);
@@ -75,9 +74,10 @@ const OutletLoginForm: React.FC = () => {
                 <ErrorOverlayComponent
                     visible={errorVisible}
                     errorType="invalid_outlet"
-                    onRetry={() => setErrorVisible(false)}
+                    onRetry={()=>{
+                        setErrorVisible(false);
+                    }}
                 />
-
             )}
         </>
     );

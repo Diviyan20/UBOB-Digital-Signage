@@ -13,6 +13,10 @@ interface ErrorOverlayProps {
 const ErrorOverlayComponent: React.FC<ErrorOverlayProps>= ({ errorType, visible, onRetry }) => {
     if (!visible) return null
 
+    onRetry = async () =>{
+
+    }
+
     /**
      * Creating 2 separate Error Overlays based on Error type
      * 2 Error Typs: Invalid Outlet Code & Error Fetching Media
