@@ -11,28 +11,22 @@ const MediaScreen = () => {
       {/* Top section - Promo card */}
       <View style={styles.promoSection}>
         <ImageComponent />
-      </View>
-      <View style ={styles.outletSpacing}></View>
-      <OutletDisplayComponent/>
-    </View>
+      </View>  
+    <OutletDisplayComponent />
+  </View>
+    
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    padding: 20,
-    paddingBottom: 30,
+    backgroundColor: "#ffff00",
   },
   promoSection: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  outletSpacing: {
-    height: 110,
   },
 });
 
