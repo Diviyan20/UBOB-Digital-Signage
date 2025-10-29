@@ -114,7 +114,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
               </Text>
             )}
             {media.date_start && (
-              <Text style={styles.date}>
+              <Text>
                 {new Date(media.date_start).toLocaleDateString()}
               </Text>
             )}

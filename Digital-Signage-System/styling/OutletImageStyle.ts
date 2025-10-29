@@ -1,35 +1,28 @@
-import { StyleSheet } from "react-native";
+import { Dimensions, StyleSheet } from "react-native";
 
-
-// choose item width relative to screen so it scales on different displays
-export 
-const CARD_H = 180;
+const { width } = Dimensions.get("window");
 
 export const OutletImageStyle = StyleSheet.create({
   container: {
-    position: "absolute",
-    bottom: 10,
     width: "100%",
+    height: "30%",
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "flex-end",
   },
 
   cardFrame: {
-    width: "80%",
-    height: CARD_H,
-    borderRadius: 20,
-    backgroundColor: "#ffff",
+    width: "95%",
+    height: "100%",
+    borderRadius: 16,
+    backgroundColor: "#fff",
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 6,
-    alignItems: "center",
-    justifyContent: "center",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 
- 
   marqueeWrapper: {
     width: "100%",
     height: "100%",
@@ -40,14 +33,14 @@ export const OutletImageStyle = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     height: "100%",
+    paddingHorizontal: 12,
   },
 
-
   itemTile: {
-    height: "85%",
+    height: "75%",
     aspectRatio: 1.3,
-    marginRight: 10,
-    borderRadius: 16,
+    marginHorizontal: 8,
+    borderRadius: 12,
     overflow: "hidden",
   },
 
@@ -55,11 +48,13 @@ export const OutletImageStyle = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
-    borderRadius: 14,
   },
 
   placeholder: {
     fontSize: 16,
-    color: "gray",
+    color: "#999",
+    textAlign: "center",
+    textAlignVertical: "center",
+    flex: 1,
   },
 });
