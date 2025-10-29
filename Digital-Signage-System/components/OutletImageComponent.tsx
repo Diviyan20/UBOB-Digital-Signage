@@ -1,4 +1,4 @@
-import { OutletImageStyle as styles } from "@/app/styling/OutletImageStyle";
+import { OutletImageStyle as styles } from "@/styling/OutletImageStyle";
 import React, { useEffect, useState } from "react";
 import { Alert, Animated, Dimensions, Easing, Image, Text, View } from "react-native";
 

@@ -1,5 +1,5 @@
+import OutletLoginForm from "@/components/OutletLoginForm";
 import React from "react";
-import OutletLoginForm from "../components/OutletLoginForm";
 
 const OutletLoginScreen: React.FC = () => {
     return(

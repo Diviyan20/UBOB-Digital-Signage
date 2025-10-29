@@ -1,4 +1,4 @@
-import { MediaStyles as styles } from "@/app/styling/MediaStyles";
+import { MediaStyles as styles } from "@/styling/MediaStyles";
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Animated, Easing, Image, Text, View } from "react-native";
 
