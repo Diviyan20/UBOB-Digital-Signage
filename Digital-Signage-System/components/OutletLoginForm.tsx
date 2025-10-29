@@ -1,6 +1,7 @@
-import { OutletLoginStyles as styles } from '@/app/styling/OutletLoginStyles';
+import { OutletLoginStyles as styles } from '@/styling/OutletLoginStyles';
+import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import ErrorOverlayComponent from './ErrorOverlayComponent';
 
 
@@ -27,7 +28,7 @@ const OutletLoginForm: React.FC = () => {
             const data = await response.json() as { is_valid: boolean}; // Read JSON output for 'is_valid'
             if (response.ok) {
                 if (data.is_valid) {
-                    //navigation.navigate("MediaScreen")
+                    router.navigate('/screens/MediaScreen')
                 }
                 else {
                     setErrorVisible(true);
@@ -66,9 +67,9 @@ const OutletLoginForm: React.FC = () => {
                     keyboardType="numeric" // since it's an ID (number)
                     autoCapitalize="none"
                 />
-                <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-                    <Text style={styles.loginButtonText}>Log In</Text>
-                </TouchableOpacity>
+                <Pressable  style={styles.loginButton} onPress={handleLogin}>
+                <Text style={styles.loginButtonText}>Log In</Text>
+                </Pressable>
             </View>
             {errorVisible && (
                 <ErrorOverlayComponent

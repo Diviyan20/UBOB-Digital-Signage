@@ -1,6 +1,6 @@
-import ImageComponent from "@/app/views/components/ImageComponent";
+import ImageComponent from "@/components/ImageComponent";
+import OutletDisplayComponent from "@/components/OutletImageComponent";
 import React from 'react';
-import OutletDisplayComponent from "../components/OutletImageComponent";
 
 const MediaScreen: React.FC = () => {
     return(

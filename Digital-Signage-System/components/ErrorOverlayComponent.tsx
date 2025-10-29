@@ -1,4 +1,4 @@
-import { ErrorOverlayStyle as styles } from '@/app/styling/ErrorOverlayStyle';
+import { ErrorOverlayStyle as styles } from '@/styling/ErrorOverlayStyle';
 import { Button, Overlay } from '@rneui/themed';
 import React from 'react';
 import { Text } from 'react-native';
