@@ -1,6 +1,7 @@
 import { MediaStyles as styles } from "@/styling/MediaStyles";
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Animated, Easing, Image, Text, View } from "react-native";
+import { Animated, Easing, Image, Text, View } from "react-native";
+import ErrorOverlayComponent from "./ErrorOverlayComponent";
 
 interface MediaItem {
   name?: string;
@@ -10,25 +11,22 @@ interface MediaItem {
   date_end?: string;
 }
 
-
 const ImageComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = "http://127.0.0.1:5000/current_media",
 }) => {
   const [media, setMedia] = useState<MediaItem | null>(null);
-  const[nextMedia, setNextMedia] = useState<MediaItem | null>(null);
+  const [nextMedia, setNextMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [errorVisible, setErrorVisible] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const isTransitioning = useRef(false);
-
 
   const fetchCurrentMedia = async () => {
     try {
       if (!media) setLoading(true);
 
       const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const data = await response.json();
 
@@ -36,18 +34,12 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
         isTransitioning.current = true;
         setNextMedia(data);
         fadeOutIn(data);
-      } else if (!media){
+      } else if (!media) {
         setMedia(data);
       }
-      
     } catch (error) {
       console.error("Media Fetch Error:", error);
-      if (!media) {
-        Alert.alert(
-          "Connection Error",
-          "Could not load media. Please try again later."
-        );
-      }
+      if (!media) setErrorVisible(true);
     } finally {
       setLoading(false);
     }
@@ -60,10 +52,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
       easing: Easing.linear,
       useNativeDriver: true,
     }).start(() => {
-      // After fade out completes, swap image
       setMedia(newData);
-
-      // Fade back in
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 400,
@@ -77,18 +66,38 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
 
   useEffect(() => {
     fetchCurrentMedia();
-    const interval = setInterval(fetchCurrentMedia, 5000); // poll every 5s
+    const interval = setInterval(fetchCurrentMedia, 5000);
     return () => clearInterval(interval);
   }, []);
 
+  // --- Handle loading or error states ---
   if (!media) {
+    if (errorVisible) {
+      return (
+        <ErrorOverlayComponent
+          visible={errorVisible}
+          errorType="media_error"
+          onRetry={async () => {
+            setErrorVisible(false);
+            setLoading(true);
+            try {
+              await fetchCurrentMedia();
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      );
+    }
+
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No media available.</Text>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>Loading media...</Text>
       </View>
     );
   }
 
+  // --- Main render once media exists ---
   const imageUri =
     typeof media.image === "string" && media.image.length > 50
       ? media.image
@@ -106,19 +115,17 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
         <Text style={styles.placeholderText}>No Image</Text>
       )}
 
-          <View style={styles.textContainer}>
-            <Text style={styles.title}>{media.name || "Untitled"}</Text>
-            {media.description && (
-              <Text style={styles.description} numberOfLines={3}>
-                {media.description}
-              </Text>
-            )}
-            {media.date_start && (
-              <Text>
-                {new Date(media.date_start).toLocaleDateString()}
-              </Text>
-            )}
-          </View>
+      <View style={styles.textContainer}>
+        <Text style={styles.title}>{media.name || "Untitled"}</Text>
+        {media.description && (
+          <Text style={styles.description} numberOfLines={3}>
+            {media.description}
+          </Text>
+        )}
+        {media.date_start && (
+          <Text>{new Date(media.date_start).toLocaleDateString()}</Text>
+        )}
+      </View>
     </Animated.View>
   );
 };
