@@ -3,6 +3,8 @@ import time
 import threading
 import requests
 import pandas as pd
+import base64
+import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,12 +13,38 @@ BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
 
+STATIC_DIR = os.path.join(os.getcwd(), "static")
+os.makedirs(STATIC_DIR, exist_ok=True)
 
 # Global index tracker
 current_index = 0
 media_items_cache = []
 carousel_active = False
 
+
+def save_base64_image_to_static(base64_data: str) -> str:
+    """Decode base64 -> save as .jpg -> return public URL"""
+    try:
+        cleaned = (
+            base64_data.replace("\n", "")
+            .replace(" ", "")
+            .replace("\r", "")
+            .strip()
+        )
+        if cleaned.startswith("data:image"):
+            cleaned = cleaned.split(",", 1)[1]
+
+        image_bytes = base64.b64decode(cleaned)
+        file_name = f"media_{uuid.uuid4().hex}.jpg"
+        file_path = os.path.join(STATIC_DIR, file_name)
+
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+
+        return f"http://10.0.2.2:5000/static/{file_name}"
+    except Exception as e:
+        print(f"Image decode error: {e}")
+        return "https://via.placeholder.com/800x600?text=No+Media"
 
 # Fetches all media/news from Odoo and returns a formatted DataFrame.
 def fetch_media_df() -> pd.DataFrame | None:
@@ -35,24 +63,15 @@ def fetch_media_df() -> pd.DataFrame | None:
         for block in data.get("data", []):  
             promotions = block.get("promotion", [])
             for item in promotions:
-                raw_img = item.get("image", "") or ""
-                # Clean and normalize
-                cleaned_img = (
-                    raw_img.replace("\n", "")
-                    .replace(" ", "")
-                    .replace("\r", "")
-                    .strip()
-                )
-                # Ensure it has the prefix
-                if cleaned_img and not cleaned_img.startswith("data:image"):
-                    cleaned_img = f"data:image/jpeg;base64,{cleaned_img}"
+                 raw_img = item.get("image", "") or ""
+                 image_url = save_base64_image_to_static(raw_img) if raw_img else None
 
-                media_items.append({
+            media_items.append({
                     "name": item.get("name"),
                     "date_start": item.get("date_start"),
                     "date_end": item.get("date_end"),
                     "description": item.get("description"),
-                    "image": cleaned_img,
+                    "image": image_url,
                 })
 
         df_media = pd.DataFrame(media_items)

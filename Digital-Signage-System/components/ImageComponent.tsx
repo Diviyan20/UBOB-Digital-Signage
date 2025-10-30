@@ -99,9 +99,9 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
 
   // --- Main render once media exists ---
   const imageUri =
-    typeof media.image === "string" && media.image.length > 50
-      ? media.image
-      : null;
+      typeof media.image === "string" && media.image.startsWith("http")
+        ? media.image
+        : null;
 
   return (
     <Animated.View style={[styles.card, { opacity: fadeAnim }]}>

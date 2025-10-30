@@ -97,9 +97,9 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
           >
             {[...images, ...images].map((item, index) => {
       const imageUri =
-        typeof item.image === "string" && item.image.length > 50
-          ? item.image
-          : null;
+      typeof item.image === "string" && item.image.startsWith("http")
+        ? item.image
+        : null;
 
               return(
                 <View style={styles.itemTile} key={index}>

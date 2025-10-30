@@ -7,7 +7,8 @@ export const OutletImageStyle = StyleSheet.create({
     width: width,
     height: "20%",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    position: "relative",
   },
 
   cardFrame: {
