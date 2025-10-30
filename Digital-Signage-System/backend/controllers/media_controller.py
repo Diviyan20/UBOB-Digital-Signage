@@ -20,7 +20,8 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 
 # --- GLOBAL CACHE ---
 current_index = 0
-media_items_cache = []
+media_cache = []
+cache_loaded = False
 carousel_active = False
 
 
@@ -52,7 +53,12 @@ def save_image_if_new(base64_data):
 # 🔹 Fetch media from Odoo
 # ----------------------------------------------------------
 def get_media_json():
+    global media_cache, cache_loaded
     try:
+        if cache_loaded and media_cache:
+            print("✅ Returning cached media list")
+            return media_cache
+
         print("Fetching promotion media from Odoo...")
         response = requests.get(f"{BASE_URL}/api/get/news", headers=HEADERS, timeout=20)
         response.raise_for_status()
@@ -86,10 +92,12 @@ def get_media_json():
                 url = f"/static/media/{file}"
                 if not any(i["image"] == url for i in media_items):
                     media_items.append({"image": url})
-
+        
+        media_cache = media_items
+        cache_loaded = True
         print(f"✅ {len(media_items)} media items available.")
-        return media_items
+        return media_cache
 
     except Exception as e:
         print(f"Error fetching media: {e}")
-        return []
+        return media_cache or []

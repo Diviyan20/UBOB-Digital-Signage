@@ -6,7 +6,7 @@ interface ImageItem {
   image?: string | null;
 }
 
-const SERVER_URL = "http://10.0.2.2:5000";
+const SERVER_URL = "http://localhost:5000";
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = `${SERVER_URL}/outlet_image`,
