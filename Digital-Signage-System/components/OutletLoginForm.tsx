@@ -5,6 +5,9 @@ import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import ErrorOverlayComponent from './ErrorOverlayComponent';
 
 
+
+const SERVER_URL = "http://10.0.2.2:5000";
+
 const OutletLoginForm: React.FC = () => {
     const [outletId, setOutletId] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
@@ -18,7 +21,7 @@ const OutletLoginForm: React.FC = () => {
 
         try {
             setLoading(true);
-            const response = await fetch("http://10.0.2.2:5000/get_outlets", {
+            const response = await fetch(`${SERVER_URL}/get_outlets`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ outlet_id: outletId })
