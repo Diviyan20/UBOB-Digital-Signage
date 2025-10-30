@@ -1,6 +1,4 @@
 import os
-import time
-import threading
 import requests
 import base64
 import hashlib
@@ -95,36 +93,3 @@ def get_media_json():
     except Exception as e:
         print(f"Error fetching media: {e}")
         return []
-
-
-# ----------------------------------------------------------
-# 🔹 Carousel logic
-# ----------------------------------------------------------
-def start_image_carousel(media_list: list, interval: int = 5):
-    global media_items_cache, current_index, carousel_active
-    media_items_cache = media_list
-    current_index = 0
-    carousel_active = True
-
-    def loop():
-        global current_index
-        while carousel_active and media_items_cache:
-            current_item = media_items_cache[current_index]
-            print(f"🖼️ Showing image index {current_index}: {current_item.get('name', 'Unnamed')}")
-            time.sleep(interval)
-            current_index = (current_index + 1) % len(media_items_cache)
-
-    threading.Thread(target=loop, daemon=True).start()
-
-
-def stop_media_carousel():
-    global carousel_active
-    carousel_active = False
-    print("Carousel stopped")
-
-
-def get_current_media():
-    global current_index, media_items_cache
-    if not media_items_cache:
-        return None
-    return media_items_cache[current_index]
