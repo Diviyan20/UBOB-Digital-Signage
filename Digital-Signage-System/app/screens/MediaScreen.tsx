@@ -6,6 +6,7 @@ import { Dimensions, StyleSheet, View } from "react-native";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const MediaScreen = () => {
+  
   return (
     <View style={styles.container}>
       {/* Top section - Promo card */}
@@ -21,7 +22,7 @@ const MediaScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffff00",
+    backgroundColor: "#fff",
   },
   promoSection: {
     flex: 1,
