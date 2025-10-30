@@ -6,8 +6,10 @@ interface ImageItem {
   image?: string | null;
 }
 
+const SERVER_URL = "http://10.0.2.2:5000";
+
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
-  endpoint = "http://10.0.2.2:5000/outlet_image",
+  endpoint = `${SERVER_URL}/outlet_image`,
 }) => {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -50,23 +52,23 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
     const totalWidth = images.length * (ITEM_W + 18);
     const duration = totalWidth * 25;
 
-    const loopScroll = () =>{
+    const loopScroll = () => {
       scrollX.setValue(0);
-    Animated.timing(scrollX, {
-      toValue: -totalWidth,
-      duration,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) loopScroll();
-    });
-      
+      Animated.timing(scrollX, {
+        toValue: -totalWidth,
+        duration,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) loopScroll();
+      });
+
     };
 
     loopScroll();
 
     return () => scrollX.stopAnimation();
-    
+
   }, [images]);
 
   if (loading) {
@@ -96,23 +98,28 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
             ]}
           >
             {[...images, ...images].map((item, index) => {
-      const imageUri =
-      typeof item.image === "string" && item.image.startsWith("http")
-        ? item.image
-        : null;
+              const getImageUrl = (imagePath: string | null | undefined): string | null => {
+                if (!imagePath) return null;
+                if (imagePath.startsWith("http")) return imagePath;
+                return `${SERVER_URL}${imagePath}`;
+              };
 
-              return(
+              return (
                 <View style={styles.itemTile} key={index}>
-          {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.image} />
-          ) : (
-            <Text style={styles.placeholder}>No Image</Text>
-          )}
+                  {getImageUrl(item.image) ? (
+                    <Image
+                      source={{ uri: getImageUrl(item.image)! }}
+                      style={styles.image}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Text style={styles.placeholder}>No Image</Text>
+                  )}
+                </View>
+              );
+            })}
+          </Animated.View>
         </View>
-      );
-    })}
-  </Animated.View>
-    </View>
       </View>
     </View>
   );

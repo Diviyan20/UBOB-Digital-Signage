@@ -11,8 +11,10 @@ interface MediaItem {
   date_end?: string;
 }
 
+const SERVER_URL = "http://10.0.2.2:5000";
+
 const ImageComponent: React.FC<{ endpoint?: string }> = ({
-  endpoint = "http://10.0.2.2:5000/current_media",
+  endpoint = `${SERVER_URL}/current_media`,
 }) => {
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [nextMedia, setNextMedia] = useState<MediaItem | null>(null);
@@ -98,22 +100,25 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   }
 
   // --- Main render once media exists ---
-  const imageUri =
-      typeof media.image === "string" && media.image.startsWith("http")
-        ? media.image
-        : null;
+  const getImageUrl = (imagePath: string | null | undefined): string | null => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("http")) return imagePath;
+    return `${SERVER_URL}${imagePath}`;
+  };
 
   return (
     <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-      {imageUri ? (
+
+      {getImageUrl(media.image) ? (
         <Image
-          source={{ uri: imageUri }}
+          source={{ uri: getImageUrl(media.image)! }}
           style={styles.image}
           resizeMode="contain"
         />
       ) : (
         <Text style={styles.placeholderText}>No Image</Text>
       )}
+
 
       <View style={styles.textContainer}>
         <Text style={styles.title}>{media.name || "Untitled"}</Text>

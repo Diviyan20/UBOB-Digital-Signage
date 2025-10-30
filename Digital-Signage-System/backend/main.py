@@ -12,7 +12,7 @@ from controllers.outlet_controllers import get_outlets_json, get_outlet_images
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static")
 CORS(app)
 
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
@@ -136,7 +136,10 @@ def log_response_info(response):
 
 @app.route("/static/<path:filename>")
 def static_files(filename):
-    return send_from_directory("static", filename)
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if not os.path.exists(os.path.join(static_dir, filename)):
+        print(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
+    return send_from_directory(static_dir, filename)
 
 # =============================
 # 🚀 RUN SERVER
