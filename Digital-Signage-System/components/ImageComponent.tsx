@@ -1,6 +1,6 @@
-import { MediaStyles as styles } from "@/styling/MediaStyles";
+import { MediaStyles } from "@/styling/MediaStyles";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Image, Text, View } from "react-native";
+import { Animated, Easing, Image, Text, View, useWindowDimensions } from "react-native";
 import ErrorOverlayComponent from "./ErrorOverlayComponent";
 
 interface MediaItem {
@@ -16,6 +16,9 @@ const SERVER_URL = "http://10.0.2.2:5000";
 const ImageComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = `${SERVER_URL}/current_media`,
 }) => {
+  const { width, height } = useWindowDimensions();
+  const styles = MediaStyles(width, height);
+
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [nextMedia, setNextMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -72,7 +75,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // --- Handle loading or error states ---
+  // --- Loading or error state ---
   if (!media) {
     if (errorVisible) {
       return (
@@ -99,7 +102,6 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     );
   }
 
-  // --- Main render once media exists ---
   const getImageUrl = (imagePath: string | null | undefined): string | null => {
     if (!imagePath) return null;
     if (imagePath.startsWith("http")) return imagePath;
@@ -108,7 +110,6 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
 
   return (
     <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-
       {getImageUrl(media.image) ? (
         <Image
           source={{ uri: getImageUrl(media.image)! }}
@@ -118,7 +119,6 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
       ) : (
         <Text style={styles.placeholderText}>No Image</Text>
       )}
-
 
       <View style={styles.textContainer}>
         <Text style={styles.title}>{media.name || "Untitled"}</Text>
