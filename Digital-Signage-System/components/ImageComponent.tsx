@@ -111,8 +111,6 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   // --- Initial Fetch ---
   useEffect(() => {
     fetchMediaList();
-    const refresh = setInterval(fetchMediaList, 15000); // refresh media every 15s
-    return () => clearInterval(refresh);
   }, []);
 
   // --- Helpers ---
