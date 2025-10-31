@@ -1,9 +1,9 @@
 import os
 import requests
-import base64
-import hashlib
-import pandas as pd
+import io,base64
 from dotenv import load_dotenv
+from flask import send_file, abort
+from PIL import Image as PILImage
 
 load_dotenv()
 
@@ -11,42 +11,20 @@ BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
 
-# --- PATH SETUP ---
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTLET_DIR = os.path.join(BASE_DIR, "static", "outlets")
-os.makedirs(OUTLET_DIR, exist_ok=True)
+payload = {
+    "ids":[],
+}
 
+outlet_cache = []
+cache_loaded = False
 
-# ----------------------------------------------------------
-# 🔹 Save image if new
-# ----------------------------------------------------------
-def save_image_if_new(base64_data):
-    try:
-        base64_data = base64_data.split(",")[-1]
-        image_bytes = base64.b64decode(base64_data)
-        img_hash = hashlib.md5(image_bytes).hexdigest()
-        filename = f"{img_hash}.jpg"
-        path = os.path.join(OUTLET_DIR, filename)
-
-        if os.path.exists(path):
-            return f"/static/outlets/{filename}"
-
-        with open(path, "wb") as f:
-            f.write(image_bytes)
-
-        return f"/static/outlets/{filename}"
-    except Exception as e:
-        print(f"Failed to save outlet image: {e}")
-        return None
-
-
-# ----------------------------------------------------------
-# 🔹 Fetch outlet list
-# ----------------------------------------------------------
-def fetch_outlets_df() -> pd.DataFrame | None:
+# -----------------
+# Fetch list of all outlets
+# -----------------
+def fetch_outlets():
     try:
         print("Fetching outlets from Odoo...")
-        response = requests.post(f"{BASE_URL}/api/get/outlet/regions", headers=HEADERS, json={"ids": []}, timeout=15)
+        response = requests.post(f"{BASE_URL}/api/get/outlet/regions", headers=HEADERS, json=payload, timeout=15)
         print(f"📡 Odoo Response Status: {response.status_code}")
         data = response.json()
 
@@ -74,27 +52,29 @@ def fetch_outlets_df() -> pd.DataFrame | None:
                     "merchant_id": outlet.get("entity_merchant_id"),
                 })
 
-        df_outlets = pd.DataFrame(outlets)
-        print(f"✅ Retrieved {len(df_outlets)} outlets successfully.")
-        return df_outlets
+        return outlets
 
     except requests.exceptions.Timeout:
         print("Timeout while connecting to Odoo API.")
         return None
 
 
-def get_outlets_json() -> list[dict]:
-    df = fetch_outlets_df()
-    if df is None or df.empty:
+def get_outlets_json():
+    outlets = fetch_outlets()
+    if outlets is None or not outlets:
         return []
-    return df.to_dict(orient="records")
+    return outlets
 
 
-# ----------------------------------------------------------
-# 🔹 Fetch outlet images
-# ----------------------------------------------------------
+# -------------------
+# Fetch outlet images
+# -------------------
 def get_outlet_images():
+    global outlet_cache, cache_loaded
     try:
+        if cache_loaded and len(outlet_cache) > 0:
+            print("Using cached outlet images")
+            return outlet_cache
         print("Fetching outlet images from Odoo...")
         response = requests.post(f"{BASE_URL}/api/order/session", headers=HEADERS, json={"ids": []}, timeout=20)
         response.raise_for_status()
@@ -105,24 +85,57 @@ def get_outlet_images():
 
         outlet_images = []
         for item in data.get("data", []):
-            raw_img = (item.get("image") or "").replace("\n", "").replace(" ", "").replace("\r", "").strip()
-            if not raw_img:
+            img_data = (item.get("image") or "").replace("\n", "").replace(" ", "").replace("\r", "").strip()
+            if not img_data:
                 continue
 
-            image_url = save_image_if_new(raw_img)
-            if image_url:
-                outlet_images.append({"image": image_url})
+            image_id = str(abs(hash(img_data)))[:10]
 
-        # Include existing files from the directory
-        for file in os.listdir(OUTLET_DIR):
-            if file.endswith(".jpg"):
-                url = f"/static/outlets/{file}"
-                if not any(i["image"] == url for i in outlet_images):
-                    outlet_images.append({"image": url})
+            HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://localhost:5000")
+            image_url = f"{HOST_URL}/outlet_image/{image_id}"
 
-        print(f"✅ {len(outlet_images)} outlet images available.")
-        return outlet_images
+            outlet_images.append({
+                "id":image_id,
+                "image": image_url,
+                "raw_img": img_data
+            })
+        
+        outlet_cache = outlet_images
+        cache_loaded = True
+        print(f"{len(outlet_images)} outlet images available")
+        return outlet_cache
 
     except Exception as e:
         print(f"Error fetching outlet images: {e}")
-        return []
+        return outlet_cache or []
+
+def stream_outlet_image(image_id:str):
+    try:
+        match = next(
+            (o for o in outlet_cache if o["id"] == image_id), 
+            None)
+
+        if not match:
+            print(f"Outlet Image not found for ID: {image_id}")
+            abort(404)
+
+        raw_img = match["raw_img"]
+        if not raw_img.startswith("data:image"):
+            raw_img = "data:image/jpeg;base64," + raw_img
+        
+        # Extract base64 data
+        base64_data = raw_img.split(",")[1]
+        img_bytes = base64.b64decode(base64_data)
+
+        # Downscale to save memory
+        img = PILImage.open(io.BytesIO(img_bytes))
+        img.thumbnail((1280,720))
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=85)
+        output.seek(0)
+
+        return send_file(output, mimetype="image/jpeg")
+
+    except Exception as e:
+        print(f"Failed to stream image {image_id}: {e}")
+        abort(500)
