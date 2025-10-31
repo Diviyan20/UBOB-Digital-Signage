@@ -33,8 +33,8 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const intervalRef =  useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const FADE_DURATION = 500; // ms
-  const DISPLAY_DURATION = 6000; // ms
+  const FADE_DURATION = 500;
+  const DISPLAY_DURATION = 6000;
 
   // --- Fetch media list ---
   const fetchMediaList = async () => {
@@ -116,8 +116,8 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   // --- Helpers ---
   const getImageUrl = (imagePath: string | null | undefined): string | null => {
     if (!imagePath) return null;
-    if (imagePath.startsWith("http")) return imagePath;
-    return `${SERVER_URL}${imagePath}`;
+    if (imagePath.startsWith("http")) return `${imagePath}?t=${Date.now()}`;
+    return `${SERVER_URL}${imagePath}?t=${Date.now()}`;
   };
 
   const currentMedia = mediaList[currentIndex];
