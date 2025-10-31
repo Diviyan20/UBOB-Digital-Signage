@@ -92,7 +92,7 @@ def stream_image(image_id: str):
         img.save(output, format="JPEG", quality=85)
         output.seek(0)
         
-        return send_file(io.BytesIO(img_bytes), mimetype="image/jpeg")
+        return send_file(output, mimetype="image/jpeg")
     
     except Exception as e:
         print(f"Failed to stream image {image_id}: {e}")

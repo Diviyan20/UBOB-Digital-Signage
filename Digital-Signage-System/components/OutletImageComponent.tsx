@@ -1,6 +1,7 @@
 import { OutletImageStyle } from "@/styling/OutletImageStyle";
-import React, { useEffect, useState } from "react";
-import { Alert, Animated, Easing, Image, Text, View, useWindowDimensions } from "react-native";
+import { Image } from "expo-image";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Text, View, useWindowDimensions } from "react-native";
 
 interface ImageItem {
   image?: string | null;
@@ -16,9 +17,16 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
 
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const scrollX = new Animated.Value(0);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const isMounted = useRef(true);
 
   const ITEM_W = Math.min(220, Math.round(width * 0.22));
+
+  const getImageUrl = (path?: string | null) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return `${path}?t=${Date.now()}`;
+    return `${SERVER_URL}${path}?t=${Date.now()}`;
+  };
 
   const fetchOutletImages = async () => {
     try {
@@ -28,20 +36,21 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
         headers: { "Content-Type": "application/json" },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
       const data = await response.json();
-      if (data.images && Array.isArray(data.images)) {
-        setImages(data.images);
-      } else {
-        throw new Error("Invalid response format!");
+      const items = data.media || [];
+
+      if (items.length === 0) throw new Error("No Images found");
+      if (isMounted.current) {
+        setImages(items);
       }
     } catch (error) {
-      console.error("Media Fetch Error:", error);
-      Alert.alert("Connection Error", "Could not load images.");
+      console.error("Image Fetch Error:", error);
+      if (isMounted.current && images.length === 0) throw new Error("Error fetching Outlets.")
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchOutletImages();
@@ -96,19 +105,13 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
             ]}
           >
             {[...images, ...images].map((item, index) => {
-              const getImageUrl = (imagePath: string | null | undefined): string | null => {
-                if (!imagePath) return null;
-                if (imagePath.startsWith("http")) return imagePath;
-                return `${SERVER_URL}${imagePath}`;
-              };
-
               return (
                 <View style={styles.itemTile} key={index}>
                   {getImageUrl(item.image) ? (
                     <Image
                       source={{ uri: getImageUrl(item.image)! }}
                       style={styles.image}
-                      resizeMode="contain"
+                      contentFit="contain"
                     />
                   ) : (
                     <Text style={styles.placeholder}>No Image</Text>

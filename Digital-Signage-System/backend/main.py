@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 from controllers.media_controller import get_media_json, stream_image
-from controllers.outlet_controllers import get_outlets_json, get_outlet_images
+from controllers.outlet_controllers import get_outlets_json, get_outlet_images, stream_outlet_image
 
 load_dotenv()
 
@@ -14,7 +14,6 @@ BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
-
 
 
 # ================
@@ -48,8 +47,17 @@ def outlet_images():
     if not image_data:
         return jsonify({"error": "Failed to fetch outlet images from Odoo"}), 500
 
-    return jsonify({"message": "Images fetched successfully!", "images": image_data}), 200
+    safe_copy = [
+        {k:v for k, v in item.items() if k != "raw_img"}
+        for item in image_data
+    ]
+    
+    return jsonify({"message":"Outlet Images fetched successfully!", "media":safe_copy})
 
+@app.route("/outlet_image/<image_id>", methods=["GET"])
+def serve_outlet_images(image_id):
+    print(f"Received GET at /outelet_image/{image_id}")
+    return stream_outlet_image(image_id)
 
 # ===============
 # MEDIA ENDPOINTS
@@ -76,9 +84,9 @@ def serve_image(image_id):
     print(f"Received GET at /image/{image_id}")
     return stream_image(image_id)
 
-# =============================
-# 🔹 RESPONSE LOGGING
-# =============================
+# ====================
+# RESPONSE LOGGING
+# ====================
 @app.after_request
 def log_response_info(response):
     print(f"Response Status: {response.status}")
@@ -99,9 +107,9 @@ def static_files(filename):
         print(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
     return send_from_directory(static_dir, filename)
 
-# =============================
+# ==============
 # 🚀 RUN SERVER
-# =============================
+# ==============
 if __name__ == "__main__":
     print("🚀 Starting Flask backend for Digital Signage System...")
     print("🌍 Listening on http://0.0.0.0:5000")
