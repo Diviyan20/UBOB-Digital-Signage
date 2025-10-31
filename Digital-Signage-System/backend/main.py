@@ -1,9 +1,8 @@
 import os
-import json
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
-from controllers.media_controller import get_media_json
+from controllers.media_controller import get_media_json, stream_image
 from controllers.outlet_controllers import get_outlets_json, get_outlet_images
 
 load_dotenv()
@@ -15,6 +14,8 @@ BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
+
+
 
 # ================
 # OUTLET ENDPOINTS
@@ -54,14 +55,26 @@ def outlet_images():
 # MEDIA ENDPOINTS
 # ===============
 @app.route("/get_media", methods=["GET"])
-def get_media():
+def get_media_list():
     print("Received GET at /get_media")
     media_data = get_media_json()
 
     if not media_data:
-        return jsonify({"error": "Failed to fetch media from Odoo"}), 500
+        return jsonify({"error":"Failed to fetch media from Odoo"}), 500
 
-    return jsonify({"message": "Media fetched successfully!", "media": media_data}), 200
+    
+    safe_copy = [
+        {k: v for k, v in item.items() if k != "raw_img"}
+        for item in media_data
+    ]
+    
+    return jsonify({"message":"Media fetched successfully!", "media":safe_copy}) 
+
+
+@app.route("/image/<image_id>", methods=["GET"])
+def serve_image(image_id):
+    print(f"Received GET at /image/{image_id}")
+    return stream_image(image_id)
 
 # =============================
 # 🔹 RESPONSE LOGGING

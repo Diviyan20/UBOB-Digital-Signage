@@ -1,8 +1,9 @@
 import os
-import requests
+import io
 import base64
-import hashlib
+import requests
 from dotenv import load_dotenv
+from flask import send_file, abort, request
 
 load_dotenv()
 
@@ -11,46 +12,12 @@ BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
 
-# --- PATH SETUP ---
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MEDIA_DIR = os.path.join(BASE_DIR, "static", "media")
-
-# ✅ Auto-create the folder if it doesn't exist
-os.makedirs(MEDIA_DIR, exist_ok=True)
-
-# --- GLOBAL CACHE ---
-current_index = 0
 media_cache = []
 cache_loaded = False
-carousel_active = False
 
 
 # ----------------------------------------------------------
-# 🔹 Save image if new (no duplicates)
-# ----------------------------------------------------------
-def save_image_if_new(base64_data):
-    try:
-        base64_data = base64_data.split(",")[-1]
-        image_bytes = base64.b64decode(base64_data)
-        img_hash = hashlib.md5(image_bytes).hexdigest()
-        filename = f"{img_hash}.jpg"
-        path = os.path.join(MEDIA_DIR, filename)
-
-        # Skip writing if already exists
-        if os.path.exists(path):
-            return f"/static/media/{filename}"
-
-        with open(path, "wb") as f:
-            f.write(image_bytes)
-
-        return f"/static/media/{filename}"
-    except Exception as e:
-        print(f"Failed to save image: {e}")
-        return None
-
-
-# ----------------------------------------------------------
-# 🔹 Fetch media from Odoo
+# Fetch media from Odoo
 # ----------------------------------------------------------
 def get_media_json():
     global media_cache, cache_loaded
@@ -68,31 +35,27 @@ def get_media_json():
             raise ValueError(f"Odoo API error: {data.get('message')}")
 
         media_items = []
+
         for block in data.get("data", []):
             for item in block.get("promotion", []):
-                raw_img = (item.get("image") or "").replace("\n", "").replace(" ", "").replace("\r", "").strip()
-                if not raw_img:
+                img_data = (item.get("image") or "").replace("\n", "").replace(" ", "").replace("\r", "").strip()
+                if not img_data:
                     continue
 
-                image_url = save_image_if_new(raw_img)
-                if not image_url:
-                    continue
+                
+                image_id = str(abs(hash(img_data)))[:10]  # Simple unique identifier
+                image_url = f"{request.host_url}image/{image_id}".rstrip("/")
 
                 media_items.append({
+                    "id": image_id,
                     "name": item.get("name"),
                     "description": item.get("description"),
                     "date_start": item.get("date_start"),
                     "date_end": item.get("date_end"),
                     "image": image_url,
+                    "raw_img": img_data
                 })
 
-        # Add already existing files (in case no new ones)
-        for file in os.listdir(MEDIA_DIR):
-            if file.endswith(".jpg"):
-                url = f"/static/media/{file}"
-                if not any(i["image"] == url for i in media_items):
-                    media_items.append({"image": url})
-        
         media_cache = media_items
         cache_loaded = True
         print(f"✅ {len(media_items)} media items available.")
@@ -101,3 +64,25 @@ def get_media_json():
     except Exception as e:
         print(f"Error fetching media: {e}")
         return media_cache or []
+
+
+def stream_image(image_id: str):
+    try:
+        match = next((m for m in media_cache if m["id"] == image_id), None)
+
+        if not match:
+            print(f"Image not found for ID: {image_id}")
+            abort(404)
+
+        raw_img = match["raw_img"]
+        if not raw_img.startswith("data:image"):
+            raw_img = "data:image/jpeg;base64," + raw_img
+
+        # Extract base64 data
+        base64_data = raw_img.split(",")[1]
+        img_bytes = base64.b64decode(base64_data)
+        return send_file(io.BytesIO(img_bytes), mimetype="image/jpeg")
+    
+    except Exception as e:
+        print(f"Failed to stream image {image_id}: {e}")
+        abort(500)
