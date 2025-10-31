@@ -1,9 +1,9 @@
 import os
-import io
-import base64
+import io,base64
 import requests
 from dotenv import load_dotenv
-from flask import send_file, abort, request
+from flask import send_file, abort
+from PIL import Image as PILImage
 
 load_dotenv()
 
@@ -44,7 +44,10 @@ def get_media_json():
 
                 
                 image_id = str(abs(hash(img_data)))[:10]  # Simple unique identifier
-                image_url = f"{request.host_url}image/{image_id}".rstrip("/")
+                
+                HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://localhost:5000")
+                image_url = f"{HOST_URL}/image/{image_id}"
+
 
                 media_items.append({
                     "id": image_id,
@@ -81,6 +84,14 @@ def stream_image(image_id: str):
         # Extract base64 data
         base64_data = raw_img.split(",")[1]
         img_bytes = base64.b64decode(base64_data)
+
+        # Downscale to save memory
+        img = PILImage.open(io.BytesIO(img_bytes))
+        img.thumbnail((1280, 720))  # maintain aspect ratio
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=85)
+        output.seek(0)
+        
         return send_file(io.BytesIO(img_bytes), mimetype="image/jpeg")
     
     except Exception as e:

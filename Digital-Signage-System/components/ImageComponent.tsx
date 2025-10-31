@@ -1,9 +1,9 @@
 import { MediaStyles } from "@/styling/MediaStyles";
+import { Image } from "expo-image";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  Image,
   Text,
   View,
   useWindowDimensions,
@@ -18,7 +18,9 @@ interface MediaItem {
   date_end?: string;
 }
 
-const SERVER_URL = "http://localhost:5000";
+const SERVER_URL = "http://10.0.2.2:5000"; // Emulator-safe
+const FADE_DURATION = 500;
+const DISPLAY_DURATION = 6000;
 
 const ImageComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = `${SERVER_URL}/get_media`,
@@ -30,35 +32,52 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [errorVisible, setErrorVisible] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const intervalRef =  useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMounted = useRef(true);
 
-  const FADE_DURATION = 500;
-  const DISPLAY_DURATION = 6000;
+  // Helper to form valid image URL
+  const getImageUrl = (path?: string | null) => {
+    if (!path) return null;
+    if (path.startsWith("http")) return `${path}?t=${Date.now()}`;
+    return `${SERVER_URL}${path}?t=${Date.now()}`;
+  };
 
-  // --- Fetch media list ---
+  // Fetch from backend
   const fetchMediaList = async () => {
     try {
       const response = await fetch(endpoint);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-
       const items = data.media || [];
-      if (items.length === 0) throw new Error("No Media found");
-
-      setMediaList(items);
-      setErrorVisible(false);
+      if (items.length === 0) throw new Error("No media found");
+      if (isMounted.current) {
+        setMediaList(items);
+        setErrorVisible(false);
+      }
     } catch (err) {
-      console.error("Media Fetch Error:", err);
-      if (mediaList.length === 0) setErrorVisible(true);
+      console.error("❌ Media fetch error:", err);
+      if (isMounted.current && mediaList.length === 0) setErrorVisible(true);
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
 
-  // --- Fade Transition ---
+  // Prefetch next image for smoother transitions
+  const preloadNextImage = (nextIndex: number) => {
+    const nextUrl = getImageUrl(mediaList[nextIndex]?.image);
+    if (!nextUrl) return;
+    Image.prefetch(nextUrl).catch(() =>
+      console.warn("⚠️ Prefetch failed for", nextUrl)
+    );
+  };
+
+  // Advance carousel with fade animation
   const advanceOnce = () => {
     if (mediaList.length <= 1) return;
+    const nextIndex = (currentIndex + 1) % mediaList.length;
+    preloadNextImage(nextIndex);
 
     Animated.timing(fadeAnim, {
       toValue: 0,
@@ -66,10 +85,9 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
       easing: Easing.linear,
       useNativeDriver: true,
     }).start(() => {
-      // Once fade-out completes → switch image
-      setCurrentIndex((prev) => (prev + 1) % mediaList.length);
+      if (!isMounted.current) return;
+      setCurrentIndex(nextIndex);
 
-      // Fade in next image
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: FADE_DURATION,
@@ -79,69 +97,53 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     });
   };
 
-  // --- Carousel logic ---
+  // Setup loop
   useEffect(() => {
-    // clear old interval if any
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
     if (mediaList.length === 0) return;
 
-    fadeAnim.setValue(1);
+    // Clear old interval if any
+    if (intervalRef.current) clearInterval(intervalRef.current);
 
     const totalInterval = DISPLAY_DURATION + FADE_DURATION * 2;
+    intervalRef.current = setInterval(advanceOnce, totalInterval);
 
-    intervalRef.current = setInterval(() => {
-      advanceOnce();
-    }, totalInterval);
-
-    // trigger first transition after DISPLAY_DURATION
-    const firstTimeout = setTimeout(() => {
-      advanceOnce();
-    }, DISPLAY_DURATION);
+    // Trigger first fade manually after DISPLAY_DURATION
+    const firstTimeout = setTimeout(advanceOnce, DISPLAY_DURATION);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       clearTimeout(firstTimeout);
     };
-  }, [mediaList]);
+  }, [mediaList, currentIndex]);
 
-  // --- Initial Fetch ---
+  // Fetch once on mount
   useEffect(() => {
+    isMounted.current = true;
     fetchMediaList();
+    return () => {
+      isMounted.current = false;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
-  // --- Helpers ---
-  const getImageUrl = (imagePath: string | null | undefined): string | null => {
-    if (!imagePath) return null;
-    if (imagePath.startsWith("http")) return `${imagePath}?t=${Date.now()}`;
-    return `${SERVER_URL}${imagePath}?t=${Date.now()}`;
-  };
-
   const currentMedia = mediaList[currentIndex];
+  const currentImageUrl = getImageUrl(currentMedia?.image);
 
-  // --- Error + Loading states ---
+  // --- States ---
   if (!currentMedia) {
     if (errorVisible) {
       return (
         <ErrorOverlayComponent
           visible={errorVisible}
           errorType="media_error"
-          onRetry={async () => {
+          onRetry={() => {
             setErrorVisible(false);
             setLoading(true);
-            try {
-              await fetchMediaList();
-            } finally {
-              setLoading(false);
-            }
+            fetchMediaList();
           }}
         />
       );
     }
-
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>Loading media...</Text>
@@ -152,23 +154,25 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   // --- Render ---
   return (
     <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-      {getImageUrl(currentMedia.image) ? (
+      {currentImageUrl ? (
         <Image
-          source={{ uri: getImageUrl(currentMedia.image)! }}
-          style={styles.image}
-          resizeMode="contain"
-        />
+        source={{ uri: getImageUrl(currentMedia.image)! }}
+        style={styles.image}
+        contentFit="contain"
+        transition={500} // smooth fade-in
+        cachePolicy="disk" // cache images efficiently
+      />
       ) : (
         <Text style={styles.placeholderText}>No Image</Text>
       )}
 
       <View style={styles.textContainer}>
         <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
-        {currentMedia.description && (
+        {currentMedia.description ? (
           <Text style={styles.description} numberOfLines={3}>
             {currentMedia.description}
           </Text>
-        )}
+        ) : null}
       </View>
     </Animated.View>
   );

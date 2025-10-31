@@ -8,7 +8,7 @@ from controllers.outlet_controllers import get_outlets_json, get_outlet_images
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
