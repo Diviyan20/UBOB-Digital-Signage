@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from flask import jsonify
 from pymongo import MongoClient
 from dotenv import load_dotenv, find_dotenv
@@ -25,7 +25,6 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
         return{
             "device_id": existing_device["device_id"],
             "device_name": existing_device["device_name"],
-            "device_status": existing_device.get("device_status", "active"),
             "timestamp": existing_device.get("timestamp"),
             "is_new": False
         }
@@ -34,7 +33,7 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
     record = {
         "device_id": outlet_code,
         "device_name": outlet_name,
-        "device_status": "active",
+        "device_status": "online",
         "device_location": region_name,
         "timestamp": datetime.now()
     }
@@ -48,13 +47,18 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
 # Update Device Heartbeat
 # -----------------
 
-def update_heartbeat(device_id: str, timestamp:str ,status: str = "online"):
+def update_heartbeat(device_id: str, status: str, timestamp:str):
     if not device_id:
         return jsonify({"error": "Missing Device ID!"}), 400
     
+    now = datetime.now(timezone.utc)
     result = devices.update_one(
         {"device_id": device_id},
-        {"$set": {"device_status": status, "timestamp": datetime.now()}}
+        {"$set": {
+            "device_status": status, 
+            "timestamp": now,
+            "last_seen":now
+            }}
     )
 
     if result.matched_count == 0:
@@ -63,12 +67,11 @@ def update_heartbeat(device_id: str, timestamp:str ,status: str = "online"):
             "device_id": device_id,
             "status": "offline"}), 404
    
-   
     return jsonify({
         "message": "Heartbeat updated successfully",
         "device_id": device_id,
         "status": status,
-        "timestamp":timestamp,
+        "timestamp":now.isoformat(),
         }), 200
 
 
