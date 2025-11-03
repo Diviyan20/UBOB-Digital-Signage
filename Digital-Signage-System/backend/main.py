@@ -4,7 +4,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from controllers.media_controller import get_media_json, stream_image
 from controllers.outlet_controllers import get_outlets_json, get_outlet_images, stream_outlet_image
-from controllers.heartbeat_controller import register_device, update_heartbeat, get_all_devices
+from controllers.heartbeat_controller import devices, register_device, update_heartbeat
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta, timezone 
 
 load_dotenv()
 
@@ -148,6 +150,30 @@ def log_response_info(response):
     print("===========================================")
     return response
 
+
+def check_for_inactive_devices():
+    print("Checking for inactive devices....")
+    now = datetime.now(timezone.utc)
+    timeout = now - timedelta(minutes=5) # Devices inactive for longer than given threshold = Offline
+
+
+    # Find devices that are 'online' but have not checked in recently
+    inactive = devices.find({
+        "device_status": "online",
+        "last_seen": {"$lt": timeout}
+    })
+
+    for dev in inactive:
+        devices.update_one(
+            {"device_id": dev["device_id"]},
+            {"$set": {"device_status": "offline"}}
+        )
+        print(f"Marked device {dev['device_id']} as offline (no heartbeat since {dev['last_seen']})")
+
+# Start the scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=check_for_inactive_devices, trigger="interval", minutes = 2) # Check every 10 seconds
+scheduler.start()
 
 # ==============
 # 🚀 RUN SERVER
