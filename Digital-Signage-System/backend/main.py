@@ -4,6 +4,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from controllers.media_controller import get_media_json, stream_image
 from controllers.outlet_controllers import get_outlets_json, get_outlet_images, stream_outlet_image
+from controllers.heartbeat_controller import register_device, update_heartbeat, get_all_devices
 
 load_dotenv()
 
@@ -84,6 +85,38 @@ def serve_image(image_id):
     print(f"Received GET at /image/{image_id}")
     return stream_image(image_id)
 
+# ============
+# STATIC FILES
+# ============
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if not os.path.exists(os.path.join(static_dir, filename)):
+        print(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
+    return send_from_directory(static_dir, filename)
+
+# ===================
+# HEARTBEAT ENDPOINTS
+# ===================
+@app.route("/register_device", methods=["POST"])
+def register_device_route():
+    data = request.get_json(force=True)
+    outlet_code = data.get("outlet_code")
+    outlet_name = data.get("outlet_name", "Unnamed Outlet")
+    return register_device(outlet_code, outlet_name)
+
+@app.route("/heartbeat", methods=["POST"])
+def heartbeat_route():
+    data = request.get_json(force=True)
+    device_id = data.get("device_id")
+    status = data.get("status","online")
+    return update_heartbeat(device_id, status)
+
+@app.route("/devices", methods=["GET"])
+def get_devices_route():
+    return get_all_devices()
+
+
 # ====================
 # RESPONSE LOGGING
 # ====================
@@ -97,15 +130,6 @@ def log_response_info(response):
     print("===========================================")
     return response
 
-# ============
-# STATIC FILES
-# ============
-@app.route("/static/<path:filename>")
-def static_files(filename):
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    if not os.path.exists(os.path.join(static_dir, filename)):
-        print(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
-    return send_from_directory(static_dir, filename)
 
 # ==============
 # 🚀 RUN SERVER
