@@ -6,7 +6,7 @@ import ErrorOverlayComponent from './ErrorOverlayComponent';
 
 
 
-const SERVER_URL = "http://localhost:5000";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 const OutletLoginForm: React.FC = () => {
     const [outletId, setOutletId] = useState<string>("");
@@ -30,7 +30,7 @@ const OutletLoginForm: React.FC = () => {
             const data = await response.json() as { is_valid: boolean}; // Read JSON output for 'is_valid'
             if (response.ok) {
                 if (data.is_valid) {
-                    router.replace('/screens/MediaScreen')
+                    router.replace('/screens/MediaScreen');
                 }
                 else {
                     setErrorVisible(true);

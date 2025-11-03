@@ -30,14 +30,25 @@ def get_outlet():
     if not outlet_data:
         return jsonify({"error": "Failed to fetch outlets from Odoo"}), 500
 
-    signal = {"is_valid": False, "message": "Invalid Outlet Code!"}
+    if not outlet_id:
+        return jsonify({"error": "Missing outlet ID"}), 400
+    
+    match = next((o for o in outlet_data if o["outlet_id"] == outlet_id), None)
+    if not match:
+        return jsonify({"is_valid": False, "message": "Invalid Outlet Code!"}), 404
+    
+    # If outlet is valid, register the device
+    outlet_name = match["outlet_name"]
+    region_name = match["region_name"]
+    heartbeat_info = register_device(outlet_id, outlet_name, region_name)
 
-    if outlet_id:
-        match = next((o for o in outlet_data if o["outlet_id"] == outlet_id), None)
-        if match:
-            signal = {"is_valid": True, "message": "Outlet Verified Successfully!"}
-
-    return jsonify(signal), 200
+    return jsonify({
+        "is_valid": True,
+        "message": "Outlet Verified and Device Registered Successfully!",
+        "outlet_name": outlet_name,
+        "region_name": region_name,
+        "device_info": heartbeat_info
+    }), 200
 
 
 @app.route("/outlet_image", methods=["POST"])
@@ -94,27 +105,6 @@ def static_files(filename):
     if not os.path.exists(os.path.join(static_dir, filename)):
         print(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
     return send_from_directory(static_dir, filename)
-
-# ===================
-# HEARTBEAT ENDPOINTS
-# ===================
-@app.route("/register_device", methods=["POST"])
-def register_device_route():
-    data = request.get_json(force=True)
-    outlet_code = data.get("outlet_code")
-    outlet_name = data.get("outlet_name", "Unnamed Outlet")
-    return register_device(outlet_code, outlet_name)
-
-@app.route("/heartbeat", methods=["POST"])
-def heartbeat_route():
-    data = request.get_json(force=True)
-    device_id = data.get("device_id")
-    status = data.get("status","online")
-    return update_heartbeat(device_id, status)
-
-@app.route("/devices", methods=["GET"])
-def get_devices_route():
-    return get_all_devices()
 
 
 # ====================

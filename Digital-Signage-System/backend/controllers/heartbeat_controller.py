@@ -16,29 +16,32 @@ devices = db["UBOB Digital Signage"]
 # Register devices (By Outlet Code)
 # -----------------
 
-def register_device(outlet_code: str, outlet_name: str = "Unnamed Outlet"):
-    if not outlet_code:
-        return jsonify({"error": "Outlet code is required"}), 400
-    
-    existing_device = devices.find_one({"outlet_code": outlet_code})
-    
+def register_device(outlet_code: str, outlet_name: str, region_name: str = None):
+    existing_device = devices.find_one({"device_id": outlet_code})
+
     if existing_device:
-        return jsonify({
-            "message": "Device already registered",
-            "device_id": outlet_code,
-            "status": existing_device.get("device_status", "unknown")}), 200
-    
-    new_device = {
+        print(f"Device already registed to outlet code {outlet_code}")
+
+        return{
+            "device_id": existing_device["device_id"],
+            "device_name": existing_device["device_name"],
+            "device_status": existing_device.get("device_status", "active"),
+            "timestamp": existing_device.get("timestamp"),
+            "is_new": False
+        }
+
+    # Create new Record
+    record = {
         "device_id": outlet_code,
-        "outlet_name": outlet_name,
-        "device_status": "online",
+        "device_name": outlet_name,
+        "device_status": "active",
+        "device_location": region_name,
         "timestamp": datetime.now()
     }
-    devices.insert_one(new_device)
-    return jsonify({
-        "message": "Device registered successfully",
-        "device_id": outlet_code,
-        }), 200
+
+    devices.insert_one(record)
+    print(f"Registered device to outlet code {outlet_code}!")
+    return{**record, "is_new": True}
 
 
 # -----------------
