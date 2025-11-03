@@ -18,7 +18,7 @@ interface MediaItem {
   date_end?: string;
 }
 
-const SERVER_URL = "http://10.0.2.2:5000"; // Emulator-safe
+const SERVER_URL = "http://localhost:5000"; // Emulator-safe
 const FADE_DURATION = 500;
 const DISPLAY_DURATION = 6000;
 
