@@ -9,8 +9,8 @@ load_dotenv(find_dotenv())
 
 MONGO_URI = os.getenv("MONGODB_CONNECTION_STRING")
 client = MongoClient(MONGO_URI)
-db = client.heartbeats
-devices = db["UBOB Digital Signage"]
+db = client["UBOB-Digital-Signage"]
+devices = db.heartbeats
 
 # -----------------
 # Register devices (By Outlet Code)
@@ -48,7 +48,7 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
 # Update Device Heartbeat
 # -----------------
 
-def update_heartbeat(device_id: str, status: str = "online"):
+def update_heartbeat(device_id: str, timestamp:str ,status: str = "online"):
     if not device_id:
         return jsonify({"error": "Missing Device ID!"}), 400
     
@@ -67,7 +67,9 @@ def update_heartbeat(device_id: str, status: str = "online"):
     return jsonify({
         "message": "Heartbeat updated successfully",
         "device_id": device_id,
-        "status": status}), 200
+        "status": status,
+        "timestamp":timestamp,
+        }), 200
 
 
 # --------------------------
