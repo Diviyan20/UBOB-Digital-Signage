@@ -107,6 +107,34 @@ def static_files(filename):
     return send_from_directory(static_dir, filename)
 
 
+
+# ===================
+# HEARTBEAT ENDPOINTS
+# ==================
+@app.route("/heartbeat", methods=["POST"])
+def heartbeat():
+    # Receive heartbeat pings from devices (Outlet codes)
+    # JSON response: {"device_id": "42"}
+    try:
+        data = request.get_json(force=True)
+        print("Incoming data: ", data)
+    except Exception as e:
+        print("JSON decode error: ", str(e))
+        return jsonify({"error":"Invalid JSON payload"}), 400
+    
+    if not data:
+        return jsonify({"error": "Empty request body"}), 400
+    
+    device_id = data.get("device_id")
+    status = data.get("status")
+    timestamp = data.get("timestamp")
+    
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
+
+    print(f"Heatbeat Updated for outlet {device_id}, Status: {status}, Timestamp: {timestamp}")
+    return update_heartbeat(device_id, status, timestamp)
+
 # ====================
 # RESPONSE LOGGING
 # ====================

@@ -30,7 +30,10 @@ const OutletLoginForm: React.FC = () => {
             const data = await response.json() as { is_valid: boolean}; // Read JSON output for 'is_valid'
             if (response.ok) {
                 if (data.is_valid) {
-                    router.replace('/screens/MediaScreen');
+                    router.replace({
+                        pathname: '/screens/MediaScreen',
+                        params:{outletId} // Used as reference for the Heartbeat Monitoring System
+                    });
                 }
                 else {
                     setErrorVisible(true);
