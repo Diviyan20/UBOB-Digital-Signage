@@ -5,12 +5,14 @@ import { Animated, Easing, Text, View, useWindowDimensions } from "react-native"
 
 interface ImageItem {
   image?: string | null;
+  outlet_name?: string;
+  outlet_id?: string;
 }
 
 const SERVER_URL = "http://10.0.2.2:5000";
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
-  endpoint = `${SERVER_URL}/outlet_image`,
+  endpoint = `${SERVER_URL}/outlet_image_combined`,
 }) => {
   const { width, height } = useWindowDimensions();
   const styles = OutletImageStyle(width, height);
@@ -106,16 +108,35 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
           >
             {[...images, ...images].map((item, index) => {
               return (
-                <View style={styles.itemTile} key={index}>
-                  {getImageUrl(item.image) ? (
-                    <Image
-                      source={{ uri: getImageUrl(item.image)! }}
-                      style={styles.image}
-                      contentFit="contain"
-                    />
-                  ) : (
-                    <Text style={styles.placeholder}>No Image</Text>
-                  )}
+                <View key={index} style={{ alignItems: "center", width: ITEM_W, marginHorizontal: 8 }}>
+                  <View style={styles.itemTile}>
+                    {getImageUrl(item.image) ? (
+                      <Image
+                        source={{ uri: getImageUrl(item.image)! }}
+                        style={styles.image}
+                        contentFit="contain"
+                      />
+                    ) : (
+                      <Text style={styles.placeholder}>No Image</Text>
+                    )}
+                  </View>
+
+                  {/* Outlet name below image */}
+                  <Text
+                    style={{
+                      textAlign: "center",
+                      marginTop: 6,
+                      fontSize: 14,
+                      color: "#333",
+                      flexWrap: "wrap",
+                      width: ITEM_W,
+                      lineHeight: 18,
+                    }}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    {item.outlet_name || "Unnamed Outlet"}
+                  </Text>
                 </View>
               );
             })}

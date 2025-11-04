@@ -3,7 +3,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 from controllers.media_controller import get_media_json, stream_image
-from controllers.outlet_controllers import get_outlets_json, get_outlet_images, stream_outlet_image
+from controllers.outlet_controllers import get_outlets_json, get_outlet_images, stream_outlet_image, get_outlet_images_with_names
 from controllers.heartbeat_controller import devices, register_device, update_heartbeat
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta, timezone 
@@ -72,6 +72,11 @@ def outlet_images():
 def serve_outlet_images(image_id):
     print(f"Received GET at /outelet_image/{image_id}")
     return stream_outlet_image(image_id)
+
+@app.route("/outlet_image_combined", methods=["POST"])
+def outlet_images_combined():
+    return get_outlet_images_with_names()
+
 
 # ===============
 # MEDIA ENDPOINTS
