@@ -1,5 +1,5 @@
 import { ErrorOverlayStyle as styles } from "@/styling/ErrorOverlayStyle";
-import { Button, Overlay } from "@rneui/themed";
+import { Overlay } from "@rneui/themed";
 import React, { useEffect, useRef } from "react";
 import {
   Pressable,
@@ -23,26 +23,28 @@ const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
 }) => {
   if (!visible) return null;
 
+  // ✅ Shared focus logic
+  const useFocusOnMount = (ref: React.RefObject<any>) => {
+    useEffect(() => {
+      const timeout = setTimeout(() => {
+        const node = findNodeHandle(ref.current);
+        if (node) AccessibilityInfo.setAccessibilityFocus(node);
+      }, 150);
+      return () => clearTimeout(timeout);
+    }, []);
+  };
+
   // --- Invalid Outlet Overlay ---
   const InvalidOutletOverlay: React.FC<{ onRetry: () => void }> = ({
     onRetry,
   }) => {
     const retryButtonRef = useRef<any>(null);
-
-    useEffect(() => {
-      const timeout = setTimeout(() => {
-        const node = findNodeHandle(retryButtonRef.current);
-        if (node) {
-          AccessibilityInfo.setAccessibilityFocus(node);
-        }
-      }, 150);
-      return () => clearTimeout(timeout);
-    }, []);
+    useFocusOnMount(retryButtonRef);
 
     return (
       <Overlay
         isVisible
-        overlayStyle={styles.outletContainer}
+        overlayStyle={[styles.outletContainer, { zIndex: 9999 }]}
         backdropStyle={{ pointerEvents: "auto" }}
       >
         <View>
@@ -50,16 +52,12 @@ const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
           <Text style={styles.outletTextSecondary}>
             Please re-enter the code.
           </Text>
-
-          {/* Note: nextFocusUp/Down only supported on Android TV runtime */}
           <Pressable
             ref={retryButtonRef}
             style={styles.outletButton}
             onPress={onRetry}
             focusable={true}
-            {...(Platform.isTV && {
-              hasTVPreferredFocus: true,
-            })}
+            {...(Platform.isTV && { hasTVPreferredFocus: true })}
           >
             <Text style={styles.outletButtonText}>Try Again</Text>
           </Pressable>
@@ -69,17 +67,34 @@ const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
   };
 
   // --- Media Error Overlay ---
-  const MediaErrorOverlay: React.FC<{ onRetry: () => void }> = ({ onRetry }) => (
-    <Overlay isVisible overlayStyle={styles.mediaContainer}>
-      <Text style={styles.mediaTextPrimary}>Oops! Nothing’s showing.</Text>
-      <Text style={styles.mediaTextSecondary}>
-        Give us a minute or refresh the media screen.
-      </Text>
-      <Button onPress={onRetry} buttonStyle={styles.mediaButton}>
-        <Text style={styles.mediaButtonText}>Refresh</Text>
-      </Button>
-    </Overlay>
-  );
+  const MediaErrorOverlay: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
+    const refreshButtonRef = useRef<any>(null);
+    useFocusOnMount(refreshButtonRef);
+
+    return (
+      <Overlay
+        isVisible
+        overlayStyle={[styles.mediaContainer, { zIndex: 9999 }]}
+        backdropStyle={{ pointerEvents: "auto" }}
+      >
+        <View>
+          <Text style={styles.mediaTextPrimary}>Oops! Nothing’s showing.</Text>
+          <Text style={styles.mediaTextSecondary}>
+            Give us a minute or refresh the media screen.
+          </Text>
+          <Pressable
+            ref={refreshButtonRef}
+            style={styles.mediaButton}
+            onPress={onRetry}
+            focusable={true}
+            {...(Platform.isTV && { hasTVPreferredFocus: true })}
+          >
+            <Text style={styles.mediaButtonText}>Refresh</Text>
+          </Pressable>
+        </View>
+      </Overlay>
+    );
+  };
 
   // --- Render ---
   switch (errorType) {
