@@ -14,7 +14,8 @@ const SERVER_URL = "http://10.0.2.2:5000";
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = `${SERVER_URL}/outlet_image_combined`,
 }) => {
-  const { width, height } = useWindowDimensions();
+  const { width, height} = useWindowDimensions();
+  const imageSize = Math.min(85, width * 0.15);
   const styles = OutletImageStyle(width, height);
 
   const [images, setImages] = useState<ImageItem[]>([]);
@@ -108,29 +109,29 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
           >
             {[...images, ...images].map((item, index) => {
               return (
-                <View key={index} style={{ alignItems: "center", width: ITEM_W, marginHorizontal: 8 }}>
-                  <View style={styles.itemTile}>
+                <View key={index} style={{ alignItems: "center", marginHorizontal: 8 }}>
+                  <View style={styles.imageWrapper}>
                     {getImageUrl(item.image) ? (
                       <Image
                         source={{ uri: getImageUrl(item.image)! }}
                         style={styles.image}
-                        contentFit="contain"
+                        contentFit="cover"
                       />
                     ) : (
                       <Text style={styles.placeholder}>No Image</Text>
                     )}
                   </View>
 
-                  {/* Outlet name below image */}
                   <Text
                     style={{
                       textAlign: "center",
                       marginTop: 6,
-                      fontSize: 14,
+                      fontSize: 11,
+                      fontWeight: "bold",
                       color: "#333",
                       flexWrap: "wrap",
-                      width: ITEM_W,
-                      lineHeight: 18,
+                      width:imageSize,
+                      lineHeight: 10,
                     }}
                     numberOfLines={2}
                     ellipsizeMode="tail"
