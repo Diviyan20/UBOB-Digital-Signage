@@ -38,7 +38,8 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
         "timestamp": datetime.now()
     }
 
-    devices.insert_one(record)
+    result = devices.insert_one(record)
+    record["_id"] = str(result.inserted_id) # Capture and stringify ObjectId
     print(f"Registered device to outlet code {outlet_code}!")
     return{**record, "is_new": True}
 
