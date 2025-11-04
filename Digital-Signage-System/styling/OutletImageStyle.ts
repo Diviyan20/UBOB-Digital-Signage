@@ -5,15 +5,16 @@ export const OutletImageStyle = (width: number, height: number) => {
     container: {
       width: width,
       height: height * 0.2,
-      justifyContent: "center",
+      justifyContent: "flex-start",
       alignItems: "center",
       position: "relative",
+      paddingBottom: 20
     },
 
     cardFrame: {
       width: "100%",
-      height: "90%",
-      backgroundColor: "#fff",
+      height: "125%",
+      backgroundColor: "#ffffdf",
       overflow: "hidden",
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 4 },
@@ -39,13 +40,14 @@ export const OutletImageStyle = (width: number, height: number) => {
       aspectRatio: 1.3,
       marginHorizontal: 8,
       borderRadius: 12,
-      overflow: "hidden",
+      justifyContent: "flex-start",
+      alignItems: "center",
     },
 
     image: {
       width: "100%",
       height: "100%",
-      resizeMode: "cover",
+      resizeMode: "contain",
     },
 
     placeholder: {
