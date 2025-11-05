@@ -2,7 +2,6 @@ import os
 import io
 import base64
 import json
-import time
 import gc
 import threading
 import requests
@@ -142,7 +141,6 @@ def fetch_outlets():
         print(f"❌ fetch_outlets: {e}")
         return []
 
-
 def fetch_outlet_images():
     try:
         print("🖼️ Fetching outlet image metadata...")
@@ -177,7 +175,6 @@ def fetch_outlet_images():
         print(f"❌ fetch_outlet_images: {e}")
         return []
 
-
 def stream_outlet_image(image_id):
     cache_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
     if os.path.exists(cache_path):
@@ -206,7 +203,6 @@ def stream_outlet_image(image_id):
         abort(500)
     finally:
         gc.collect()
-
 
 def get_outlet_images_with_names():
     try:

@@ -1,5 +1,4 @@
 import os
-import psutil
 from sched import scheduler
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -7,7 +6,6 @@ from dotenv import load_dotenv
 from controllers.media_controller import get_media_json, stream_image
 from controllers.outlet_controllers import fetch_outlets, fetch_outlet_images, stream_outlet_image, get_outlet_images_with_names
 from controllers.heartbeat_controller import devices, register_device, update_heartbeat
-from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta, timezone 
 
 load_dotenv()
@@ -177,11 +175,6 @@ def check_for_inactive_devices():
 if not scheduler.run:
     scheduler.add_job(func=check_for_inactive_devices, trigger="interval", minutes=2)
     scheduler.start()
-
-process = psutil.Process(os.getpid())
-memory_usage = process.memory_info().rss  # bytes
-print(f"Memory (bytes): {memory_usage}")
-print(f"Memory (MB): {memory_usage / (1024 * 1024):.2f} MB")
 
 # ==============
 # 🚀 RUN SERVER
