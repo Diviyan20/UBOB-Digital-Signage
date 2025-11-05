@@ -1,6 +1,6 @@
 import { OutletImageStyle } from "@/styling/OutletImageStyle";
 import { Image } from "expo-image";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Text, View, useWindowDimensions } from "react-native";
 
 interface ImageItem {
@@ -14,7 +14,7 @@ const SERVER_URL = "http://10.0.2.2:5000";
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = `${SERVER_URL}/outlet_image_combined`,
 }) => {
-  const { width, height} = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const imageSize = Math.min(85, width * 0.15);
   const styles = OutletImageStyle(width, height);
 
@@ -25,13 +25,13 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
 
   const ITEM_W = Math.min(220, Math.round(width * 0.22));
 
-  const getImageUrl = (path?: string | null) => {
+  const getImageUrl = useCallback((path?: string | null) => {
     if (!path) return null;
     if (path.startsWith("http")) return `${path}?t=${Date.now()}`;
     return `${SERVER_URL}${path}?t=${Date.now()}`;
-  };
+  }, []);
 
-  const fetchOutletImages = async () => {
+  const fetchOutletImages = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(endpoint, {
@@ -52,12 +52,16 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
     } finally {
       if (isMounted.current) setLoading(false);
     }
-  };
+  }, [endpoint]);
 
 
   useEffect(() => {
     fetchOutletImages();
-  }, []);
+    return () => {
+      isMounted.current = false;
+      scrollX.stopAnimation();
+    };
+  }, [fetchOutletImages]);
 
   useEffect(() => {
     if (images.length === 0) return;
@@ -81,21 +85,9 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
     return () => scrollX.stopAnimation();
   }, [images, width]);
 
-  if (loading) {
-    return (
-      <View>
-        <Text>Loading Images....</Text>
-      </View>
-    );
-  }
+  if (loading) return <Text>Loading Images....</Text>
 
-  if (images.length === 0) {
-    return (
-      <View>
-        <Text>No images available.</Text>
-      </View>
-    );
-  }
+  if (images.length === 0) return <Text>No images available.</Text>;
 
   return (
     <View style={styles.container}>
@@ -107,21 +99,17 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
               { transform: [{ translateX: scrollX }] },
             ]}
           >
-            {[...images, ...images].map((item, index) => {
+            {[...images, ...images].map((item, i) => {
+              const uri = getImageUrl(item.image);
               return (
-                <View key={index} style={{ alignItems: "center", marginHorizontal: 8 }}>
+                <View key={i} style={{ alignItems: "center", marginHorizontal: 8 }}>
                   <View style={styles.imageWrapper}>
-                    {getImageUrl(item.image) ? (
-                      <Image
-                        source={{ uri: getImageUrl(item.image)! }}
-                        style={styles.image}
-                        contentFit="cover"
-                      />
+                    {uri ? (
+                      <Image source={{ uri }} style={styles.image} contentFit="cover" />
                     ) : (
                       <Text style={styles.placeholder}>No Image</Text>
                     )}
                   </View>
-
                   <Text
                     style={{
                       textAlign: "center",
@@ -130,7 +118,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
                       fontWeight: "bold",
                       color: "#333",
                       flexWrap: "wrap",
-                      width:imageSize,
+                      width: Math.min(85, width * 0.15),
                       lineHeight: 10,
                     }}
                     numberOfLines={2}
