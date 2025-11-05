@@ -1,9 +1,11 @@
 import os
+import psutil
+from sched import scheduler
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 from controllers.media_controller import get_media_json, stream_image
-from controllers.outlet_controllers import get_outlets_json, get_outlet_images, stream_outlet_image, get_outlet_images_with_names
+from controllers.outlet_controllers import fetch_outlets, fetch_outlet_images, stream_outlet_image, get_outlet_images_with_names
 from controllers.heartbeat_controller import devices, register_device, update_heartbeat
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta, timezone 
@@ -28,7 +30,7 @@ def get_outlet():
     data = request.get_json(force=True)
     outlet_id = str(data.get("outlet_id")).strip() if data.get("outlet_id") else None
 
-    outlet_data = get_outlets_json()
+    outlet_data = fetch_outlets()
     if not outlet_data:
         return jsonify({"error": "Failed to fetch outlets from Odoo"}), 500
 
@@ -56,7 +58,7 @@ def get_outlet():
 @app.route("/outlet_image", methods=["POST"])
 def outlet_images():
     print("Received POST at /outlet_image")
-    image_data = get_outlet_images()
+    image_data = fetch_outlet_images()
 
     if not image_data:
         return jsonify({"error": "Failed to fetch outlet images from Odoo"}), 500
@@ -70,7 +72,7 @@ def outlet_images():
 
 @app.route("/outlet_image/<image_id>", methods=["GET"])
 def serve_outlet_images(image_id):
-    print(f"Received GET at /outelet_image/{image_id}")
+    print(f"Received GET at /outlet_image/{image_id}")
     return stream_outlet_image(image_id)
 
 @app.route("/outlet_image_combined", methods=["POST"])
@@ -142,17 +144,13 @@ def heartbeat():
     print(f"Heatbeat Updated for outlet {device_id}, Status: {status}, Timestamp: {timestamp}")
     return update_heartbeat(device_id, status, timestamp)
 
+
 # ====================
 # RESPONSE LOGGING
 # ====================
 @app.after_request
 def log_response_info(response):
     print(f"Response Status: {response.status}")
-    try:
-        print(f"Response JSON: {response.get_json()}")
-    except Exception:
-        print("Response not JSON (HTML or empty)")
-    print("===========================================")
     return response
 
 
@@ -176,9 +174,14 @@ def check_for_inactive_devices():
         print(f"Marked device {dev['device_id']} as offline (no heartbeat since {dev['last_seen']})")
 
 # Start the scheduler
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=check_for_inactive_devices, trigger="interval", minutes = 2) # Check every 10 seconds
-scheduler.start()
+if not scheduler.run:
+    scheduler.add_job(func=check_for_inactive_devices, trigger="interval", minutes=2)
+    scheduler.start()
+
+process = psutil.Process(os.getpid())
+memory_usage = process.memory_info().rss  # bytes
+print(f"Memory (bytes): {memory_usage}")
+print(f"Memory (MB): {memory_usage / (1024 * 1024):.2f} MB")
 
 # ==============
 # 🚀 RUN SERVER
