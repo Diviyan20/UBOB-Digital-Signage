@@ -1,8 +1,8 @@
-import MediaScreen from "./screens/MediaScreen";
+import OutletLoginForm from "@/components/OutletLoginForm";
 import React from "react";
 
 export default function Index() {
   return (
-    <MediaScreen/>
+    <OutletLoginForm/>
   );
 }

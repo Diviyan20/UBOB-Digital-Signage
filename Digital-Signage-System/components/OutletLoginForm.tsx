@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 import ErrorOverlayComponent from './ErrorOverlayComponent';
+import LoggingInOverlayComponent from './LogginInOverlayComponent';
 
 
 
@@ -12,6 +13,7 @@ const OutletLoginForm: React.FC = () => {
     const [outletId, setOutletId] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
     const [errorVisible, setErrorVisible] = useState(false);
+    const [status, setStatus] = useState<"loading" | "success" | "error" | undefined>();
 
     const handleLogin = async () => {
         if (!outletId.trim()) {
@@ -21,26 +23,33 @@ const OutletLoginForm: React.FC = () => {
 
         try {
             setLoading(true);
+            setStatus("loading");
             const response = await fetch(`${SERVER_URL}/get_outlets`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ outlet_id: outletId })
             });
 
-            const data = await response.json() as { is_valid: boolean}; // Read JSON output for 'is_valid'
+            const data = await response.json() as { is_valid: boolean }; // Read JSON output for 'is_valid'
             if (response.ok) {
                 if (data.is_valid) {
-                    router.replace({
-                        pathname: '/screens/MediaScreen',
-                        params:{outletId} // Used as reference for the Heartbeat Monitoring System
-                    });
+                    setStatus("success");
+
+                    setTimeout(() => {
+                        router.replace({
+                            pathname: '/screens/MediaScreen',
+                            params: { outletId } // Used as reference for the Heartbeat Monitoring System
+                        });
+                    }, 1000);
                 }
                 else {
+                    setStatus("error");
                     setErrorVisible(true);
                 }
             }
             else {
                 console.error("Server responded with status:", response.status);
+                setStatus("error");
                 setErrorVisible(true);
             }
         }
@@ -55,7 +64,11 @@ const OutletLoginForm: React.FC = () => {
             );
         }
         finally {
-            setLoading(false);
+            setTimeout(() => {
+                setLoading(false);
+                setStatus(undefined);
+            }, 2000);
+
         }
     };
 
@@ -72,19 +85,23 @@ const OutletLoginForm: React.FC = () => {
                     keyboardType="numeric" // since it's an ID (number)
                     autoCapitalize="none"
                 />
-                <Pressable  style={styles.loginButton} onPress={handleLogin}>
-                <Text style={styles.loginButtonText}>Log In</Text>
+                <Pressable style={styles.loginButton} onPress={handleLogin}>
+                    <Text style={styles.loginButtonText}>Log In</Text>
                 </Pressable>
             </View>
             {errorVisible && (
                 <ErrorOverlayComponent
                     visible={errorVisible}
                     errorType="invalid_outlet"
-                    onRetry={()=>{
+                    onRetry={() => {
                         setErrorVisible(false);
                     }}
                 />
             )}
+            <LoggingInOverlayComponent
+                visible={loading}
+                status={status || "loading"} />
+
         </>
     );
 
