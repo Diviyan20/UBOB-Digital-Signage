@@ -91,30 +91,22 @@ def cleanup_cache():
 # ----------------
 def cache_image(image_id, img_bytes):
     cache_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
-    if os.path.exists(cache_path):
-        return cache_path
 
     try:
         with PILImage.open(io.BytesIO(img_bytes)) as img:
+            # Convert palette, RGBA, or other modes to RGB before saving as JPEG
+            if img.mode in ("P", "RGBA", "LA"):
+                img = img.convert("RGB")
+
             img.thumbnail((1280, 720))
             img.save(cache_path, format="JPEG", quality=85)
 
-        with CACHE_LOCK:
-            index = _load_cache_index()
-            index[f"{image_id}.jpg"] = os.path.getsize(cache_path)
-            _save_cache_index(index)
-
-        # Lazy cleanup (1 in 20 saves)
-        if get_cache_size_mb() > MAX_CACHE_SIZE_MB:
-            threading.Thread(target=cleanup_cache, daemon=True).start()
+        log.info(f"💾 Cached image {image_id} successfully → {cache_path}")
+        return cache_path
 
     except Exception as e:
         log.error(f"⚠️ Failed to cache image {image_id}: {e}")
-    finally:
-        del img_bytes
-        gc.collect()
-
-    return cache_path
+        raise
 
 
 # ----------------
@@ -178,37 +170,64 @@ def fetch_outlet_images():
         return outlet_images
 
     except Exception as e:
-        log.error(f"❌ fetch_outlet_images: {e}")
+        log.error(f"❌ Failed fetch_outlet_images: {e}")
         return []
 
 def stream_outlet_image(image_id):
     cache_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
     if os.path.exists(cache_path):
+        log.info(f"✅ Serving cached image {image_id}")
         return send_file(cache_path, mimetype="image/jpeg")
 
     try:
-        log.info(f"📡 Lazy fetch for image {image_id}")
+        log.info(f"📡 Lazy fetch for image {image_id} from Odoo API...")
         res = SESSION.post(f"{BASE_URL}/api/order/session", json={"ids": []}, timeout=20)
+        res.raise_for_status()
         data = res.json()
+        log.info(f"✅ Received response with {len(data.get('data', []))} items")
+
         if not data.get("status"):
+            log.error(f"❌ Invalid Odoo response: {data}")
             abort(404)
 
+        found = False
         for item in data.get("data", []):
             name = item.get("name", "")
             possible_id = str(abs(hash(name or item.get("image", ""))))[:10]
             if possible_id == image_id:
+                found = True
                 raw_img = item.get("image", "").strip()
-                base64_data = raw_img.split(",")[1] if "base64," in raw_img else raw_img
-                img_bytes = base64.b64decode(base64_data)
-                cached_path = cache_image(image_id, img_bytes)
-                return send_file(cached_path, mimetype="image/jpeg")
+                log.info(f"🎯 Matched outlet image {name} → ID {image_id}")
 
-        abort(404)
+                if not raw_img:
+                    log.error(f"❌ No image data found for {name}")
+                    abort(404)
+
+                try:
+                    base64_data = raw_img.split(",")[1] if "base64," in raw_img else raw_img
+                    img_bytes = base64.b64decode(base64_data)
+                except Exception as e:
+                    log.error(f"⚠️ Base64 decode failed for {name}: {e}")
+                    abort(500)
+
+                try:
+                    cached_path = cache_image(image_id, img_bytes)
+                    log.info(f"💾 Cached image for {name} at {cached_path}")
+                    return send_file(cached_path, mimetype="image/jpeg")
+                except Exception as e:
+                    log.error(f"⚠️ Failed to cache or send image {name}: {e}")
+                    abort(500)
+
+        if not found:
+            log.warning(f"⚠️ Image ID {image_id} not found in Odoo response.")
+            abort(404)
+
     except Exception as e:
-        log.error(f"⚠️ stream_outlet_image failed: {e}")
+        log.error(f"❌ stream_outlet_image failed for {image_id}: {e}", exc_info=True)
         abort(500)
     finally:
         gc.collect()
+
 
 def get_outlet_images_with_names():
     try:
@@ -216,6 +235,7 @@ def get_outlet_images_with_names():
         images = fetch_outlet_images()
 
         outlet_map = {o["outlet_name"].strip().lower(): o for o in outlets if o.get("outlet_name")}
+                
         combined = [
             {
                 "id": img["id"],
@@ -228,6 +248,6 @@ def get_outlet_images_with_names():
 
         return jsonify({"status": True, "media": combined}), 200
     except Exception as e:
-        log.error(f"❌ get_outlet_images_with_names: {e}")
+        log.error(f"❌ Failed get_outlet_images_with_names: {e}")
         gc.collect()
         return jsonify({"status": False, "message": str(e)}), 500
