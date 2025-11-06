@@ -105,7 +105,7 @@ def outlet_images_combined():
 # ===============
 @app.route("/get_media", methods=["GET"])
 def get_media_list():
-    print("Received GET at /get_media")
+    log.info("Received GET at /get_media")
     media_data = get_media_json()
 
     if not media_data:
@@ -122,7 +122,7 @@ def get_media_list():
 
 @app.route("/image/<image_id>", methods=["GET"])
 def serve_image(image_id):
-    print(f"Received GET at /image/{image_id}")
+    log.debug(f"Received GET at /image/{image_id}")
     return stream_image(image_id)
 
 # ============
@@ -132,7 +132,7 @@ def serve_image(image_id):
 def static_files(filename):
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     if not os.path.exists(os.path.join(static_dir, filename)):
-        print(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
+        log.warning(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
     return send_from_directory(static_dir, filename)
 
 
@@ -146,9 +146,9 @@ def heartbeat():
     # JSON response: {"device_id": "42"}
     try:
         data = request.get_json(force=True)
-        print("Incoming data: ", data)
+        log.debug(f"Incoming heartbeat data: {data}")
     except Exception as e:
-        print("JSON decode error: ", str(e))
+        log.error(f"JSON decode error: {e}")
         return jsonify({"error":"Invalid JSON payload"}), 400
     
     if not data:
@@ -161,7 +161,7 @@ def heartbeat():
     if not device_id:
         return jsonify({"error": "Missing device_id"}), 400
 
-    print(f"Heatbeat Updated for outlet {device_id}, Status: {status}, Timestamp: {timestamp}")
+    log.info(f"Heartbeat Updated for outlet {device_id}, Status: {status}, Timestamp: {timestamp}")
     return update_heartbeat(device_id, status, timestamp)
 
 
@@ -207,6 +207,6 @@ scheduler.start()
 # 🚀 RUN SERVER
 # ==============
 if __name__ == "__main__":
-    print("🚀 Starting Flask backend for Digital Signage System...")
-    print("🌍 Listening on http://0.0.0.0:5000")
+    log.info("🚀 Starting Flask backend for Digital Signage System...")
+    log.info("🌍 Listening on http://0.0.0.0:5000")
     app.run(debug=True, threaded=True, host="0.0.0.0", port=5000)
