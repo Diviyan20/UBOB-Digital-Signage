@@ -73,38 +73,35 @@ const OutletLoginForm: React.FC = () => {
     };
 
     return (
-        <>
-            <View style={styles.formContainer}>
-                <Text style={styles.label}>Outlet ID</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Enter Outlet ID"
-                    placeholderTextColor="#BDBDBD"
-                    value={outletId}
-                    onChangeText={setOutletId}
-                    keyboardType="numeric" // since it's an ID (number)
-                    autoCapitalize="none"
-                />
-                <Pressable style={styles.loginButton} onPress={handleLogin}>
-                    <Text style={styles.loginButtonText}>Log In</Text>
-                </Pressable>
-            </View>
-            {errorVisible && (
-                <ErrorOverlayComponent
-                    visible={errorVisible}
-                    errorType="invalid_outlet"
-                    onRetry={() => {
-                        setErrorVisible(false);
-                    }}
-                />
-            )}
-            <LoggingInOverlayComponent
-                visible={loading}
-                status={status || "loading"} />
-
-        </>
-    );
-
+        <View style={styles.container}>
+          <View style={styles.card}>
+            <Text style={styles.label}>Outlet ID</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter Outlet ID"
+              placeholderTextColor="#BDBDBD"
+              value={outletId}
+              onChangeText={setOutletId}
+              keyboardType="numeric"
+              autoCapitalize="none"
+            />
+            <Pressable style={styles.loginButton} onPress={handleLogin}>
+              <Text style={styles.loginButtonText}>Log In</Text>
+            </Pressable>
+          </View>
+      
+          {errorVisible && (
+            <ErrorOverlayComponent
+              visible={errorVisible}
+              errorType="invalid_outlet"
+              onRetry={() => setErrorVisible(false)}
+            />
+          )}
+      
+          <LoggingInOverlayComponent visible={loading} status={status || "loading"} />
+        </View>
+      );
+      
 };
 
 export default OutletLoginForm;
