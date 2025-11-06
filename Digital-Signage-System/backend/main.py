@@ -1,39 +1,61 @@
-import os
+import os, logging
 from sched import scheduler
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
-from controllers.media_controller import get_media_json, stream_image
-from controllers.outlet_controllers import fetch_outlets, fetch_outlet_images, stream_outlet_image, get_outlet_images_with_names
-from controllers.heartbeat_controller import devices, register_device, update_heartbeat
 from datetime import datetime, timedelta, timezone 
+from apscheduler.schedulers.background import BackgroundScheduler 
 
+# ==================
+# CONTROLLER IMPORTS
+# ==================
+from controllers.media_controller import get_media_json, stream_image
+
+from controllers.outlet_controllers import (
+    fetch_outlets, 
+    fetch_outlet_images, 
+    stream_outlet_image, 
+    get_outlet_images_with_names)
+
+from controllers.heartbeat_controller import (
+    devices, 
+    register_device, 
+    update_heartbeat)
+
+# LOAD ENVIRONMENT
 load_dotenv()
-
-app = Flask(__name__, static_folder="static")
-CORS(app, resources={r"/*": {"origins": "*"}})
-
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 
-HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
+# FLASK SETUP
+app = Flask(__name__, static_folder="static")
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# LOGGING SETUP
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 
 # ================
 # OUTLET ENDPOINTS
 # ================
+
 @app.route("/get_outlets", methods=["POST"])
 def get_outlet():
-    print("Received POST at /get_outlets")
     data = request.get_json(force=True)
     outlet_id = str(data.get("outlet_id")).strip() if data.get("outlet_id") else None
 
-    outlet_data = fetch_outlets()
-    if not outlet_data:
-        return jsonify({"error": "Failed to fetch outlets from Odoo"}), 500
-
     if not outlet_id:
         return jsonify({"error": "Missing outlet ID"}), 400
+    
+    outlet_data = fetch_outlets()
+    
+    if not outlet_data:
+        return jsonify({"error": "Failed to fetch outlets from Odoo."}), 500
     
     match = next((o for o in outlet_data if o["outlet_id"] == outlet_id), None)
     if not match:
@@ -55,28 +77,28 @@ def get_outlet():
 
 @app.route("/outlet_image", methods=["POST"])
 def outlet_images():
-    print("Received POST at /outlet_image")
     image_data = fetch_outlet_images()
 
     if not image_data:
         return jsonify({"error": "Failed to fetch outlet images from Odoo"}), 500
 
-    safe_copy = [
+    # Streamline: generator avoids building extra large list copies
+    safe_media = [
         {k:v for k, v in item.items() if k != "raw_img"}
         for item in image_data
     ]
     
-    return jsonify({"message":"Outlet Images fetched successfully!", "media":safe_copy})
+    return jsonify({"message":"Outlet Images fetched successfully!", "media":safe_media})
+
 
 @app.route("/outlet_image/<image_id>", methods=["GET"])
 def serve_outlet_images(image_id):
-    print(f"Received GET at /outlet_image/{image_id}")
     return stream_outlet_image(image_id)
+
 
 @app.route("/outlet_image_combined", methods=["POST"])
 def outlet_images_combined():
     return get_outlet_images_with_names()
-
 
 # ===============
 # MEDIA ENDPOINTS
@@ -143,17 +165,11 @@ def heartbeat():
     return update_heartbeat(device_id, status, timestamp)
 
 
+# =====================
+# INACTIVE DEVICE CHECK
 # ====================
-# RESPONSE LOGGING
-# ====================
-@app.after_request
-def log_response_info(response):
-    print(f"Response Status: {response.status}")
-    return response
-
-
 def check_for_inactive_devices():
-    print("Checking for inactive devices....")
+    log.info("Checking for inactive devices....")
     now = datetime.now(timezone.utc)
     timeout = now - timedelta(minutes=5) # Devices inactive for longer than given threshold = Offline
 
@@ -169,12 +185,23 @@ def check_for_inactive_devices():
             {"device_id": dev["device_id"]},
             {"$set": {"device_status": "offline"}}
         )
-        print(f"Marked device {dev['device_id']} as offline (no heartbeat since {dev['last_seen']})")
+        log.info(f"Marked device {dev['device_id']} as offline (no heartbeat since {dev['last_seen']})")
 
-# Start the scheduler
-if not scheduler.run:
-    scheduler.add_job(func=check_for_inactive_devices, trigger="interval", minutes=2)
-    scheduler.start()
+# =======================
+# GLOBAL RESPONSE LOGGING
+# =======================
+@app.after_request
+def log_response_info(response):
+    log.info(f"{request.method} {request.path} → {response.status}")
+    return response
+
+
+# ==============
+# SCHEDULER INIT
+# ==============
+scheduler = BackgroundScheduler(daemon = True)
+scheduler.add_job(check_for_inactive_devices, "interval", minutes=2)
+scheduler.start()
 
 # ==============
 # 🚀 RUN SERVER
