@@ -90,16 +90,19 @@ def cleanup_cache():
 # IMAGE OPERATIONS
 # ----------------
 def cache_image(image_id, img_bytes):
-    cache_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
+    cache_path = os.path.join(CACHE_DIR, f"{image_id}.png")
 
     try:
         with PILImage.open(io.BytesIO(img_bytes)) as img:
             # Convert palette, RGBA, or other modes to RGB before saving as JPEG
-            if img.mode in ("P", "RGBA", "LA"):
+            if img.mode in ("P", "LA"):
+                img = img.convert("RGBA")
+            
+            elif img.mode not in ("RGB", "RBGA"):
                 img = img.convert("RGB")
 
             img.thumbnail((1280, 720))
-            img.save(cache_path, format="JPEG", quality=85)
+            img.save(cache_path, format="PNG", quality=85)
 
         log.info(f"💾 Cached image {image_id} successfully → {cache_path}")
         return cache_path
@@ -213,7 +216,7 @@ def stream_outlet_image(image_id):
                 try:
                     cached_path = cache_image(image_id, img_bytes)
                     log.info(f"💾 Cached image for {name} at {cached_path}")
-                    return send_file(cached_path, mimetype="image/jpeg")
+                    return send_file(cached_path, mimetype="image/png")
                 except Exception as e:
                     log.error(f"⚠️ Failed to cache or send image {name}: {e}")
                     abort(500)
