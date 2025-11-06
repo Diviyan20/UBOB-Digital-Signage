@@ -123,12 +123,7 @@ def get_media_list():
 @app.route("/image/<image_id>", methods=["GET"])
 def serve_image(image_id):
     log.debug(f"Received GET at /image/{image_id}")
-    try:
-        log.info(f"Serving image: {image_id}")
-        return send_from_directory("uploads", image_id)
-    except Exception as e:
-        log.error(f"❌ Failed to serve image '{image_id}': {e}")
-        return jsonify({"error": str(e)}), 500
+    return stream_image(image_id)
 
 # ============
 # STATIC FILES

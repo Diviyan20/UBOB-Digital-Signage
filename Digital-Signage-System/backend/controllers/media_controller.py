@@ -1,3 +1,4 @@
+from pickletools import optimize
 import os, io, base64, json, gc, threading, requests, logging
 from dotenv import load_dotenv
 from flask import send_file, abort
@@ -94,13 +95,13 @@ def cleanup_cache():
         _save_cache_index(index)
         log.info(f"✅ Cache reduced to {total_size / (1024*1024):.2f} MB")
 
-def _add_to_cache(image_id: str, jpeg_bytes: bytes):
-    """Write a processed image to disk cache."""
-    file_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
+def _add_to_cache(image_id: str, img_bytes: bytes):
+    """Write a processed image to disk cache. (PNG format)"""
+    file_path = os.path.join(CACHE_DIR, f"{image_id}.png")
     
     try:
         with open(file_path, "wb") as f:
-            f.write(jpeg_bytes)
+            f.write(img_bytes)
         size = os.path.getsize(file_path)
         index = _load_cache_index()
         index[os.path.basename(file_path)] = size
@@ -114,19 +115,21 @@ def _process_single_image(item, img_data, image_id, image_url):
     try:
         # Normalize base64 input
         if not img_data.startswith("data:image"):
-            img_data = "data:image/jpeg;base64," + img_data
+            img_data = "data:image/png;base64," + img_data
 
         base64_data = img_data.split(",")[1]
         img_bytes = base64.b64decode(base64_data)
         
         with PILImage.open(io.BytesIO(img_bytes)) as img:
+            if img.mode in ("P", "RGBA", "LA"):
+                img = img.convert("RGBA")
             img.thumbnail((1280, 720))
             output = io.BytesIO()
-            img.save(output, format="JPEG", quality=85)
-            jpeg_bytes = output.getvalue()
+            img.save(output, format="PNG", optimize=True)
+            img_bytes = output.getvalue()
 
         # Save to disk cache
-        _add_to_cache(image_id, jpeg_bytes)
+        _add_to_cache(image_id, img_bytes)
 
         meta = {
             "id": image_id,
@@ -137,7 +140,7 @@ def _process_single_image(item, img_data, image_id, image_url):
             "image": image_url,
         }
 
-        return meta, jpeg_bytes
+        return meta, img_bytes
 
     except Exception as img_err:
         log.warning(f"⚠️ Failed to process image {item.get('name')}: {img_err}")
@@ -190,12 +193,12 @@ def get_media_json():
                 image_url = f"{HOST_URL}/image/{image_id}"
                 
                 # Check if image already exists in disk cache
-                cache_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
+                cache_path = os.path.join(CACHE_DIR, f"{image_id}.png")
                 if os.path.exists(cache_path):
                     # Image already cached, load it
                     try:
                         with open(cache_path, "rb") as f:
-                            jpeg_bytes = f.read()
+                            image_bytes = f.read()
                         new_cache[image_id] = {
                             "meta": {
                                 "id": image_id,
@@ -205,7 +208,7 @@ def get_media_json():
                                 "date_end": item.get("date_end"),
                                 "image": image_url,
                             },
-                            "jpeg_bytes": jpeg_bytes,
+                            "image_bytes": image_bytes,
                         }
                         metadata_list.append(new_cache[image_id]["meta"])
                         continue
@@ -233,9 +236,9 @@ def get_media_json():
         if processing_tasks:
             def process_and_update(task):
                 image_id, item, img_data, image_url, meta = task
-                processed_meta, jpeg_bytes = _process_single_image(item, img_data, image_id, image_url)
-                if processed_meta and jpeg_bytes:
-                    return image_id, processed_meta, jpeg_bytes
+                processed_meta, image_bytes = _process_single_image(item, img_data, image_id, image_url)
+                if processed_meta and image_bytes:
+                    return image_id, processed_meta, image_bytes
                 return None
 
             # Process images in parallel
@@ -248,11 +251,11 @@ def get_media_json():
                     try:
                         result = future.result()
                         if result:
-                            image_id, meta, jpeg_bytes = result
+                            image_id, meta, image_bytes = result
                             with CACHE_LOCK:
                                 new_cache[image_id] = {
                                     "meta": meta,
-                                    "jpeg_bytes": jpeg_bytes,
+                                    "image_bytes": image_bytes,
                                 }
                             processed_count += 1
                     except Exception as e:
@@ -285,41 +288,41 @@ def get_media_json():
 
 @profile
 def stream_image(image_id: str):
-    """Return JPEG image by ID from memory or disk cache (lazy loading)."""
+    """Return PNG image by ID from memory or disk cache (lazy loading)."""
     try:
         # Step 1: Check memory cache
         entry = media_cache.get(image_id)
-        if entry and entry.get("jpeg_bytes"):
+        if entry and entry.get("image_bytes"):
             return send_file(
-                io.BytesIO(entry["jpeg_bytes"]),
-                mimetype="image/jpeg",
+                io.BytesIO(entry["image_bytes"]),
+                mimetype="image/png",
                 as_attachment=False,
-                download_name=f"{image_id}.jpg",
+                download_name=f"{image_id}.png",
             )
         
         # Step 2: Check disk cache (lazy loading)
-        cache_path = os.path.join(CACHE_DIR, f"{image_id}.jpg")
+        cache_path = os.path.join(CACHE_DIR, f"{image_id}.png")
         if os.path.exists(cache_path):
             try:
                 with open(cache_path, "rb") as f:
-                    jpeg_bytes = f.read()
+                    image_bytes = f.read()
                 
                 # Update memory cache for faster future access
                 if entry:
-                    entry["jpeg_bytes"] = jpeg_bytes
+                    entry["image_bytes"] = image_bytes
                 else:
                     # Create entry if metadata exists but bytes are missing
                     with CACHE_LOCK:
                         media_cache[image_id] = {
                             "meta": {"id": image_id},  # Minimal metadata
-                            "jpeg_bytes": jpeg_bytes,
+                            "image_bytes": image_bytes,
                         }
                 
                 return send_file(
-                    io.BytesIO(jpeg_bytes),
-                    mimetype="image/jpeg",
+                    io.BytesIO(image_bytes),
+                    mimetype="image/png",
                     as_attachment=False,
-                    download_name=f"{image_id}.jpg",
+                    download_name=f"{image_id}.png",
                 )
             except Exception as e:
                 log.warning(f"Failed to read cached image {image_id}: {e}")

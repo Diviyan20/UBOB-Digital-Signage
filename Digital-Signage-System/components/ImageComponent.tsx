@@ -19,8 +19,8 @@ interface MediaItem {
 }
 
 const SERVER_URL = "http://10.0.2.2:5000"; // Emulator-safe
-const FADE_DURATION = 500;
-const DISPLAY_DURATION = 6000;
+const DISPLAY_DURATION = 5000;
+const FADE_DURATION = 400;
 
 const ImageComponent: React.FC<{ endpoint?: string }> = ({
   endpoint = `${SERVER_URL}/get_media`,
@@ -159,8 +159,8 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
         source={{ uri: getImageUrl(currentMedia.image)! }}
         style={styles.image}
         contentFit="contain"
-        transition={500} // smooth fade-in
-        cachePolicy="disk" // cache images efficiently
+        transition={170} // smooth fade-in
+        cachePolicy="memory-disk" // cache images efficiently
       />
       ) : (
         <Text style={styles.placeholderText}>No Image</Text>
