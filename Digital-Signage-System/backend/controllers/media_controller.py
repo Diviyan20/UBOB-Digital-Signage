@@ -343,13 +343,28 @@ class MediaService:
 
             # Step 3: Process images in background
             if processing_tasks:
-                self._process_images_async(processing_tasks, new_cache)
-            else:
-                # All images were cached, update immediately
+                # Process first 3 images synchronously for immediate availability
+                priority_tasks = processing_tasks[:3]
+                remaining_tasks = processing_tasks[3:]
+
+                # Block on priority tasks
+                for task in priority_tasks:
+                    image_id, item, img_data, meta = task
+                    image_bytes = ImageProcessor.process_image(img_data, image_id)
+                    if image_bytes:
+                        self.cache_manager.save_image(image_id, image_bytes)
+                        new_cache[image_id] = CachedImage(meta=meta, image_bytes=image_bytes)
+
+                # Process rest async
+                if remaining_tasks:
+                    self._process_images_async(remaining_tasks, new_cache)
+                
+                # Update cache with priority items
                 with self.lock:
-                    self.memory_cache = new_cache
-                    self.cache_loaded = True
-            
+                    self.memory_cache.update(new_cache)
+                    if not remaining_tasks:
+                        self.cache_loaded = True
+
             return metadata_list
         
         except Exception as e:

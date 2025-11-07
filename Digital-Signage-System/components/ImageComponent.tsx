@@ -34,14 +34,19 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   const [errorVisible, setErrorVisible] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const intervalRef =  useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(true);
 
-  // Helper to form valid image URL
-  const getImageUrl = (path?: string | null) => {
+  // Helper to form valid image URL (MOVED UP - must be defined before use)
+  const getImageUrl = (path?: string | null, bustCache = false) => {
     if (!path) return null;
-    if (path.startsWith("http")) return `${path}?t=${Date.now()}`;
-    return `${SERVER_URL}${path}?t=${Date.now()}`;
+    if (path.startsWith("http")) {
+      return bustCache ? `${path}?t=${Date.now()}` : path;
+    }
+    return bustCache
+      ? `${SERVER_URL}${path}?t=${Date.now()}`
+      : `${SERVER_URL}${path}`;
   };
 
   // Fetch from backend
@@ -55,6 +60,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
       if (isMounted.current) {
         setMediaList(items);
         setErrorVisible(false);
+        setCurrentIndex(0); // Reset to first image
       }
     } catch (err) {
       console.error("❌ Media fetch error:", err);
@@ -97,34 +103,52 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     });
   };
 
-  // Setup loop
-  useEffect(() => {
-    if (mediaList.length === 0) return;
-
-    // Clear old interval if any
-    if (intervalRef.current) clearInterval(intervalRef.current);
-
-    const totalInterval = DISPLAY_DURATION + FADE_DURATION * 2;
-    intervalRef.current = setInterval(advanceOnce, totalInterval);
-
-    // Trigger first fade manually after DISPLAY_DURATION
-    const firstTimeout = setTimeout(advanceOnce, DISPLAY_DURATION);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      clearTimeout(firstTimeout);
-    };
-  }, [mediaList, currentIndex]);
-
-  // Fetch once on mount
+  // Fetch media on mount
   useEffect(() => {
     isMounted.current = true;
     fetchMediaList();
     return () => {
       isMounted.current = false;
-      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
+
+  // Prefetch ALL images immediately when mediaList changes
+  useEffect(() => {
+    if (mediaList.length === 0) return;
+
+    // Prefetch all images in parallel
+    const prefetchPromises = mediaList
+      .map((item) => getImageUrl(item.image))
+      .filter((url) => url !== null)
+      .map((url) => Image.prefetch(url!).catch(() => null));
+
+    Promise.all(prefetchPromises).then(() => {
+      console.log(`✅ Prefetched ${mediaList.length} images`);
+    });
+  }, [mediaList]);
+
+  // Setup cycling with proper interval
+  useEffect(() => {
+    if (mediaList.length === 0) return;
+
+    // Clear any existing intervals/timeouts
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    const totalInterval = DISPLAY_DURATION + FADE_DURATION * 2;
+
+    // First transition after DISPLAY_DURATION
+    timeoutRef.current = setTimeout(() => {
+      advanceOnce();
+      // Then set up interval for continuous cycling
+      intervalRef.current = setInterval(advanceOnce, totalInterval);
+    }, DISPLAY_DURATION);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [mediaList, currentIndex]);
 
   const currentMedia = mediaList[currentIndex];
   const currentImageUrl = getImageUrl(currentMedia?.image);
@@ -156,12 +180,12 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
       {currentImageUrl ? (
         <Image
-        source={{ uri: getImageUrl(currentMedia.image)! }}
-        style={styles.image}
-        contentFit="contain"
-        transition={170} // smooth fade-in
-        cachePolicy="memory-disk" // cache images efficiently
-      />
+          source={{ uri: currentImageUrl }}
+          style={styles.image}
+          contentFit="contain"
+          transition={170}
+          cachePolicy="memory-disk"
+        />
       ) : (
         <Text style={styles.placeholderText}>No Image</Text>
       )}
