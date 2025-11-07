@@ -151,7 +151,10 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
                         contentFit="cover"
                         transition={200}
                         cachePolicy="memory-disk"
-                        onError={() => handleImageError(imageId)}
+                        onError={(error) => {
+                          console.warn(`Image load error for ${item.outlet_name} (${imageId}):`, error);
+                          handleImageError(imageId);
+                        }}
                         onLoadStart={() => {
                           // Remove from errors if it starts loading successfully
                           if (imageErrors.has(imageId)) {
@@ -162,6 +165,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
                             });
                           }
                         }}
+                        recyclingKey={imageId} // Help with image recycling
                       />
                     ) : (
                       <View style={[styles.image, { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" }]}>

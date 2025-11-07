@@ -1,4 +1,4 @@
-import os, io, base64, json, gc, threading, requests, logging, time
+import os, io, base64, json, gc, threading, requests, logging, hashlib
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
@@ -77,11 +77,7 @@ class OutletImageCacheManager:
         self.max_size_bytes = max_size_bytes
         self.index_file = index_file
         self.lock = threading.Lock()
-        self._cleanup_lock = threading.Lock()  # Separate lock for cleanup operations
         self._index: Dict[str, int] = {}  # {filename: size_bytes}
-        self._recently_accessed: Dict[str, float] = {}  # {image_id: timestamp}
-        self._cleanup_running = False
-        self._cleanup_grace_period = 5.0  # Don't delete images cached within last 5 seconds
         self._load_index()
     
     def _load_index(self) -> None:
@@ -118,11 +114,6 @@ class OutletImageCacheManager:
         file_path = self.cache_dir / filename
         return file_path.exists() and filename in self._index
     
-    def mark_as_accessed(self, image_id: str) -> None:
-        """Mark an image as recently accessed to protect it from cleanup."""
-        with self.lock:
-            self._recently_accessed[image_id] = time.time()
-    
     def get_image_path(self, image_id: str) -> Path:
         """Get file path for the image ID"""
         return self.cache_dir / f"{image_id}.png"
@@ -135,10 +126,6 @@ class OutletImageCacheManager:
             return None
         
         try:
-            # Mark as recently accessed to protect from cleanup
-            with self.lock:
-                self._recently_accessed[image_id] = time.time()
-            
             with open(file_path, "rb") as f:
                 return f.read()
             
@@ -159,15 +146,13 @@ class OutletImageCacheManager:
                 f.write(image_bytes)
 
             size = file_path.stat().st_size
-            current_time = time.time()
 
             with self.lock:
                 self._index[filename] = size
-                self._recently_accessed[image_id] = current_time
                 self._save_index()
             
-            # Trigger cleanup if needed (non-blocking, debounced)
-            self._cleanup_if_needed_async()
+            # Trigger cleanup if needed
+            self._cleanup_if_needed()
             return True
         
         except Exception as e:
@@ -181,29 +166,6 @@ class OutletImageCacheManager:
             del self._index[filename]
             self._save_index()
     
-    def _cleanup_if_needed_async(self) -> None:
-        """Trigger cleanup asynchronously if needed (debounced, non-blocking)."""
-        # Check if cleanup is already running or needed
-        if self._cleanup_running:
-            return
-        
-        total_size = self.get_total_size_bytes()
-        if total_size <= self.max_size_bytes:
-            return
-        
-        # Run cleanup in background thread to avoid blocking saves
-        def run_cleanup():
-            with self._cleanup_lock:
-                if self._cleanup_running:
-                    return
-                self._cleanup_running = True
-                try:
-                    self._cleanup_if_needed()
-                finally:
-                    self._cleanup_running = False
-        
-        threading.Thread(target=run_cleanup, daemon=True).start()
-    
     def _cleanup_if_needed(self) -> None:
         """Cleanup cache if exceeds file size limit"""
         # First, sync index with actual files on disk
@@ -216,30 +178,22 @@ class OutletImageCacheManager:
         
         log.info(f"🧹 Outlet cache cleanup triggered ({self.get_total_size_mb():.2f} MB)")
 
-        current_time = time.time()
-        
-        # Get all cached files with their creation times, excluding recently accessed
+        # Get all cached files with their creation times
         files_with_times = []
         for filename in list(self._index.keys()):
             file_path = self.cache_dir / filename
-            image_id = filename.replace(".png", "")
-            
-            # Skip recently accessed images (within grace period)
-            if image_id in self._recently_accessed:
-                access_time = self._recently_accessed[image_id]
-                if current_time - access_time < self._cleanup_grace_period:
-                    continue  # Protect recently accessed images
-            
             if file_path.exists():
                 try:
                     ctime = file_path.stat().st_ctime
                     size = file_path.stat().st_size
-                    files_with_times.append((filename, file_path, ctime, size, image_id))
+                    files_with_times.append((filename, file_path, ctime, size))
                 except (OSError, FileNotFoundError):
                     # File doesn't exist or was deleted, remove from index
+                    image_id = filename.replace(".png", "")
                     self._remove_from_index(image_id)
             else:
                 # File doesn't exist, remove from index
+                image_id = filename.replace(".png", "")
                 self._remove_from_index(image_id)
         
         # Sort by creation time (Oldest first)
@@ -249,15 +203,9 @@ class OutletImageCacheManager:
         target_size = int(self.max_size_bytes * 0.9)
         deleted_count = 0
 
-        for filename, file_path, _, actual_size, image_id in files_with_times:
+        for filename, file_path, _, actual_size in files_with_times:
             if total_size <= target_size:
                 break
-            
-            # Double-check it's not recently accessed (race condition protection)
-            if image_id in self._recently_accessed:
-                access_time = self._recently_accessed[image_id]
-                if current_time - access_time < self._cleanup_grace_period:
-                    continue  # Skip this file, it was recently accessed
                 
             try:
                 # Double-check file exists before deletion (race condition protection)
@@ -267,8 +215,6 @@ class OutletImageCacheManager:
                         if filename in self._index:
                             index_size = self._index[filename]
                             del self._index[filename]
-                            if image_id in self._recently_accessed:
-                                del self._recently_accessed[image_id]
                             total_size -= index_size
                     continue
                 
@@ -279,8 +225,6 @@ class OutletImageCacheManager:
                 with self.lock:
                     if filename in self._index:
                         del self._index[filename]
-                    if image_id in self._recently_accessed:
-                        del self._recently_accessed[image_id]
                 
                 total_size -= file_size
                 deleted_count += 1
@@ -292,22 +236,10 @@ class OutletImageCacheManager:
                         # Use index size as fallback
                         index_size = self._index.get(filename, 0)
                         del self._index[filename]
-                        if image_id in self._recently_accessed:
-                            del self._recently_accessed[image_id]
                         total_size -= index_size
                 log.debug(f"File {filename} was already deleted, removed from index")
             except Exception as e:
                 log.warning(f"Failed to delete {file_path}: {e}")
-        
-        # Clean up old entries from recently_accessed (older than grace period)
-        with self.lock:
-            cutoff_time = current_time - self._cleanup_grace_period
-            old_keys = [
-                img_id for img_id, access_time in self._recently_accessed.items()
-                if access_time < cutoff_time
-            ]
-            for img_id in old_keys:
-                del self._recently_accessed[img_id]
         
         if deleted_count > 0:
             self._save_index()
@@ -429,7 +361,8 @@ class OutletService:
     
     def _generate_image_id(self, name: str, img_data: str = "") -> str:
         """Generate a unique ID for an image based on name or data."""
-        return str(abs(hash(name or img_data)))[:10]
+        unique_str = (name or "") + (img_data[:100] or "")
+        return hashlib.md5(unique_str.encode("utf-8")).hexdigest()[:10]
     
     def _create_metadata(self, name: str, image_id: str) -> OutletImageMetadata:
         """Create metadata object from item data."""
@@ -610,9 +543,6 @@ class OutletService:
                 cached = self.memory_cache.get(image_id)
 
             if cached and cached.image_bytes:
-                # Mark as recently accessed to protect from cleanup
-                self.cache_manager.mark_as_accessed(image_id)
-                
                 return send_file(
                     io.BytesIO(cached.image_bytes),
                     mimetype="image/png",
@@ -620,7 +550,7 @@ class OutletService:
                     download_name=f"{image_id}.png",
                 )
 
-            # Step 2: Check disk cache (load_image already marks as accessed)
+            # Step 2: Check disk cache
             image_bytes = self.cache_manager.load_image(image_id)
             if image_bytes:
                 # Update memory cache for faster future access
@@ -642,6 +572,10 @@ class OutletService:
                     as_attachment=False,
                     download_name=f"{image_id}.png"
                 )
+            
+            if not self.cache_manager.has_image(image_id):
+                log.info(f"Outlet image {image_id} still processing, returning placeholder")
+                return send_file("static/placeholder.png", mimetype="image/png")
 
             # Step 3: Lazy fetch from Odoo API if not in cache
             log.info(f"📡 Lazy fetch for outlet image {image_id} from Odoo API...")
