@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, Text, View, useWindowDimensions } from "react-native";
 
 interface ImageItem {
+  id?: string;
   image?: string | null;
   outlet_name?: string;
   outlet_id?: string;
@@ -20,15 +21,21 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
 
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const scrollX = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
 
   const ITEM_W = Math.min(220, Math.round(width * 0.22));
 
-  const getImageUrl = useCallback((path?: string | null) => {
+  // Helper to form valid image URL (without cache-busting for better caching)
+  const getImageUrl = useCallback((path?: string | null, bustCache = false) => {
     if (!path) return null;
-    if (path.startsWith("http")) return `${path}?t=${Date.now()}`;
-    return `${SERVER_URL}${path}?t=${Date.now()}`;
+    if (path.startsWith("http")) {
+      return bustCache ? `${path}?t=${Date.now()}` : path;
+    }
+    return bustCache 
+      ? `${SERVER_URL}${path}?t=${Date.now()}` 
+      : `${SERVER_URL}${path}`;
   }, []);
 
   const fetchOutletImages = useCallback(async () => {
@@ -45,23 +52,46 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
       if (items.length === 0) throw new Error("No Images found");
       if (isMounted.current) {
         setImages(items);
+        setImageErrors(new Set()); // Reset errors when fetching new images
       }
     } catch (error) {
       console.error("Image Fetch Error:", error);
-      if (isMounted.current && images.length === 0) throw new Error("Error fetching Outlets.")
+      if (isMounted.current && images.length === 0) {
+        // Don't throw, just log the error
+        console.error("Error fetching Outlets:", error);
+      }
     } finally {
       if (isMounted.current) setLoading(false);
     }
-  }, [endpoint]);
+  }, [endpoint, images.length]);
 
+  // Prefetch all images when they're loaded
+  useEffect(() => {
+    if (images.length === 0) return;
+
+    // Prefetch all images in parallel
+    const prefetchPromises = images
+      .map(item => getImageUrl(item.image))
+      .filter(url => url !== null)
+      .map(url => Image.prefetch(url!).catch((err) => {
+        console.warn("⚠️ Prefetch failed for", url, err);
+        return null;
+      }));
+
+    Promise.all(prefetchPromises).then((results) => {
+      const successCount = results.filter(r => r !== null).length;
+      console.log(`✅ Prefetched ${successCount}/${images.length} outlet images`);
+    });
+  }, [images, getImageUrl]);
 
   useEffect(() => {
+    isMounted.current = true;
     fetchOutletImages();
     return () => {
       isMounted.current = false;
       scrollX.stopAnimation();
     };
-  }, [fetchOutletImages]);
+  }, []);
 
   useEffect(() => {
     if (images.length === 0) return;
@@ -77,17 +107,24 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
         easing: Easing.linear,
         useNativeDriver: true,
       }).start(({ finished }) => {
-        if (finished) loopScroll();
+        if (finished && isMounted.current) loopScroll();
       });
     };
 
     loopScroll();
     return () => scrollX.stopAnimation();
-  }, [images, width]);
+  }, [images, width, ITEM_W]);
 
-  if (loading) return <Text>Loading Images....</Text>
+  const handleImageError = useCallback((imageId: string) => {
+    setImageErrors(prev => new Set(prev).add(imageId));
+  }, []);
+
+  if (loading) return <Text>Loading Images....</Text>;
 
   if (images.length === 0) return <Text>No images available.</Text>;
+
+  // Create duplicated array for seamless loop
+  const duplicatedImages = [...images, ...images];
 
   return (
     <View style={styles.container}>
@@ -99,15 +136,37 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
               { transform: [{ translateX: scrollX }] },
             ]}
           >
-            {[...images, ...images].map((item, i) => {
+            {duplicatedImages.map((item, i) => {
+              const imageId = item.id || item.outlet_id || `image-${i}`;
               const uri = getImageUrl(item.image);
+              const hasError = imageErrors.has(imageId);
+              
               return (
-                <View key={i} style={{ alignItems: "center", marginHorizontal: 8 }}>
+                <View key={`${imageId}-${i}`} style={{ alignItems: "center", marginHorizontal: 8 }}>
                   <View style={styles.imageWrapper}>
-                    {uri ? (
-                      <Image source={{ uri }} style={styles.image} contentFit="cover" />
+                    {uri && !hasError ? (
+                      <Image
+                        source={{ uri }}
+                        style={styles.image}
+                        contentFit="cover"
+                        transition={200}
+                        cachePolicy="memory-disk"
+                        onError={() => handleImageError(imageId)}
+                        onLoadStart={() => {
+                          // Remove from errors if it starts loading successfully
+                          if (imageErrors.has(imageId)) {
+                            setImageErrors(prev => {
+                              const next = new Set(prev);
+                              next.delete(imageId);
+                              return next;
+                            });
+                          }
+                        }}
+                      />
                     ) : (
-                      <Text style={styles.placeholder}>No Image</Text>
+                      <View style={[styles.image, { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" }]}>
+                        <Text style={styles.placeholder}>No Image</Text>
+                      </View>
                     )}
                   </View>
                   <Text
