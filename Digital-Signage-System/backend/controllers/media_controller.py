@@ -3,7 +3,6 @@ import os, io, base64, json, gc, threading, requests, logging
 from dotenv import load_dotenv
 from flask import send_file, abort
 from PIL import Image as PILImage
-from memory_profiler import profile
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -163,7 +162,6 @@ def _fetch_raw_media_data():
     
     return data
 
-@profile
 def get_media_json():
     """Fetch media list - returns metadata immediately, processes images async."""
     global media_cache, cache_loaded
@@ -286,7 +284,6 @@ def get_media_json():
             return [v["meta"] for v in media_cache.values()]
         return []
 
-@profile
 def stream_image(image_id: str):
     """Return PNG image by ID from memory or disk cache (lazy loading)."""
     try:
