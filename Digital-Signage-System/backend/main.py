@@ -9,15 +9,15 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # ==================
 # CONTROLLER IMPORTS
 # ==================
-from backend.controllers.media_controller import get_media_json, stream_image
+from controllers.media_controller import get_media_json, stream_image
 
-from backend.controllers.outlet_controllers import (
+from controllers.outlet_controllers import (
     fetch_outlets, 
     fetch_outlet_images, 
     stream_outlet_image, 
     get_outlet_images_with_names)
 
-from backend.controllers.heartbeat_controller import (
+from controllers.heartbeat_controller import (
     devices, 
     register_device, 
     update_heartbeat)
