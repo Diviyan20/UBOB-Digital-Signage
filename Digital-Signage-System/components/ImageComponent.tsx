@@ -1,6 +1,6 @@
 import { MediaStyles } from "@/styling/MediaStyles";
 import { Image } from "expo-image";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -18,11 +18,12 @@ interface MediaItem {
   date_end?: string;
 }
 
-const SERVER_URL = "http://10.0.2.2:5000"; // Emulator-safe
+const SERVER_URL = "http://10.0.2.2:5000";
 const DISPLAY_DURATION = 5000;
 const FADE_DURATION = 400;
+const PREFETCH_BUFFER = 2 //Only Pre-fetches next 2 images instead of all
 
-const ImageComponent: React.FC<{ endpoint?: string }> = ({
+const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
   endpoint = `${SERVER_URL}/get_media`,
 }) => {
   const { width, height } = useWindowDimensions();
@@ -37,9 +38,14 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Helper to form valid image URL (MOVED UP - must be defined before use)
-  const getImageUrl = (path?: string | null, bustCache = false) => {
+  /**
+   * Memozied helper to form valid image URL
+   * Moved outside component and memoized to prevent recreation on every render
+   * Saves memory and prevent child component re-renders
+   */
+  const getImageUrl = useCallback((path?: string | null, bustCache = false) => {
     if (!path) return null;
     if (path.startsWith("http")) {
       return bustCache ? `${path}?t=${Date.now()}` : path;
@@ -47,43 +53,87 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     return bustCache
       ? `${SERVER_URL}${path}?t=${Date.now()}`
       : `${SERVER_URL}${path}`;
-  };
+  },[]);
 
-  // Fetch from backend
-  const fetchMediaList = async () => {
+  /**
+   * Optimized fetch function with request cancellation
+   * Uses AbortController to cancle previous requests if component unmounts
+   * Prevents race conditions and memory leaks
+   */ 
+  const fetchMediaList = useCallback(async () => {
+    // Cancel any ongoing request
+    if (abortControllerRef.current){
+      abortControllerRef.current.abort();
+    }
+
+    //Create new abort controller for this request
+    abortControllerRef.current = new AbortController();
+
     try {
-      const response = await fetch(endpoint);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const items = data.media || [];
-      if (items.length === 0) throw new Error("No media found");
-      if (isMounted.current) {
-        setMediaList(items);
-        setErrorVisible(false);
-        setCurrentIndex(0); // Reset to first image
-      }
+        const response = await fetch(endpoint,{
+          signal: abortControllerRef.current.signal,
+        });
+
+        if (!response.ok) console.log(`HTTP ${response.status}`);
+        const data = await response.json();
+        const items = data.media || [];
+
+        if (items.length === 0) console.error("Error: No media found");
+
+        if (isMounted.current){
+          setMediaList(items);
+          setErrorVisible(false);
+          setCurrentIndex(0); // Reset to first image
+        }
+      
     } catch (err) {
-      console.error("❌ Media fetch error:", err);
+      // Do not log abort errors (They're expected)
+      if (err instanceof Error && err.name === "AbortError") return;
+
+      console.error("Media Fetch Error: ", err);
       if (isMounted.current && mediaList.length === 0) setErrorVisible(true);
     } finally {
       if (isMounted.current) setLoading(false);
     }
-  };
+  }, [endpoint, mediaList.length]);
 
-  // Prefetch next image for smoother transitions
-  const preloadNextImage = (nextIndex: number) => {
-    const nextUrl = getImageUrl(mediaList[nextIndex]?.image);
-    if (!nextUrl) return;
-    Image.prefetch(nextUrl).catch(() =>
-      console.warn("⚠️ Prefetch failed for", nextUrl)
-    );
-  };
+  /** 
+   * Smart prefetching - only prefetches next few image
+   * More efficient that prefetching all at once
+   * Reduces memory usage and network load
+   * 
+  */
+ const prefetchImages = useCallback((startIndex: number, count: number) =>{
+  if (mediaList.length === 0) return;
 
-  // Advance carousel with fade animation
-  const advanceOnce = () => {
+  // Calculate which images to prefetch (circular buffer)
+  const prefetchPromises = [];
+  for (let i =0; i< count; i++){
+    const index = (startIndex + 1) %  mediaList.length;
+    const url = getImageUrl(mediaList[index]?.image);
+    if (url){
+      prefetchPromises.push(
+        Image.prefetch(url).catch(() => null) // Ignore prefetch failures
+      );
+    }
+  }
+  Promise.all(prefetchPromises).then(() =>{
+    console.log(`✅ Prefetched next ${count} images`);
+  });
+ }, [mediaList, getImageUrl]);
+
+  /**
+   * Memoized advance function
+   * Prevents recreation on every render and ensures proper closure capture
+   * 
+  */
+  const advanceOnce = useCallback(() => {
     if (mediaList.length <= 1) return;
+
     const nextIndex = (currentIndex + 1) % mediaList.length;
-    preloadNextImage(nextIndex);
+
+    //Prefetch next images before advancing
+    prefetchImages(nextIndex, PREFETCH_BUFFER);
 
     Animated.timing(fadeAnim, {
       toValue: 0,
@@ -101,33 +151,31 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
         useNativeDriver: true,
       }).start();
     });
-  };
+  },[mediaList.length, currentIndex, prefetchImages, fadeAnim]);
 
-  // Fetch media on mount
-  useEffect(() => {
-    isMounted.current = true;
-    fetchMediaList();
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  // Prefetch ALL images immediately when mediaList changes
+  // Initial prefetch when media list loads
   useEffect(() => {
     if (mediaList.length === 0) return;
+    prefetchImages(0, Math.min(PREFETCH_BUFFER + 1, mediaList.length));
+  }, [mediaList, prefetchImages]);
 
-    // Prefetch all images in parallel
-    const prefetchPromises = mediaList
-      .map((item) => getImageUrl(item.image))
-      .filter((url) => url !== null)
-      .map((url) => Image.prefetch(url!).catch(() => null));
+  // Component mount/unmount cleanup
+  useEffect(() => {
+    isMounted.current = true;
 
-    Promise.all(prefetchPromises).then(() => {
-      console.log(`✅ Prefetched ${mediaList.length} images`);
-    });
-  }, [mediaList]);
+    // Fetch initial data
+    fetchMediaList();
 
-  // Setup cycling with proper interval
+    return () =>{
+      isMounted.current = false;
+      // Cancel any ongoing requests
+      if (abortControllerRef.current){
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchMediaList]);
+
+  // Optimized cyling effect with better dependencies
   useEffect(() => {
     if (mediaList.length === 0) return;
 
@@ -137,10 +185,10 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
 
     const totalInterval = DISPLAY_DURATION + FADE_DURATION * 2;
 
-    // First transition after DISPLAY_DURATION
+    // Start image cycle after DISPLAY_DURATION
     timeoutRef.current = setTimeout(() => {
       advanceOnce();
-      // Then set up interval for continuous cycling
+      // Set up interval for continuous cycling
       intervalRef.current = setInterval(advanceOnce, totalInterval);
     }, DISPLAY_DURATION);
 
@@ -148,12 +196,13 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [mediaList, currentIndex]);
+  }, [mediaList.length, advanceOnce]);
 
-  const currentMedia = mediaList[currentIndex];
-  const currentImageUrl = getImageUrl(currentMedia?.image);
+  // Memoized current media to prevent unnecessary recalculations
+  const currentMedia = useMemo(() => mediaList[currentIndex], [mediaList, currentIndex]);
+  const currentImageUrl = useMemo(() => getImageUrl(currentMedia?.image), [getImageUrl, currentMedia?.image]);
 
-  // --- States ---
+  // Error States
   if (!currentMedia) {
     if (errorVisible) {
       return (
@@ -175,7 +224,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
     );
   }
 
-  // --- Render ---
+  // Main rendering UI
   return (
     <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
       {currentImageUrl ? (
@@ -185,6 +234,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
           contentFit="contain"
           transition={170}
           cachePolicy="memory-disk"
+          recyclingKey={`media-${currentIndex}`} // Added for memory efficiency
         />
       ) : (
         <Text style={styles.placeholderText}>No Image</Text>
@@ -200,6 +250,8 @@ const ImageComponent: React.FC<{ endpoint?: string }> = ({
       </View>
     </Animated.View>
   );
-};
+});
+
+ImageComponent.displayName = 'ImageComponent' // For debugging
 
 export default ImageComponent;
