@@ -99,7 +99,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
 
   /** 
    * Smart prefetching - only prefetches next few image
-   * More efficient that prefetching all at once
+   * More efficient than prefetching all at once
    * Reduces memory usage and network load
    * 
   */
@@ -112,7 +112,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
     const index = (startIndex + 1) %  mediaList.length;
     const url = getImageUrl(mediaList[index]?.image);
     if (url){
-      prefetchPromises.push(
+        prefetchPromises.push(
         Image.prefetch(url).catch(() => null) // Ignore prefetch failures
       );
     }
@@ -168,6 +168,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
 
     return () =>{
       isMounted.current = false;
+      
       // Cancel any ongoing requests
       if (abortControllerRef.current){
         abortControllerRef.current.abort();
