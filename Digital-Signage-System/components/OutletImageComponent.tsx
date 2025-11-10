@@ -11,20 +11,22 @@ interface ImageItem {
 }
 
 const SERVER_URL = "http://10.0.2.2:5000";
+const PREFETCH_BUFFER = 5 // Prefetch 5 images for marquee effect
 
-const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
+const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(({
   endpoint = `${SERVER_URL}/outlet_image_combined`,
 }) => {
   const { width, height } = useWindowDimensions();
-  const imageSize = Math.min(85, width * 0.15);
   const styles = OutletImageStyle(width, height);
 
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  
   const scrollX = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
-
+  const abortControllerRef = useRef<AbortController |null>(null);
+  const prefetchCache = useRef<Set<string>>(new Set());
   const ITEM_W = Math.min(220, Math.round(width * 0.22));
 
   // Helper to form valid image URL (without cache-busting for better caching)
@@ -38,61 +40,98 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
       : `${SERVER_URL}${path}`;
   }, []);
 
+  // Smart prefetching for marquee (Prefetch images that will be visible soon)
+  const smartPrefetchForMarquee = useCallback(()=>{
+    if (images.length === 0) return;
+
+    const urlsToPrefetch: string[] = [];
+
+    // For marquee, prefetch more images since scrolling is continuous
+    for (let i =0; i < Math.min(PREFETCH_BUFFER, images.length); i++){
+      const url = getImageUrl(images[i]?.image);
+      if (url && !prefetchCache.current.has(url)){
+        urlsToPrefetch.push(url);
+        prefetchCache.current.add(url);
+      }
+    }
+
+    if (urlsToPrefetch.length > 0){
+      const prefetchPromises = urlsToPrefetch.map(url =>
+        Image.prefetch(url).catch(() => null)
+      );
+
+      Promise.all(prefetchPromises).then(() =>{
+        console.log(`✅ Prefetched ${urlsToPrefetch.length} marquee images`);
+      });
+    }
+
+  }, [images, getImageUrl]);
+
+
   const fetchOutletImages = useCallback(async () => {
+    // Cancel any ongoing request
+    if (abortControllerRef.current){
+      abortControllerRef.current.abort()
+    }
+    
+    // Create a new abort controller for this request
+    abortControllerRef.current = new AbortController();
+    
     try {
       setLoading(true);
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortControllerRef.current.signal,
       });
+
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       const items = data.media || [];
 
       if (items.length === 0) throw new Error("No Images found");
+      
       if (isMounted.current) {
         setImages(items);
         setImageErrors(new Set()); // Reset errors when fetching new images
+        prefetchCache.current.clear(); // Clear the current cache 
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error("Image Fetch Error:", error);
-      if (isMounted.current && images.length === 0) {
-        // Don't throw, just log the error
-        console.error("Error fetching Outlets:", error);
-      }
+      
+      if (isMounted.current && images.length === 0) console.error("Error fetching Outlets:", error);
+        
     } finally {
       if (isMounted.current) setLoading(false);
     }
   }, [endpoint, images.length]);
 
-  // Prefetch all images when they're loaded
-  useEffect(() => {
-    if (images.length === 0) return;
+  // Initial prefetch when images load
+  useEffect(() =>{
+    if (images.length > 0){
+      smartPrefetchForMarquee();
+    }
+  }, [images, smartPrefetchForMarquee]);
 
-    // Prefetch all images in parallel
-    const prefetchPromises = images
-      .map(item => getImageUrl(item.image))
-      .filter(url => url !== null)
-      .map(url => Image.prefetch(url!).catch((err) => {
-        console.warn("⚠️ Prefetch failed for", url, err);
-        return null;
-      }));
-
-    Promise.all(prefetchPromises).then((results) => {
-      const successCount = results.filter(r => r !== null).length;
-      console.log(`✅ Prefetched ${successCount}/${images.length} outlet images`);
-    });
-  }, [images, getImageUrl]);
-
+  // Component mount/unmount cleanup
   useEffect(() => {
     isMounted.current = true;
-    fetchOutletImages();
+    fetchOutletImages(); // Fetch initial data
+
     return () => {
       isMounted.current = false;
       scrollX.stopAnimation();
-    };
-  }, []);
 
+      // Cancel any ongoing requests
+      if (abortControllerRef.current){
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchOutletImages]);
+
+
+  // Marquee animation (All images are still rendered for smooth scrolling)
   useEffect(() => {
     if (images.length === 0) return;
 
@@ -107,13 +146,17 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
         easing: Easing.linear,
         useNativeDriver: true,
       }).start(({ finished }) => {
-        if (finished && isMounted.current) loopScroll();
+        if (finished && isMounted.current){
+          // Prefetch more images for next cycle
+          smartPrefetchForMarquee();
+          loopScroll();
+        }
       });
     };
 
     loopScroll();
     return () => scrollX.stopAnimation();
-  }, [images, width, ITEM_W]);
+  }, [images.length, ITEM_W, width, smartPrefetchForMarquee]);
 
   const handleImageError = useCallback((imageId: string) => {
     setImageErrors(prev => new Set(prev).add(imageId));
@@ -123,7 +166,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
 
   if (images.length === 0) return <Text>No images available.</Text>;
 
-  // Create duplicated array for seamless loop
+  // All images still rendered here for marquee effect
   const duplicatedImages = [...images, ...images];
 
   return (
@@ -151,6 +194,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
                         contentFit="cover"
                         transition={200}
                         cachePolicy="memory-disk"
+                        recyclingKey={imageId}
                         onError={(error) => {
                           console.warn(`Image load error for ${item.outlet_name} (${imageId}):`, error);
                           handleImageError(imageId);
@@ -165,7 +209,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
                             });
                           }
                         }}
-                        recyclingKey={imageId} // Help with image recycling
+                        
                       />
                     ) : (
                       <View style={[styles.image, { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" }]}>
@@ -197,6 +241,6 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = ({
       </View>
     </View>
   );
-};
+});
 
 export default OutletDisplayComponent;
