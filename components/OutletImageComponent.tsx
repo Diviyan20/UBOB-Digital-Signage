@@ -135,26 +135,31 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(({
   useEffect(() => {
     if (images.length === 0) return;
 
-    const totalWidth = images.length * (ITEM_W + 18);
-    const duration = totalWidth * 25;
+    const itemWidth = ITEM_W + 8;
+    const originalWidth = images.length * itemWidth;
+    const duration = originalWidth * 25;
 
-    const loopScroll = () => {
+    const startInfiniteScroll = () => {
       scrollX.setValue(0);
-      Animated.timing(scrollX, {
-        toValue: -totalWidth,
-        duration,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished && isMounted.current){
-          // Prefetch more images for next cycle
-          smartPrefetchForMarquee();
-          loopScroll();
-        }
-      });
+      const animate = () =>{
+        Animated.timing(scrollX, {
+          toValue: -originalWidth,
+          duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished && isMounted.current){
+            // Instantly reset position without visual jump (Seamless transition)
+            scrollX.setValue(0);
+            smartPrefetchForMarquee();
+            animate();
+          }
+        });
+      };
+      animate();  
     };
 
-    loopScroll();
+    startInfiniteScroll();
     return () => scrollX.stopAnimation();
   }, [images.length, ITEM_W, width, smartPrefetchForMarquee]);
 
