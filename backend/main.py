@@ -1,4 +1,4 @@
-import os, logging
+import os, logging, psutil, gc
 from sched import scheduler
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -186,6 +186,47 @@ def check_for_inactive_devices():
         )
         log.info(f"Marked device {dev['device_id']} as offline (no heartbeat since {dev['last_seen']})")
 
+# ==============
+# MEMORY LOGGING
+# ==============
+def log_memory_usage():
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    memory_mb = memory_info.rss / 1024 / 1024 # Convert to mb
+
+    # Get cache size from controllers
+    from controllers.media_controller import _media_service
+    from controllers.outlet_controllers import _outlet_service
+
+    media_cache_size = len(_media_service.memory_cache) if hasattr(_media_service, 'memory_cache') else 0
+    outlet_cache_size = len(_outlet_service.memory_cache) if hasattr(_outlet_service, 'memory_cache') else 0
+
+    log.info(f"🧠 Memory: {memory_mb:.1f}MB | Media Cache: {media_cache_size} | Outlet Cache: {outlet_cache_size}")
+
+
+# Add memory endpoint
+@app.route("/memory_stats", methods=["GET"])
+def get_memory_stats():
+    gc.collect()
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+
+    from controllers.media_controller import _media_service
+    from controllers.outlet_controllers import _outlet_service
+
+    stats = {
+        "memory_mb": round(memory_info.rss / 1024 / 1024, 1),
+        "memory_percent": round(process.memory_percent(), 1),
+        "media_cache_items": len(_media_service.memory_cache),
+        "outlet_cache_items": len(_outlet_service.memory_cache),
+        "cache_files_media": len(_media_service.cache_manager._index) if hasattr(_media_service, 'cache_manager') else 0,
+        "cache_files_outlet": len(_outlet_service.cache_manager._index) if hasattr(_outlet_service, 'cache_manager') else 0,
+    }
+
+    log_memory_usage() # Log to console
+    return jsonify(stats)
+
+
 # =======================
 # GLOBAL RESPONSE LOGGING
 # =======================
@@ -199,7 +240,8 @@ def log_response_info(response):
 # SCHEDULER INIT
 # ==============
 scheduler = BackgroundScheduler(daemon = True)
-scheduler.add_job(check_for_inactive_devices, "interval", minutes=2)
+scheduler.add_job(check_for_inactive_devices, "interval", minutes=2) # Scheduled job to check for inactive devices
+scheduler.add_job(func=log_memory_usage, trigger="interval", minutes=4, id="memory_monitor", name="Memory Usage Monitor") # Scheduled job to log memory usage
 scheduler.start()
 
 # ==============
