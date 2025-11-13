@@ -3,7 +3,7 @@ import { ActivityIndicator, Animated, Text } from "react-native";
 
 interface LoginOverlayProps {
     visible: boolean;
-    status?: "loading" | "success" | "error";
+    status?: "loading" | "fetching_promotions" | "preloading_images" | "success" | "error";
     message?: string;
 }
 
@@ -32,9 +32,14 @@ const LoggingInOverlayComponent: React.FC<LoginOverlayProps> = ({
 
     if (!visible) return null;
 
-    const isLoading = status == "loading";
-    const isSuccess = status == "success";
-    const isError = status == "error";
+    const isLoading = status === "loading";
+    const isFetching = status === "fetching_promotions";
+    const isPreloading = status === "preloading_images";
+    const isSuccess = status === "success";
+    const isError = status === "error";
+    
+    // Show loading spinner for loading states
+    const showSpinner = isLoading || isFetching || isPreloading;
 
     return (
         <Animated.View
@@ -51,7 +56,7 @@ const LoggingInOverlayComponent: React.FC<LoginOverlayProps> = ({
                 opacity,
             }}
         >
-            {isLoading && <ActivityIndicator size="large" color="#fff" />}
+            {showSpinner && <ActivityIndicator size="large" color="#fff" />}
             <Text
                 style={{
                     color: "#fff",
@@ -62,7 +67,9 @@ const LoggingInOverlayComponent: React.FC<LoginOverlayProps> = ({
                 }}
             >
                 {isLoading && message}
-                {isSuccess && "✅ Success! Redirecting..."}
+                {isFetching && message}
+                {isPreloading && message}
+                {isSuccess && "✅ Success! Loading Media..."}
                 {isError && "❌ Invalid Outlet Code"}
             </Text>
         </Animated.View>
