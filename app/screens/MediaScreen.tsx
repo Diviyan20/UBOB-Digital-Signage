@@ -1,8 +1,8 @@
 import ImageComponent from "@/components/ImageComponent";
 import OutletDisplayComponent from "@/components/OutletImageComponent";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect } from "react";
 import { Dimensions, StyleSheet, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SERVER_URL = "http://10.0.2.2:5000";

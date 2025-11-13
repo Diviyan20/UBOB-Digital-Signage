@@ -1,4 +1,5 @@
-import os, io, base64, json, gc, threading, requests, logging, hashlib
+from sre_parse import SUCCESS
+import os, io, base64, json, gc, threading, requests, logging, hashlib, signal
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
@@ -573,72 +574,130 @@ class OutletService:
                     download_name=f"{image_id}.png"
                 )
             
+            # Step 3: Check if image is currently being processed
             if not self.cache_manager.has_image(image_id):
-                log.info(f"Outlet image {image_id} still processing, returning placeholder")
-                return send_file("static/placeholder.png", mimetype="image/png")
+                with self.lock:
+                    if image_id not in [img.meta.id for img in self.memory_cache.values()]:
+                        log.info(f"Outlet image {image_id} still processing, returning placeholder")
+                        # Do not return placeholder immediately, try lazy loading first
+                    else:
+                        log.debug(f"Image {image_id} exists in memory but not processed yet")
 
-            # Step 3: Lazy fetch from Odoo API if not in cache
+            # Step 4: Lazy fetch from Odoo API if not in cache
             log.info(f"📡 Lazy fetch for outlet image {image_id} from Odoo API...")
-            data = self._fetch_raw_outlet_images_data()
             
-            if not data:
-                log.warning(f"⚠️ No outlet images data available for ID: {image_id}")
-                abort(404)
+            # Try to find this specific image without fetching all images
+            found_item = None
+            found_name = None
+
+            # First try to find it in exisiting metadata cache
+            with self.lock:
+                for cached_img in self.memory_cache.values():
+                    if cached_img.meta.id == image_id and cached_img.meta.name:
+                        found_name = cached_img.meta.name
+                        break
             
-            # Search for the image by matching ID
-            found = False
-            for item in data:
-                name = item.get("name", "").strip()
-                raw_img = (item.get("image") or "").strip()
-                
-                # Generate ID using the same method as metadata creation
-                possible_id = self._generate_image_id(name, raw_img)
-                
-                if possible_id == image_id:
-                    found = True
-                    log.info(f"🎯 Matched outlet image {name} → ID {image_id}")
-                    
+            # If we have the name, we can be more specific
+            if found_name:
+                log.debug(f"Found cached name '{found_name}' for image {image_id}")
+                # We can try a more targeted search or use the name to reconsturct the image
+                data = self._fetch_raw_outlet_images_data()
+
+                # Look for the specific image by name
+                for item in data:
+                    if item.get("name", "").strip() == found_name.strip():
+                        found_item = item
+                        break
+            
+            else:
+                # Fallback: fetch all and search (but with better error handling)
+                log.debug(f"No cached name for {image_id}, fetching all outlet images...")
+                data = self._fetch_raw_outlet_images_data()
+
+                if not data:
+                    log.warning(f"No outlet images availble for ID: {image_id}")
+                    # Return placeholder instead of 404 to prevent crashes
+                    return send_file("static/placeholder.png", mimetype="image/png")
+
+                # Search for the image by ID matching
+                for item in data:
+                    name = item.get("name", "").strip()
+                    raw_img = (item.get("image") or "").strip()
+
                     if not raw_img:
-                        log.error(f"❌ No image data found for {name}")
-                        abort(404)
-                    
-                    try:
-                        # Process and cache the image
-                        image_bytes = OutletImageProcessor.process_image(raw_img, image_id)
-                        if not image_bytes:
-                            log.error(f"❌ Failed to process image for {name}")
-                            abort(500)
-                        
-                        # Save to disk cache
-                        self.cache_manager.save_image(image_id, image_bytes)
-                        
-                        # Create metadata and update memory cache
-                        meta = self._create_metadata(name, image_id)
-                        with self.lock:
-                            self.memory_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
-                        
-                        log.info(f"💾 Cached and serving outlet image {name} (ID: {image_id})")
-                        return send_file(
-                            io.BytesIO(image_bytes),
-                            mimetype="image/png",
-                            as_attachment=False,
-                            download_name=f"{image_id}.png"
-                        )
-                    except Exception as e:
-                        log.error(f"⚠️ Failed to process/cache outlet image {name}: {e}")
-                        abort(500)
+                        continue
+
+                    # Generate ID using the same method as metadata creation
+                    possible_id = self._generate_image_id(name, raw_img)
+
+                    if possible_id == image_id:
+                        found_item = item
+                        break
             
-            if not found:
-                log.warning(f"⚠️ Outlet image ID {image_id} not found in Odoo response.")
-                abort(404)
-        
-        except HTTPException:
-            # Re-raise Flask abort exceptions as-is
-            raise
+            if found_item:
+                name = found_item.get("name","").strip()
+                raw_img = found_item.get("image","").strip()
+
+                if not raw_img:
+                    log.error(f"❌ No image data found for matched item {name}")
+                    return send_file("static/placeholder.png", mimetype="image/png")
+            
+            try:
+                log.info(f"🔄 Processing outlet image {name} (ID: {image_id})...")
+                
+                # Process and cache the image with timeout protection
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Image processing timed out")
+                
+                # Set a 30-second timeout for image processing
+                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(30)
+                
+                try:
+                    image_bytes = OutletImageProcessor.process_image(raw_img, image_id)
+                    signal.alarm(0)  # Cancel the alarm
+                    
+                    if not image_bytes:
+                        log.error(f"❌ Failed to process image for {name}")
+                        return send_file("static/placeholder.png", mimetype="image/png")
+                    
+                    # Save to disk cache
+                    success = self.cache_manager.save_image(image_id, image_bytes)
+                    if not success:
+                        log.error(f"❌ Failed to save image {name} to cache")
+                        return send_file("static/placeholder.png", mimetype="image/png")
+                    
+                    # Create metadata and update memory cache
+                    meta = self._create_metadata(name, image_id)
+                    with self.lock:
+                        self.memory_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
+                    
+                    log.info(f"💾 Successfully cached and serving outlet image {name} (ID: {image_id})")
+                    return send_file(
+                        io.BytesIO(image_bytes),
+                        mimetype="image/png",
+                        as_attachment=False,
+                        download_name=f"{image_id}.png"
+                    )
+                
+                except TimeoutError:
+                    signal.alarm(0)  # Cancel the alarm
+                    log.error(f"⏰ Timeout processing image {name}")
+                    return send_file("static/placeholder.png", mimetype="image/png")
+                
+                finally:
+                    signal.signal(signal.SIGALRM, old_handler)
+                    
+            except Exception as e:
+                log.error(f"⚠️ Failed to process/cache outlet image {name}: {e}")
+                return send_file("static/placeholder.png", mimetype="image/png")
+    
         except Exception as e:
-            # Log and abort for other exceptions
-            log.error(f"❌ Failed to stream outlet image {image_id}: {e}", exc_info=True)
-            abort(500)
+            # Return placeholder for any error to prevent app crashes
+            log.error(f"❌ Error streaming outlet image {image_id}: {e}", exc_info=True)
+            return send_file("static/placeholder.png", mimetype="image/png")
     
     def get_outlet_images_with_names(self) -> Tuple[dict, int]:
         """Get outlet images combined with outlet names."""

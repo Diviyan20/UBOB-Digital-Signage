@@ -5,6 +5,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone 
 from apscheduler.schedulers.background import BackgroundScheduler 
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ==================
 # CONTROLLER IMPORTS
@@ -29,7 +30,21 @@ API_TOKEN = os.getenv("ODOO_API_TOKEN")
 
 # FLASK SETUP
 app = Flask(__name__, static_folder="static")
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "max_age": 86400
+    }
+})
+
+# CONNECTION POOLING & TIMEOUT SETTINGS
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 # 50 MB max file size
+app.config['TIMEOUT'] = 300 # 5 minute timeout
+
+# ADDING PROXY FIX
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 # LOGGING SETUP
 logging.basicConfig(
