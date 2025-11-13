@@ -1,10 +1,10 @@
 import ImageComponent from "@/components/ImageComponent";
+import OrderPreparation from "@/components/OrderPreparation";
 import OutletDisplayComponent from "@/components/OutletImageComponent";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect } from "react";
-import { Dimensions, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const SERVER_URL = "http://10.0.2.2:5000";
 
 const MediaScreen = () => {
@@ -39,25 +39,47 @@ const MediaScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Top section - Promo card */}
-      <View style={styles.promoSection}>
-        <ImageComponent />
+      <View style={styles.topRow}>
+        <View style={styles.leftColumn}>
+          <ImageComponent />
+        </View>
+        <View style={styles.rightColumn}>
+          <OrderPreparation />
+        </View>
       </View>
-      <OutletDisplayComponent />
+      <View style={styles.bottomRow}>
+        <OutletDisplayComponent />
+      </View>
     </View>
-
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: '#000',
+    padding: 10,
   },
-  promoSection: {
+  topRow: {
+    flex: 3,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  leftColumn: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  rightColumn: {
+    flex: 2,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  bottomRow: {
+    flex: 1,
+    marginTop: 10,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
 });
 

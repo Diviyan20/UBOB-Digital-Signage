@@ -1,4 +1,4 @@
-import { StyleSheet, Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 export const MediaStyles = (width: number, height: number) =>
   StyleSheet.create({
@@ -19,7 +19,7 @@ export const MediaStyles = (width: number, height: number) =>
     },
 
     image: {
-      width: "100%",
+      width: "80%",
       height: height * 0.5,
       resizeMode: "contain",
       marginTop: 10,
@@ -28,12 +28,12 @@ export const MediaStyles = (width: number, height: number) =>
     textContainer: {
       width: "100%",
       alignItems: "center",
-      paddingHorizontal: width > 800 ? 16 : 8,
+      paddingHorizontal: width > 600 ? 16 : 8,
       paddingBottom: 10,
     },
 
     title: {
-      fontSize: width > 1200 ? 26 : width > 800 ? 20 : 16,
+      fontSize: width > 1200 ? 26 : width > 600 ? 15 : 16,
       fontWeight: "700",
       color: "#111",
       textAlign: "center",
@@ -41,15 +41,15 @@ export const MediaStyles = (width: number, height: number) =>
     },
 
     description: {
-      fontSize: width > 1200 ? 18 : width > 800 ? 15 : 13,
+      fontSize: width > 1200 ? 18 : width > 600 ? 12 : 13,
       color: "#444",
       textAlign: "center",
-      lineHeight: width > 800 ? 20 : 16,
+      lineHeight: width > 800 ? 10 : 16,
     },
 
     placeholderText: {
       textAlign: "center",
       color: "#888",
-      fontSize: width > 800 ? 16 : 13,
+      fontSize: width > 600 ? 12 : 13,
     },
   });
