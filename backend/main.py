@@ -1,4 +1,4 @@
-import os, logging, psutil, gc
+import os, logging, psutil, gc, requests
 from sched import scheduler
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -19,7 +19,7 @@ from controllers.outlet_controllers import (
     get_outlet_images_with_names)
 
 from controllers.heartbeat_controller import (
-    devices, 
+    supabase_headers, 
     register_device, 
     update_heartbeat)
 
@@ -27,6 +27,7 @@ from controllers.heartbeat_controller import (
 load_dotenv()
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
 
 # FLASK SETUP
 app = Flask(__name__, static_folder="static")
@@ -183,23 +184,42 @@ def heartbeat():
 # INACTIVE DEVICE CHECK
 # ====================
 def check_for_inactive_devices():
-    log.info("Checking for inactive devices....")
+    log.info("Checking for inactive devices...")
+
     now = datetime.now(timezone.utc)
-    timeout = now - timedelta(minutes=5) # Devices inactive for longer than given threshold = Offline
+    timeout_iso = (now - timedelta(minutes=5)).isoformat()
 
+    # 1. Fetch online devices
+    query_url = f"{SUPABASE_URL}/rest/v1/heartbeats?device_status=eq.online&select=*"
 
-    # Find devices that are 'online' but have not checked in recently
-    inactive = devices.find({
-        "device_status": "online",
-        "last_seen": {"$lt": timeout}
-    })
+    res = requests.get(query_url, headers=supabase_headers())
+    if not res.ok:
+        log.error("Failed to query active devices: " + res.text)
+        return
 
-    for dev in inactive:
-        devices.update_one(
-            {"device_id": dev["device_id"]},
-            {"$set": {"device_status": "offline"}}
-        )
-        log.info(f"Marked device {dev['device_id']} as offline (no heartbeat since {dev['last_seen']})")
+    devices = res.json()
+
+    # 2. Filter devices inactive longer than 5 minutes
+    for dev in devices:
+        last_seen = dev.get("last_seen")
+        if not last_seen:
+            continue
+
+        last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+
+        if last_seen_dt < (now - timedelta(minutes=5)):
+            device_id = dev["device_id"]
+
+            # mark device as offline
+            patch_url = f"{SUPABASE_URL}/rest/v1/heartbeats?device_id=eq.{device_id}"
+            body = {"device_status": "offline"}
+
+            res2 = requests.patch(patch_url, headers=supabase_headers(), json=body)
+
+            if res2.status_code in (204, 200):
+                log.info(f"Marked device {device_id} as offline")
+            else:
+                log.error(f"Failed to update device {device_id}: {res2.text}")
 
 # ==============
 # MEMORY LOGGING

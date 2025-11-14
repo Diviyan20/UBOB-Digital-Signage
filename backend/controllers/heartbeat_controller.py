@@ -1,47 +1,80 @@
-import os
+import os, requests, logging
 from datetime import datetime, timezone
 from flask import jsonify
-from pymongo import MongoClient
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
 
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+API_KEY = os.getenv("SUPABASE_API_KEY")
+SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-MONGO_URI = os.getenv("MONGODB_CONNECTION_STRING")
-client = MongoClient(MONGO_URI)
-db = client["UBOB-Digital-Signage"]
-devices = db.heartbeats
+url = f"{SUPABASE_URL}/rest/v1/heartbeats"
+
+# ------------------------
+# Helper - request headers
+#-------------------------
+
+def supabase_headers():
+    return{
+        "apikey": API_KEY,
+        "Authorization": f"Bearer {SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json"
+    }
+
+# -------------
+# LOGGING SETUP
+# -------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
 
 # -----------------
 # Register devices (By Outlet Code)
 # -----------------
 
 def register_device(outlet_code: str, outlet_name: str, region_name: str = None):
-    existing_device = devices.find_one({"device_id": outlet_code})
+    # 1. Check if device already exists
+    query_url = f"{url}?device_id=eq.{outlet_code}&select=*"
+
+    res = requests.get(query_url, headers=supabase_headers())
+    existing_device = res.json()
 
     if existing_device:
-        print(f"Device already registed to outlet code {outlet_code}")
+        device = existing_device[0]
+        log.info(f"Device already registed to outlet code {outlet_code}!")
 
         return{
-            "device_id": existing_device["device_id"],
-            "device_name": existing_device["device_name"],
-            "timestamp": existing_device.get("timestamp"),
+            "device_id": device["device_id"],
+            "device_name": device["device_name"],
+            "timestamp": device.get("timestamp"),
             "is_new": False
         }
 
-    # Create new Record
+    # 2. Insert new device
+    now = datetime.now(timezone.utc).isoformat()
     record = {
         "device_id": outlet_code,
         "device_name": outlet_name,
         "device_status": "online",
         "device_location": region_name,
-        "timestamp": datetime.now()
+        "timestamp": now,
+        "last_seen":now
     }
 
-    result = devices.insert_one(record)
-    record["_id"] = str(result.inserted_id) # Capture and stringify ObjectId
-    print(f"Registered device to outlet code {outlet_code}!")
-    return{**record, "is_new": True}
+    insert_res = requests.post(url, headers=supabase_headers(), json=record)
+
+    if not insert_res:
+        log.info("Supabase Error: ", insert_res.text)
+        return {"error": "Failed to insert device"}, 500
+    
+    log.info(f"Registered device to outlet code {outlet_code}!")
+
+    return {**record, "is_new": True}
 
 
 # -----------------
@@ -53,27 +86,33 @@ def update_heartbeat(device_id: str, status: str, timestamp:str):
         return jsonify({"error": "Missing Device ID!"}), 400
     
     now = datetime.now(timezone.utc)
-    result = devices.update_one(
-        {"device_id": device_id},
-        {"$set": {
-            "device_status": status, 
-            "timestamp": now,
-            "last_seen":now
-            }}
-    )
 
-    if result.matched_count == 0:
+    update_url = f"{url}?device_id=eq.{device_id}"
+    
+    body = {
+        "device_status": status,
+        "timestamp": now,
+        "last_seen": now
+    }
+
+    res = requests.patch(update_url, headers=supabase_headers(), json=body)
+
+    if res.status_code in (204, 200):
+        return jsonify({
+            "message": "Heartbeat updated successfully",
+            "device_id": device_id,
+            "status": status,
+            "timestamp": now
+        }), 200
+
+    if res.status_code == 404:
         return jsonify({
             "message": "Device not found",
             "device_id": device_id,
-            "status": "offline"}), 404
-   
-    return jsonify({
-        "message": "Heartbeat updated successfully",
-        "device_id": device_id,
-        "status": status,
-        "timestamp":now.isoformat(),
-        }), 200
+            "status": "offline"
+        }), 404
+    
+    return jsonify({"error": "Failed to update device", "details": res.text}), 500
 
 
 # --------------------------
@@ -83,5 +122,11 @@ def get_all_devices():
     """
     Returns all registered devices in the system (for debugging).
     """
-    data = list(devices.find({}, {"_id": 0}))
-    return jsonify({"devices": data}), 200
+    query_url = f"{url}?select=*"
+
+    res = requests.get(query_url, headers=supabase_headers())
+
+    if not res.ok:
+        return jsonify({"error": "Failed to fetch devices"}), 500
+
+    return jsonify({"devices": res.json()}), 200
