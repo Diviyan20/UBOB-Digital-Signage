@@ -57,7 +57,7 @@ const MediaScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#F2F0EF',
     padding: 10,
   },
   topRow: {

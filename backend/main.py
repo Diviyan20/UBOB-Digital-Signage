@@ -12,7 +12,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 # ==================
 from controllers.media_controller import get_media_json, stream_image
 
-from controllers.outlet_controllers import (
+from controllers.outlet_controller import (
     fetch_outlets, 
     fetch_outlet_images, 
     stream_outlet_image, 
@@ -231,7 +231,7 @@ def log_memory_usage():
 
     # Get cache size from controllers
     from controllers.media_controller import _media_service
-    from controllers.outlet_controllers import _outlet_service
+    from controllers.outlet_controller import _outlet_service
 
     media_cache_size = len(_media_service.memory_cache) if hasattr(_media_service, 'memory_cache') else 0
     outlet_cache_size = len(_outlet_service.memory_cache) if hasattr(_outlet_service, 'memory_cache') else 0
@@ -247,7 +247,7 @@ def get_memory_stats():
     memory_info = process.memory_info()
 
     from controllers.media_controller import _media_service
-    from controllers.outlet_controllers import _outlet_service
+    from controllers.outlet_controller import _outlet_service
 
     stats = {
         "memory_mb": round(memory_info.rss / 1024 / 1024, 1),
