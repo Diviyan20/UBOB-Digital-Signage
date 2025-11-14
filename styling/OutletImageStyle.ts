@@ -1,4 +1,4 @@
-import { StyleSheet, Platform } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
 export const OutletImageStyle = (width: number, height: number) => {
   const imageSize = Math.min(90, width * 0.2); // responsive image size
@@ -8,7 +8,7 @@ export const OutletImageStyle = (width: number, height: number) => {
   return StyleSheet.create({
     container: {
       width: width,
-      height: height * 0.22,
+      height: height * 0.23,
       justifyContent: "center",
       alignItems: "center",
       position: "relative",
@@ -44,6 +44,7 @@ export const OutletImageStyle = (width: number, height: number) => {
       width: imageSize,
       height: imageSize,
       marginHorizontal: 8,
+      marginTop: 8,
       borderRadius: borderRadius + borderWidth,
       backgroundColor: "#fff",
       justifyContent: "center",

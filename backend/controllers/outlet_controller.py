@@ -1,14 +1,12 @@
-from sre_parse import SUCCESS
-import os, io, base64, json, gc, threading, requests, logging, hashlib, signal
+import os, io, base64, json, gc, threading, requests, logging, hashlib
 from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
-from flask import send_file, abort, jsonify
+from flask import send_file, jsonify
 from PIL import Image as PILImage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
-from werkzeug.exceptions import HTTPException
 
 load_dotenv()
 

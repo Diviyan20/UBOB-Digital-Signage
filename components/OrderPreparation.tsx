@@ -30,11 +30,6 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         overflow: "hidden",
         backgroundColor: "#fff",
-        elevation: 3, // gives it subtle shadow on Android
-        shadowColor: "#000", // for web/iOS
-        shadowOpacity: 0.1,
-        shadowOffset: { width: 0, height: 2 },
-        shadowRadius: 4,
     },
     webview:{
         flex: 1,
