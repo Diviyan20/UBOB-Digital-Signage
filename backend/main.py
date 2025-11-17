@@ -171,13 +171,16 @@ def heartbeat():
     
     device_id = data.get("device_id")
     status = data.get("status")
-    timestamp = data.get("timestamp")
+    client_timestamp = data.get("timestamp")
     
     if not device_id:
         return jsonify({"error": "Missing device_id"}), 400
 
-    log.info(f"Heartbeat Updated for outlet {device_id}, Status: {status}, Timestamp: {timestamp}")
-    return update_heartbeat(device_id, status, timestamp)
+    log.info(
+        f"Heartbeat → Device: {device_id}, Status: {status}, "
+        f"Client TS: {client_timestamp}"
+    )
+    return update_heartbeat(device_id, status)
 
 
 # =====================

@@ -6,7 +6,6 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-API_KEY = os.getenv("SUPABASE_API_KEY")
 SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 url = f"{SUPABASE_URL}/rest/v1/heartbeats"
@@ -17,7 +16,7 @@ url = f"{SUPABASE_URL}/rest/v1/heartbeats"
 
 def supabase_headers():
     return{
-        "apikey": API_KEY,
+        "apikey": SERVICE_ROLE_KEY,
         "Authorization": f"Bearer {SERVICE_ROLE_KEY}",
         "Content-Type": "application/json"
     }
@@ -37,26 +36,21 @@ log = logging.getLogger(__name__)
 # Register devices (By Outlet Code)
 # -----------------
 
-def register_device(outlet_code: str, outlet_name: str, region_name: str = None):
+def register_device(outlet_code: int, outlet_name: str, region_name: str = None):
     # 1. Check if device already exists
     query_url = f"{url}?device_id=eq.{outlet_code}&select=*"
 
     res = requests.get(query_url, headers=supabase_headers())
-    existing_device = res.json()
+   
 
-    if existing_device:
-        device = existing_device[0]
-        log.info(f"Device already registed to outlet code {outlet_code}!")
-
-        return{
-            "device_id": device["device_id"],
-            "device_name": device["device_name"],
-            "timestamp": device.get("timestamp"),
-            "is_new": False
-        }
+    if res.ok and res.json():
+        device = res.json()[0]
+        log.info(f"Device already registered: {outlet_code}")
+        return {**device, "is_new": False}
 
     # 2. Insert new device
     now = datetime.now(timezone.utc).isoformat()
+
     record = {
         "device_id": outlet_code,
         "device_name": outlet_name,
@@ -66,14 +60,17 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
         "last_seen":now
     }
 
-    insert_res = requests.post(url, headers=supabase_headers(), json=record)
+    insert_res = requests.post(
+        url,
+        headers={**supabase_headers(), "Prefer": "return=representation"},
+        json=record
+    )
 
-    if not insert_res:
-        log.info("Supabase Error: ", insert_res.text)
-        return {"error": "Failed to insert device"}, 500
+    if not insert_res.ok:
+        log.error(insert_res.text)
+        return {"error": "Failed to insert device", "details": insert_res.text}
     
     log.info(f"Registered device to outlet code {outlet_code}!")
-
     return {**record, "is_new": True}
 
 
@@ -81,11 +78,11 @@ def register_device(outlet_code: str, outlet_name: str, region_name: str = None)
 # Update Device Heartbeat
 # -----------------
 
-def update_heartbeat(device_id: str, status: str, timestamp:str):
+def update_heartbeat(device_id: int, status: str):
     if not device_id:
         return jsonify({"error": "Missing Device ID!"}), 400
     
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc).isoformat()
 
     update_url = f"{url}?device_id=eq.{device_id}"
     
@@ -97,6 +94,13 @@ def update_heartbeat(device_id: str, status: str, timestamp:str):
 
     res = requests.patch(update_url, headers=supabase_headers(), json=body)
 
+    if res.status_code == 200 and res.text.strip() == "[]":
+        return jsonify({
+            "message": "Device not found",
+            "device_id": device_id,
+            "status": "offline"
+        }), 404
+
     if res.status_code in (204, 200):
         return jsonify({
             "message": "Heartbeat updated successfully",
@@ -105,12 +109,6 @@ def update_heartbeat(device_id: str, status: str, timestamp:str):
             "timestamp": now
         }), 200
 
-    if res.status_code == 404:
-        return jsonify({
-            "message": "Device not found",
-            "device_id": device_id,
-            "status": "offline"
-        }), 404
     
     return jsonify({"error": "Failed to update device", "details": res.text}), 500
 
