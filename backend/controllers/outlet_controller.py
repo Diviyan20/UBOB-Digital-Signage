@@ -7,6 +7,7 @@ from flask import send_file, jsonify
 from PIL import Image as PILImage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
+from func_timeout import func_timeout, FunctionTimedOut
 
 load_dotenv()
 
@@ -643,19 +644,10 @@ class OutletService:
             try:
                 log.info(f"🔄 Processing outlet image {name} (ID: {image_id})...")
                 
-                # Process and cache the image with timeout protection
-                import signal
-                
-                def timeout_handler(signum, frame):
-                    raise TimeoutError("Image processing timed out")
-                
-                # Set a 30-second timeout for image processing
-                old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(30)
+                # Process and cache the image with timeout protection                
                 
                 try:
-                    image_bytes = OutletImageProcessor.process_image(raw_img, image_id)
-                    signal.alarm(0)  # Cancel the alarm
+                    image_bytes = func_timeout(30, OutletImageProcessor.process_image, args=(raw_img, image_id))
                     
                     if not image_bytes:
                         log.error(f"❌ Failed to process image for {name}")
@@ -680,13 +672,9 @@ class OutletService:
                         download_name=f"{image_id}.png"
                     )
                 
-                except TimeoutError:
-                    signal.alarm(0)  # Cancel the alarm
+                except FunctionTimedOut:
                     log.error(f"⏰ Timeout processing image {name}")
                     return send_file("static/placeholder.png", mimetype="image/png")
-                
-                finally:
-                    signal.signal(signal.SIGALRM, old_handler)
                     
             except Exception as e:
                 log.error(f"⚠️ Failed to process/cache outlet image {name}: {e}")

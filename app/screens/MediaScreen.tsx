@@ -5,7 +5,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 
-const SERVER_URL = "http://10.0.2.2:5000";
+const SERVER_URL = "https://ubob-digital-signage.onrender.com";
 
 const MediaScreen = () => {
   const { outletId } = useLocalSearchParams();
