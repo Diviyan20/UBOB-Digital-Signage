@@ -6,7 +6,7 @@ import ErrorOverlayComponent from './ErrorOverlayComponent';
 import ImagePreloader from './ImagePreloader';
 import LoggingInOverlayComponent from './LogginInOverlayComponent';
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 const OutletLoginForm: React.FC = () => {
     const [outletId, setOutletId] = useState<string>("");
@@ -18,6 +18,11 @@ const OutletLoginForm: React.FC = () => {
     const [preloadingProgress, setPreloadingProgress] = useState<{loaded: number, total: number}>({loaded: 0, total: 0});
 
     const handleLogin = async () => {
+        if (loading) {
+            console.log("Login already in progress, ignoring duplicate request");
+            return;
+        }
+
         if (!outletId.trim()) {
             console.warn("Missing Field", "Please enter your Outlet ID.");
             return;
@@ -83,6 +88,7 @@ const OutletLoginForm: React.FC = () => {
                     
                     // Step 3: Start preloading phase
                     setStatus("preloading_images");
+                    setLoading(true);
                     setPreloadingProgress({loaded: 0, total: outletImages.length});
                     
                 } catch (error) {
@@ -115,15 +121,7 @@ const OutletLoginForm: React.FC = () => {
                 "2. Using correct URL (10.0.2.2:5000 for emulator)\n" +
                 "3. Network connection is active"
             );
-        } finally {
-            // Only hide loading if we haven't transitioned to success state
-            setTimeout(() => {
-                if (status !== "success" && status !== "preloading_images") {
-                    setLoading(false);
-                    setStatus(undefined);
-                }
-            }, 2000);
-        }
+        } 
     };
 
     // Handle when all images are preloaded
