@@ -1,8 +1,8 @@
-import OutletLoginForm from "@/components/login_forms/OutletLoginForm";
+import ConfigurationLoginForm from "@/components/login_forms/ConfigurationLoginForm";
 import React from "react";
 
 export default function Index() {
   return (
-    <OutletLoginForm/>
+    <ConfigurationLoginForm/>
   );
 }
