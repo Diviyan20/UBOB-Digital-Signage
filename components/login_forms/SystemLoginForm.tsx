@@ -4,7 +4,7 @@ import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 const SERVER_URL = "https://ubob-digital-signage.onrender.com"
 
-const ConfigurationLoginForm: React.FC = () => {
+const SystemLoginForm: React.FC = () => {
     const [username, setUsername] = useState<string>("");
     const [password, setPassword] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
@@ -76,4 +76,4 @@ const ConfigurationLoginForm: React.FC = () => {
 
 }
 
-export default ConfigurationLoginForm;
+export default SystemLoginForm;
