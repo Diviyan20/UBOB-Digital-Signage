@@ -1,4 +1,4 @@
-import OutletLoginForm from "@/components/OutletLoginForm";
+import OutletLoginForm from "@/components/login_forms/OutletLoginForm";
 import React from "react";
 
 export default function Index() {

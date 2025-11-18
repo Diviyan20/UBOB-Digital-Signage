@@ -2,9 +2,9 @@ import { OutletLoginStyles as styles } from '@/styling/OutletLoginStyles';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
-import ErrorOverlayComponent from './ErrorOverlayComponent';
-import ImagePreloader from './ImagePreloader';
-import LoggingInOverlayComponent from './LogginInOverlayComponent';
+import ImagePreloader from '../image components/ImagePreloader';
+import ErrorOverlayComponent from '../overlays/ErrorOverlayComponent';
+import LoggingInOverlayComponent from '../overlays/LogginInOverlayComponent';
 
 const SERVER_URL = "https://ubob-digital-signage.onrender.com";
 
