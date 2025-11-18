@@ -25,6 +25,7 @@ const ImagePreloader: React.FC<ImagePreloaderProps> = ({
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const mountedRef = useRef(true);
+  const processedCountRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -39,7 +40,6 @@ const ImagePreloader: React.FC<ImagePreloaderProps> = ({
       return;
     }
 
-    let loadedCount = 0;
     const totalImages = images.length;
 
     const preloadPromises = images.map(async (item, index) => {
@@ -48,6 +48,14 @@ const ImagePreloader: React.FC<ImagePreloaderProps> = ({
 
       if (!imageUrl) {
         console.warn(`No image URL for ${item.outlet_name || imageId}`);
+        // Count as processed even if no URL
+        if (mountedRef.current) {
+          const newProcessed = ++processedCountRef.current;
+          onProgress?.(newProcessed, totalImages);
+          if (newProcessed === totalImages) {
+            onAllImagesLoaded();
+          }
+        }
         return;
       }
 
@@ -56,14 +64,15 @@ const ImagePreloader: React.FC<ImagePreloaderProps> = ({
         await Image.prefetch(imageUrl);
         
         if (mountedRef.current) {
-          loadedCount++;
           setLoadedImages(prev => new Set(prev).add(imageId));
-          onProgress?.(loadedCount, totalImages);
           
-          console.log(`✅ Preloaded image ${loadedCount}/${totalImages}: ${item.outlet_name || imageId}`);
+          const newProcessed = ++processedCountRef.current;
+          onProgress?.(newProcessed, totalImages);
           
-          // Check if all images are loaded
-          if (loadedCount === totalImages) {
+          console.log(`✅ Preloaded image ${newProcessed}/${totalImages}: ${item.outlet_name || imageId}`);
+          
+          // Check if all images are processed
+          if (newProcessed === totalImages) {
             onAllImagesLoaded();
           }
         }
@@ -76,10 +85,10 @@ const ImagePreloader: React.FC<ImagePreloaderProps> = ({
           // Continue with other images, but report the error
           onError?.(`Failed to load image: ${item.outlet_name || imageId}`);
           
-          loadedCount++; // Still count as "processed"
-          onProgress?.(loadedCount, totalImages);
+          const newProcessed = ++processedCountRef.current;
+          onProgress?.(newProcessed, totalImages);
           
-          if (loadedCount === totalImages) {
+          if (newProcessed === totalImages) {
             // Even if some failed, we proceed (they will retry in the component)
             onAllImagesLoaded();
           }
