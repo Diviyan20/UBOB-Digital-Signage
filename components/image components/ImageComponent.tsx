@@ -8,7 +8,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import ErrorOverlayComponent from "./ErrorOverlayComponent";
+import ErrorOverlayComponent from "../overlays/ErrorOverlayComponent";
 
 interface MediaItem {
   name?: string;

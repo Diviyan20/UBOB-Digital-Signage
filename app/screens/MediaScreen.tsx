@@ -1,6 +1,6 @@
-import ImageComponent from "@/components/ImageComponent";
+import ImageComponent from "@/components/image components/ImageComponent";
+import OutletDisplayComponent from "@/components/image components/OutletImageComponent";
 import OrderPreparation from "@/components/OrderPreparation";
-import OutletDisplayComponent from "@/components/OutletImageComponent";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
