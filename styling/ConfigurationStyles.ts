@@ -52,6 +52,11 @@ export const ConfigurationStyles = StyleSheet.create({
     color: "#333",
   },
 
+  urlInput: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+
   loginButton: {
     backgroundColor: "#01579B",
     borderRadius: 8,
@@ -59,6 +64,10 @@ export const ConfigurationStyles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     marginTop: 10,
+  },
+
+  disabledButton: {
+    opacity: 0.6,
   },
 
   loginButtonText: {

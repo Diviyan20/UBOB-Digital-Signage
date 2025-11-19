@@ -1,42 +1,118 @@
 import ImageComponent from "@/components/image components/ImageComponent";
 import OutletDisplayComponent from "@/components/image components/OutletImageComponent";
+import SystemLoginForm from "@/components/login_forms/SystemLoginForm";
 import OrderPreparation from "@/components/OrderPreparation";
 import { useLocalSearchParams } from "expo-router";
-import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
+
+interface DeviceValidationResult {
+  can_access_media: boolean;
+  reason?: string;
+  outlet_info?: any;
+  device_info?: any;
+}
 
 const MediaScreen = () => {
   const { outletId } = useLocalSearchParams();
+  const [deviceValidation, setDeviceValidation] = useState<DeviceValidationResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const sendHeartbeat = async () => {
+    const validateDevice = async () => {
       try {
-        const response = await fetch(`${SERVER_URL}/heartbeat`, {
+        const response = await fetch(`${SERVER_URL}/validate_device`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            device_id: outletId,
-            status: "online",
-            timestamp: new Date().toISOString(),
-          })
+          body: JSON.stringify({ device_id: outletId })
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Heartbeat Failed!");
+        
+        if (!response.ok) {
+          throw new Error(data.error || "Validation failed");
+        }
+
+        setDeviceValidation(data);
       } catch (err) {
-        console.warn("Heartbeat Error: ", err);
+        console.error("Device validation error:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
       }
     };
 
-    const interval = setInterval(sendHeartbeat, 10000); // Send heartbeat every 10 seconds (for testing)
-    sendHeartbeat();
+    validateDevice();
+  }, [outletId]);
 
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => {
+    // Only start heartbeat if device is validated and can access media
+    if (deviceValidation?.can_access_media) {
+      const sendHeartbeat = async () => {
+        try {
+          const response = await fetch(`${SERVER_URL}/heartbeat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              device_id: outletId,
+              status: "online",
+              timestamp: new Date().toISOString(),
+            })
+          });
 
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Heartbeat Failed!");
+        } catch (err) {
+          console.warn("Heartbeat Error: ", err);
+        }
+      };
 
+      const interval = setInterval(sendHeartbeat, 10000); // Send heartbeat every 10 seconds
+      sendHeartbeat();
+
+      return () => clearInterval(interval);
+    }
+  }, [deviceValidation, outletId]);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Validating device...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.errorText}>Error: {error}</Text>
+      </View>
+    );
+  }
+
+  // If device doesn't have credentials, show admin login
+  if (!deviceValidation?.can_access_media && deviceValidation?.reason === "missing_credentials") {
+    return (
+      <SystemLoginForm />
+    );
+  }
+
+  // If device validation failed for other reasons
+  if (!deviceValidation?.can_access_media) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.errorText}>
+          Device validation failed: {deviceValidation?.reason}
+        </Text>
+      </View>
+    );
+  }
+
+  // Device is validated and has credentials - show media screen
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
@@ -59,6 +135,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F2F0EF',
     padding: 10,
+  },
+  centered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ff4444',
+    textAlign: 'center',
   },
   topRow: {
     flex: 3,
