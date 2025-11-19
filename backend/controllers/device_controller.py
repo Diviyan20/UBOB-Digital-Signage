@@ -1,4 +1,3 @@
-from nt import device_encoding
 import os, requests, logging
 from datetime import datetime, timezone
 from flask import jsonify
