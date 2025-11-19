@@ -1,4 +1,5 @@
 import { ConfigurationStyles as styles } from "@/styling/ConfigurationStyles";
+import Constants from "expo-constants";
 import { router } from 'expo-router';
 import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
@@ -8,8 +9,11 @@ interface ConfigurationFormProps {
 }
 
 const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
-    const [url, setUrl] = useState<string>("");
+    const [accessToken, setAccessToken] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
+
+    // Load base URL from environment variables
+    const baseUrl = Constants.expoConfig?.extra?.ORDER_TRACKING_BASE_URL;
 
     const handleSubmit = async () => {
         if (loading) {
@@ -17,13 +21,16 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
             return;
         }
 
-        if (!url.trim()) {
-            Alert.alert("Missing Field", "Please enter the order tracking URL.");
+        if (!accessToken.trim()) {
+            Alert.alert("Missing Field", "Please enter the access token.");
             return;
         }
 
         try {
             setLoading(true);
+
+            // Combine full URL with access token
+            const fullUrl = `${baseUrl}/?access_token=${accessToken.trim()}`;
 
             // Update device credentials
             const response = await fetch(`https://ubob-digital-signage.onrender.com/update_credentials`, {
@@ -31,7 +38,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     device_id: deviceId,
-                    order_tracking_url: url.trim()
+                    order_tracking_url: fullUrl.trim()
                 })
             });
 
@@ -48,7 +55,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                     {
                         text: "OK",
                         onPress: () => {
-                            // Navigate back to media screen - it will now show OrderPreparation
+                            // Navigate back to media screen - it will now show the order preparation component
                             router.replace({
                                 pathname: '/screens/MediaScreen',
                                 params: { outletId: deviceId }
@@ -72,21 +79,28 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
     return (
         <View style={styles.container}>
             <View style={styles.card}>
-                <Text style={styles.title}>Enter Order Tracking URL</Text>
+                <Text style={styles.title}>Configure Order Tracking</Text>
 
-                <Text style={styles.label}>Order Tracking URL</Text>
+                <Text style={styles.label}>URL</Text>
                 <TextInput
-                    style={[styles.input, styles.urlInput]}
-                    placeholder="https://your-domain.odoo.com/pos-order-tracking/?access_token=..."
-                    placeholderTextColor="#BDBDBD"
-                    value={url}
-                    onChangeText={setUrl}
+                    style={[styles.input, styles.readOnlyInput]}
+                    value={baseUrl}
+                    editable={false}
+                    selectTextOnFocus={false}
+                    placeholder="Loading base URL...."
+                    placeholderTextColor='#BDBDBD'
+                />
+                <Text style={styles.label}>Access Token</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Enter access token..."
+                    placeholderTextColor='#BDBDBD'
+                    value={accessToken}
+                    onChangeText={setAccessToken}
                     autoCapitalize="none"
                     autoCorrect={false}
-                    multiline={true}
-                    numberOfLines={3}
-                    keyboardType="url"
-                />
+                    secureTextEntry={false} // Activate if you want to hide the token
+                ></TextInput>
 
                 <Pressable 
                     style={[styles.loginButton, loading && styles.disabledButton]} 

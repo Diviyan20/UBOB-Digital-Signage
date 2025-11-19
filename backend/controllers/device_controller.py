@@ -215,8 +215,8 @@ def parse_order_tracking_url(full_url: str) -> tuple:
     try:
         parsed = urlparse(full_url)
 
-        # Extract the base URL (wihtout query parameters)
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        # Extract the base URL (with path, wihtout query parameters)
+        base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
         # Extract access token from query parameters
         query_params = parse_qs(parsed.query)
