@@ -82,7 +82,8 @@ const MediaScreen = () => {
       const {order_api_url, order_api_token} = deviceValidation.device_info;
       if (order_api_url && order_api_token){
         // Construct the full URL: base_url + pos-order-tracking + access_token
-        return `${order_api_url}/pos-order-tracking/?access_token=${order_api_token}`
+        console.log("URL: ", `${order_api_url}?access_token=${order_api_token}`);
+        return `${order_api_url}?access_token=${order_api_token}`
       }
     }
     return undefined; // Fall back to hardcoded URL in OrderPreparation component

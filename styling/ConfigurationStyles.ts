@@ -52,9 +52,10 @@ export const ConfigurationStyles = StyleSheet.create({
     color: "#333",
   },
 
-  urlInput: {
-    height: 80,
-    textAlignVertical: 'top',
+  readOnlyInput: {
+    backgroundColor: "#F5F5F5",
+    color: "#666",
+    borderColor: "#DDD",
   },
 
   loginButton: {
