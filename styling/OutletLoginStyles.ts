@@ -4,9 +4,15 @@ export const OutletLoginStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFF",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 24,
+  },
+
+  imageContainer:{
+    width: "35%", 
+    height: "35%",
+    resizeMode: "contain",
   },
 
   card: {

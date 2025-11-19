@@ -1,7 +1,7 @@
 import { OutletLoginStyles as styles } from '@/styling/OutletLoginStyles';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, Image, Pressable, Text, TextInput, View } from 'react-native';
 import ImagePreloader from '../image components/ImagePreloader';
 import ErrorOverlayComponent from '../overlays/ErrorOverlayComponent';
 import LoggingInOverlayComponent from '../overlays/LogginInOverlayComponent';
@@ -172,6 +172,9 @@ const OutletLoginForm: React.FC = () => {
 
     return (
         <View style={styles.container}>
+            <Image 
+            style={styles.imageContainer}
+            source={require('../images/Logo.png')}/>
             <View style={styles.card}>
                 <Text style={styles.label}>Outlet ID</Text>
                 <TextInput
