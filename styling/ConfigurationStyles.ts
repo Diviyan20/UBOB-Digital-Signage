@@ -4,9 +4,10 @@ export const ConfigurationStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFF",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 24,
+    paddingTop: 30,
   },
 
   card: {
