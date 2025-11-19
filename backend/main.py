@@ -266,7 +266,7 @@ def check_for_inactive_devices():
             device_id = dev["device_id"]
 
             # mark device as offline
-            patch_url = f"{SUPABASE_URL}/rest/v1/heartbeats?device_id=eq.{device_id}"
+            patch_url = f"{SUPABASE_URL}/rest/v1/outlet_devices?device_id=eq.{device_id}"
             body = {"device_status": "offline"}
 
             res2 = requests.patch(patch_url, headers=supabase_headers(), json=body)
