@@ -77,6 +77,17 @@ const MediaScreen = () => {
     }
   }, [deviceValidation, outletId]);
 
+  const getOrderTrackingUrl = (): string | undefined =>{
+    if(deviceValidation?.device_info){
+      const {order_api_url, order_api_token} = deviceValidation.device_info;
+      if (order_api_url && order_api_token){
+        // Construct the full URL: base_url + pos-order-tracking + access_token
+        return `${order_api_url}/pos-order-tracking/?access_token=${order_api_token}`
+      }
+    }
+    return undefined; // Fall back to hardcoded URL in OrderPreparation component
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -120,7 +131,7 @@ const MediaScreen = () => {
           <ImageComponent />
         </View>
         <View style={styles.rightColumn}>
-          <OrderPreparation />
+          <OrderPreparation orderTrackingUrl={getOrderTrackingUrl()}/>
         </View>
       </View>
       <View style={styles.bottomRow}>
