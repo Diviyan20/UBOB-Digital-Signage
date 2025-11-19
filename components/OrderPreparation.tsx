@@ -3,9 +3,14 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { WebView } from 'react-native-webview';
 
-const ORDER_TRACKING_URL = Constants.expoConfig?.extra?.ORDER_TRACKING_URL;
+interface OrderPreparationProps{
+    orderTrackingUrl?: string;
+}
 
-const OrderPreparation = () =>{
+const OrderPreparation: React.FC<OrderPreparationProps> = ({orderTrackingUrl}) =>{
+    // Use dyanmic URL, otherwise fallback to hardcoded version
+    const ORDER_TRACKING_URL = orderTrackingUrl || Constants.expoConfig?.extra?.ORDER_TRACKING_URL;;
+    
     return(
         <>
         <View style={styles.container}>
