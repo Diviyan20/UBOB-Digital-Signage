@@ -245,7 +245,7 @@ def check_for_inactive_devices():
     timeout_iso = (now - timedelta(minutes=5)).isoformat()
 
     # 1. Fetch online devices
-    query_url = f"{SUPABASE_URL}/rest/v1/heartbeats?device_status=eq.online&select=*"
+    query_url = f"{SUPABASE_URL}/rest/v1/outlet_devices?device_status=eq.online&select=*"
 
     res = requests.get(query_url, headers=supabase_headers())
     if not res.ok:
