@@ -18,7 +18,7 @@ interface MediaItem {
   date_end?: string;
 }
 
-const SERVER_URL = "http://10.0.2.2:5000";
+const SERVER_URL = "https://ubob-digital-signage.onrender.com";
 const DISPLAY_DURATION = 5000;
 const FADE_DURATION = 400;
 const PREFETCH_BUFFER = 2 //Only Pre-fetches next 2 images instead of all
