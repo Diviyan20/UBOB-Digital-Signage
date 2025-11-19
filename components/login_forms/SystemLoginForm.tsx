@@ -1,10 +1,12 @@
 import { ConfigurationStyles as styles } from "@/styling/ConfigurationStyles";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com"
+const SERVER_URL = "http://10.0.2.2:5000"
 
 const SystemLoginForm: React.FC = () => {
+    const { outletId } = useLocalSearchParams<{ outletId: string }>();
     const [username, setUsername] = useState<string>("");
     const [password, setPassword] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
@@ -21,20 +23,29 @@ const SystemLoginForm: React.FC = () => {
             return;
         }
 
+        // Check admin credentials
+        if (username !== "admin" || password !== "1234"){
+            Alert.alert("Invalid Credentials", "Incorrect username or password.");
+            return;
+        }
+
         try {
             setLoading(true);
 
-            //Configure login with username and password
-        }
-        catch (err) {
-            console.error("Network / Parsing Error: ", err);
-            Alert.alert(
-                "Connection Error",
-                "Could not connect to server. Please check your network connection."
-            )
-        }
+            if (!outletId){
+                Alert.alert("Error", "Device ID not found. Please try logging in again.");
+                return;
+            }
 
-        finally {
+            // Navigate to configuration form
+            router.replace(`/screens/ConfigurationScreen?deviceId=${outletId}` as any);
+        } catch (err) {
+            console.error("Login Error: ", err);
+            Alert.alert(
+                "Login Error",
+                err instanceof Error ? err.message : "An unexpected error occurred. Please try again."
+            );
+        } finally {
             setLoading(false);
         }
     };
@@ -73,7 +84,6 @@ const SystemLoginForm: React.FC = () => {
             </View>
         </View>
     )
-
 }
 
 export default SystemLoginForm;

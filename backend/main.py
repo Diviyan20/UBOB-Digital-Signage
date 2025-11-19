@@ -1,3 +1,4 @@
+from nt import access
 import os, logging, psutil, gc, requests
 from sched import scheduler
 from flask import Flask, jsonify, request, send_from_directory
@@ -18,10 +19,15 @@ from controllers.outlet_controller import (
     stream_outlet_image, 
     get_outlet_images_with_names)
 
-from controllers.heartbeat_controller import (
+from controllers.device_controller import (
     supabase_headers, 
+    validate_outlet,
     register_device, 
-    update_heartbeat)
+    update_heartbeat,
+    validate_device_for_media,
+    update_device_credentials,
+    parse_order_tracking_url,
+    get_all_devices)
 
 # LOAD ENVIRONMENT
 load_dotenv()
@@ -55,6 +61,49 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# ================
+# DEVICE ENDPOINTS
+# ================
+@app.route("/validate_device", methods=["POST"])
+def validate_device():
+    """
+    Comprehensive device validation for media screen access.
+    """
+    data = request.get_json(force=True)
+    device_id = str(data.get("device_id")).strip() if data.get("device_id") else None
+
+    if not device_id:
+        return jsonify({"error": "Missing device ID"}), 400
+    
+    result = validate_device_for_media(device_id)
+    return jsonify(result), 200
+
+@app.route("/update_credentials", methods=["POST"])
+def update_credentials():
+    """
+    Update device with API credentials after admin login.
+    """
+    data = request.get_json(force=True)
+
+    device_id = str(data.get("device_id")).strip()
+    full_url = data.get("order_tracking_url")
+
+    if not device_id or not full_url:
+        return jsonify({"error": "Missing device_id or order_tracking_url"}), 400
+    
+    # Parse the URL to extract base URl and access token
+    base_url, access_token = parse_order_tracking_url(full_url)
+
+    if not base_url or not access_token:
+        return jsonify({"error": "Invalid URL format or missing access token"}), 400
+
+    result = update_device_credentials(device_id, base_url, access_token)
+
+    if "error" in result:
+        return jsonify(result), 500
+    
+    return jsonify(result), 200
+
 
 # ================
 # OUTLET ENDPOINTS
@@ -68,26 +117,30 @@ def get_outlet():
     if not outlet_id:
         return jsonify({"error": "Missing outlet ID"}), 400
     
-    outlet_data = fetch_outlets()
+    # Validate outlet
+    outlet_result = validate_outlet(outlet_id)
+    if not outlet_result.get("is_valid"):
+        return jsonify({
+            "is_valid": False, 
+            "message": outlet_result.get("error", "Invalid Outlet Code!")
+        }), 404
     
-    if not outlet_data:
-        return jsonify({"error": "Failed to fetch outlets from Odoo."}), 500
+    # Register/update device
+    device_result = register_device(
+        outlet_result["outlet_id"], 
+        outlet_result["outlet_name"], 
+        outlet_result["region_name"]
+    )
     
-    match = next((o for o in outlet_data if o["outlet_id"] == outlet_id), None)
-    if not match:
-        return jsonify({"is_valid": False, "message": "Invalid Outlet Code!"}), 404
-    
-    # If outlet is valid, register the device
-    outlet_name = match["outlet_name"]
-    region_name = match["region_name"]
-    heartbeat_info = register_device(outlet_id, outlet_name, region_name)
+    if "error" in device_result:
+        return jsonify({"error": "Device registration failed", "details": device_result}), 500
 
     return jsonify({
         "is_valid": True,
         "message": "Outlet Verified and Device Registered Successfully!",
-        "outlet_name": outlet_name,
-        "region_name": region_name,
-        "device_info": heartbeat_info
+        "outlet_name": outlet_result["outlet_name"],
+        "region_name": outlet_result["region_name"],
+        "device_info": device_result
     }), 200
 
 
