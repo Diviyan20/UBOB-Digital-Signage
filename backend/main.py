@@ -13,7 +13,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from controllers.media_controller import get_media_json, stream_image
 
 from controllers.outlet_controller import (
-    fetch_outlets, 
     fetch_outlet_images, 
     stream_outlet_image, 
     get_outlet_images_with_names)
@@ -25,8 +24,7 @@ from controllers.device_controller import (
     update_heartbeat,
     validate_device_for_media,
     update_device_credentials,
-    parse_order_tracking_url,
-    get_all_devices)
+    parse_order_tracking_url)
 
 # LOAD ENVIRONMENT
 load_dotenv()

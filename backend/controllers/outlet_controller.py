@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Tuple, List
 from pathlib import Path
 from dotenv import load_dotenv
-from flask import send_file, jsonify
+from flask import send_file, jsonify, abort
 from PIL import Image as PILImage
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
@@ -615,8 +615,7 @@ class OutletService:
 
                 if not data:
                     log.warning(f"No outlet images availble for ID: {image_id}")
-                    # Return placeholder instead of 404 to prevent crashes
-                    return send_file("static/placeholder.png", mimetype="image/png")
+                    return abort(404, "No image available for this outlet")
 
                 # Search for the image by ID matching
                 for item in data:
@@ -639,7 +638,7 @@ class OutletService:
 
                 if not raw_img:
                     log.error(f"❌ No image data found for matched item {name}")
-                    return send_file("static/placeholder.png", mimetype="image/png")
+                    return abort(404, "No image data found for this outlet")
             
             try:
                 log.info(f"🔄 Processing outlet image {name} (ID: {image_id})...")
@@ -651,13 +650,13 @@ class OutletService:
                     
                     if not image_bytes:
                         log.error(f"❌ Failed to process image for {name}")
-                        return send_file("static/placeholder.png", mimetype="image/png")
+                        return abort(404, "No image data found for this outlet")
                     
                     # Save to disk cache
                     success = self.cache_manager.save_image(image_id, image_bytes)
                     if not success:
                         log.error(f"❌ Failed to save image {name} to cache")
-                        return send_file("static/placeholder.png", mimetype="image/png")
+                        return abort(404, "No image data found for this outlet")
                     
                     # Create metadata and update memory cache
                     meta = self._create_metadata(name, image_id)
@@ -674,16 +673,16 @@ class OutletService:
                 
                 except FunctionTimedOut:
                     log.error(f"⏰ Timeout processing image {name}")
-                    return send_file("static/placeholder.png", mimetype="image/png")
+                    return abort(404, "Image processing timeout")
                     
             except Exception as e:
                 log.error(f"⚠️ Failed to process/cache outlet image {name}: {e}")
-                return send_file("static/placeholder.png", mimetype="image/png")
+                return abort(404, f"Failed to process outlet image: {str(e)}")
     
         except Exception as e:
             # Return placeholder for any error to prevent app crashes
             log.error(f"❌ Error streaming outlet image {image_id}: {e}", exc_info=True)
-            return send_file("static/placeholder.png", mimetype="image/png")
+            return abort(404, f"Error streaming outlet image: {str(e)}")
     
     def get_outlet_images_with_names(self) -> Tuple[dict, int]:
         """Get outlet images combined with outlet names."""
