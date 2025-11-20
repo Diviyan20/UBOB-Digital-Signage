@@ -51,6 +51,8 @@ export const ConfigurationStyles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 20,
     color: "#333",
+    minHeight: 44,
+    textAlignVertical: "top",
   },
 
   readOnlyInput: {

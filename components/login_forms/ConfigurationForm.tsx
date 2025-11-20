@@ -89,6 +89,8 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                     selectTextOnFocus={false}
                     placeholder="Loading base URL...."
                     placeholderTextColor='#BDBDBD'
+                    multiline={true}
+                    numberOfLines={2}
                 />
                 <Text style={styles.label}>Access Token</Text>
                 <TextInput
