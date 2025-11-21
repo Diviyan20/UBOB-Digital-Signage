@@ -18,7 +18,6 @@ from controllers.outlet_controller import (
     get_outlet_images_with_names)
 
 from controllers.device_controller import (
-    supabase_headers, 
     validate_outlet,
     register_device, 
     update_heartbeat,
@@ -26,11 +25,12 @@ from controllers.device_controller import (
     update_device_credentials,
     parse_order_tracking_url)
 
+from models.db_connection import get_db_connection
+
 # LOAD ENVIRONMENT
 load_dotenv()
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
 
 # FLASK SETUP
 app = Flask(__name__, static_folder="static")
@@ -238,41 +238,57 @@ def heartbeat():
 # ====================
 def check_for_inactive_devices():
     log.info("Checking for inactive devices...")
-
-    now = datetime.now(timezone.utc)
-    timeout_iso = (now - timedelta(minutes=5)).isoformat()
-
-    # 1. Fetch online devices
-    query_url = f"{SUPABASE_URL}/rest/v1/outlet_devices?device_status=eq.online&select=*"
-
-    res = requests.get(query_url, headers=supabase_headers())
-    if not res.ok:
-        log.error("Failed to query active devices: " + res.text)
-        return
-
-    devices = res.json()
-
-    # 2. Filter devices inactive longer than 5 minutes
-    for dev in devices:
-        last_seen = dev.get("last_seen")
-        if not last_seen:
-            continue
-
-        last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
-
-        if last_seen_dt < (now - timedelta(minutes=5)):
-            device_id = dev["device_id"]
-
-            # mark device as offline
-            patch_url = f"{SUPABASE_URL}/rest/v1/outlet_devices?device_id=eq.{device_id}"
-            body = {"device_status": "offline"}
-
-            res2 = requests.patch(patch_url, headers=supabase_headers(), json=body)
-
-            if res2.status_code in (204, 200):
-                log.info(f"Marked device {device_id} as offline")
-            else:
-                log.error(f"Failed to update device {device_id}: {res2.text}")
+    
+    try:
+        with get_db_connection() as (conn, cur):
+            now = datetime.now(timezone.utc)
+            
+            # 1. Fetch online devices and their last_seen timestamps
+            select_query = """
+                SELECT device_id, device_name, last_seen 
+                FROM outlet_devices 
+                WHERE device_status = 'online'
+            """
+            cur.execute(select_query)
+            devices = cur.fetchall()
+            
+            # 2. Check each device for inactivity (5+ minutes)
+            inactive_threshold = now - timedelta(minutes=5)
+            
+            for device in devices:
+                device_id, device_name, last_seen = device
+                
+                # Skip if no last_seen timestamp
+                if not last_seen:
+                    continue
+                
+                # Convert last_seen to datetime if it's a string
+                if isinstance(last_seen, str):
+                    last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                else:
+                    last_seen_dt = last_seen
+                
+                # Check if device is inactive
+                if last_seen_dt < inactive_threshold:
+                    log.info(f"Device {device_id} inactive for {(now - last_seen_dt).total_seconds() / 60:.1f} minutes")
+                    
+                    # Mark device as offline
+                    update_query = """
+                        UPDATE outlet_devices 
+                        SET device_status = 'offline' 
+                        WHERE device_id = %s
+                    """
+                    cur.execute(update_query, (device_id,))
+                    
+                    if cur.rowcount > 0:
+                        log.info(f"Marked device {device_id} as offline")
+                    else:
+                        log.warning(f"Failed to update device {device_id}")
+            
+            conn.commit()
+            
+    except Exception as e:
+        log.error(f"Error checking for inactive devices: {e}")
 
 # ==============
 # MEMORY LOGGING
