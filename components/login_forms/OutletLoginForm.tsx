@@ -124,6 +124,10 @@ const OutletLoginForm: React.FC = () => {
         } 
     };
 
+    const handleAdminLogin = () =>{
+        router.replace("/screens/SystemLoginScreen");
+    }
+
     // Handle when all images are preloaded
     const handleImagesPreloaded = useCallback(() => {
         console.log("🎉 All images preloaded successfully!");
@@ -188,6 +192,10 @@ const OutletLoginForm: React.FC = () => {
                 />
                 <Pressable style={styles.loginButton} onPress={handleLogin}>
                     <Text style={styles.loginButtonText}>Log In</Text>
+                </Pressable>
+
+                <Pressable style={styles.adminButton} onPress={handleAdminLogin}>
+                    <Text style={styles.adminButtonText}>Login as Admin</Text>
                 </Pressable>
             </View>
         

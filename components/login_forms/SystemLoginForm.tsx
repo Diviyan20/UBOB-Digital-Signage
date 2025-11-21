@@ -3,14 +3,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com"
 
 const SystemLoginForm: React.FC = () => {
     const { outletId } = useLocalSearchParams<{ outletId: string }>();
     const [username, setUsername] = useState<string>("");
     const [password, setPassword] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
-    const [errorVisible, setErrorVisible] = useState(false);
 
     const handleLogin = async () => {
         if (loading) {
