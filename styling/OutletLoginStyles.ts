@@ -66,9 +66,25 @@ export const OutletLoginStyles = StyleSheet.create({
     marginTop: 10,
   },
 
+  adminButton:{
+    backgroundColor:"#01579B",
+    borderRadius: 8,
+    width: "100%",
+    alignItems: "center",
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+
   loginButtonText: {
     color: "#000",
     fontSize: 16,
     fontWeight: "600",
   },
+
+  adminButtonText:{
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  }
+  
 });
