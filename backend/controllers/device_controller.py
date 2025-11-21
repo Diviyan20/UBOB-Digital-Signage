@@ -3,26 +3,17 @@ from datetime import datetime, timezone
 from flask import jsonify
 from dotenv import load_dotenv, find_dotenv
 from urllib.parse import urlparse, parse_qs
+from models.db_connection import get_db_connection
 
 load_dotenv(find_dotenv())
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 ODOO_DATABASE_URL = os.getenv("ODOO_DATABASE_URL")
 ODOO_API_TOKEN = os.getenv("ODOO_API_TOKEN")
 
-outlet_devices_url = f"{SUPABASE_URL}/rest/v1/outlet_devices"
 
 # ------------------------
 # Helper - request headers
 #-------------------------
-
-def supabase_headers():
-    return{
-        "apikey": SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SERVICE_ROLE_KEY}",
-        "Content-Type": "application/json"
-    }
 
 def odoo_headers():
     return{
@@ -98,79 +89,114 @@ def get_device_info(device_id: str) -> dict:
     Get device information from Supabase, including API credentials.
     """
     try:
-        query_url = f"{outlet_devices_url}?device_id=eq.{device_id}&select=*"
-        response = requests.get(query_url, headers=supabase_headers())
+        with get_db_connection() as (conn, cur):
+            query = """
+                SELECT device_id, device_name, device_status, device_location, 
+                       active, last_seen, order_api_url, order_api_key
+                FROM outlet_devices 
+                WHERE device_id = %s
+            """
+            cur.execute(query, [device_id])
+            device = cur.fetchone()
 
-        if response.ok and response.json():
-            device = response.json()[0]
-            return{
-                "exists": True,
-                "device": device,
-                "has_credentials": bool(
-                    device.get("order_api_url") and device.get("order_api_token")
-                )
-            }
-        else:
-            return {"exists": False, "has_credentials": False}
+            if device:
+                # Convert tuple/list to dict for consistency
+                device_dict = {
+                    "device_id": device[0],
+                    "device_name": device[1],
+                    "device_status": device[2],
+                    "device_location": device[3],
+                    "active": device[4],
+                    "last_seen": device[5],
+                    "order_api_url": device[6],
+                    "order_api_key": device[7]
+                }
+
+                return{
+                    "exists": True,
+                    "device": device_dict,
+                    "has_credentials": bool(device[6] and device[7])  # order_api_url and order_api_key
+                }
+            
+            else:
+                return {"exists": False, "has_credentials": False}
     
     except Exception as e:
         log.error(f"Failed to get device info for {device_id}: {e}")
         return {"exists": False, "has_credentials": False}
+
+        
 
 def register_device(outlet_id: str, outlet_name: str, region_name: str = None):
     """
     Register or update device in Supabase
     """
     
-    # 1. Check if device already exists
-    query_url = f"{outlet_devices_url}?device_id=eq.{outlet_id}&select=*"
+    try:
+        with get_db_connection() as (conn, cur):
+            now = datetime.now(timezone.utc)
 
-    res = requests.get(query_url, headers=supabase_headers())
-   
-    now = datetime.now(timezone.utc).isoformat()
+            # Check if device already exists
+            cur.execute("SELECT * FROM outlet_devices WHERE device_id = %s", (outlet_id,))
+            existing_device = cur.fetchone()
 
-    if res.ok and res.json():
-        # Update existing device
-        device = res.json()[0]
-        log.info(f"Device already registered: {outlet_id}")
-        
-        update_url = f"{outlet_devices_url}?device_id=eq.{outlet_id}"
-        update_body = {
-            "device_status": "online",
-            "timestamp": now,
-            "last_seen": now
-        }
+            if existing_device:
+                # Update existing device
+                log.info(f"Device already registered: {outlet_id}")
 
-        update_res = requests.patch(update_url, headers=supabase_headers(), json=update_body)
-        if update_res.status_code in (204, 200):
-            return {**device, "is_new": False}
-        else:
-            return {"error": "Failed to update device", "details": update_res.text}
+                update_query = """
+                    UPDATE outlet_devices 
+                    SET device_status = 'online', last_seen = %s
+                    WHERE device_id = %s
+                    RETURNING *
+                """
+                cur.execute(update_query, (now, outlet_id))
+                updated_device = cur.fetchone()
+                conn.commit()
 
-    # 2. Insert new device
-    record = {
-        "device_id": outlet_id,
-        "device_name": outlet_name,
-        "device_status": "online",
-        "device_location": region_name,
-        "timestamp": now,
-        "last_seen": now,
-        "order_api_url": None,  # Will be set by admin later
-        "order_api_token": None  # Will be set by admin later
-    }
+                # Convert to dict
+                device_dict = {
+                    "device_id": updated_device[0],
+                    "device_name": updated_device[1],
+                    "device_status": updated_device[2],
+                    "device_location": updated_device[3],
+                    "active": updated_device[4],
+                    "last_seen": updated_device[5],
+                    "order_api_url": updated_device[6],
+                    "order_api_key": updated_device[7]
+                }
+                return {**device_dict, "is_new": False}
+            
+            # Insert new device if non-existent
+            insert_query = """
+                INSERT INTO outlet_devices 
+                (device_id, device_name, device_status, device_location, active, last_seen, order_api_url, order_api_key)
+                VALUES (%s, %s, 'online', %s, %s, %s, NULL, NULL)
+                RETURNING *
+            """
 
-    insert_res = requests.post(
-        outlet_devices_url,
-        headers={**supabase_headers(), "Prefer": "return=representation"},
-        json=record
-    )
+            cur.execute(insert_query, (outlet_id, outlet_name, region_name, now, now))
+            new_device = cur.fetchone()
+            conn.commit()
+            
+            log.info(f"Registered device to outlet code: {outlet_id}")
 
-    if not insert_res.ok:
-        log.error(insert_res.text)
-        return {"error": "Failed to insert device", "details": insert_res.text}
+            # Convert to dict
+            device_dict = {
+                "device_id": new_device[0],
+                "device_name": new_device[1],
+                "device_status": new_device[2],
+                "device_location": new_device[3],
+                "active": new_device[4],
+                "last_seen": new_device[5],
+                "order_api_url": new_device[6],
+                "order_api_key": new_device[7]
+            }
+            return {**device_dict, "is_new": True}
     
-    log.info(f"Registered device to outlet code {outlet_id}!")
-    return {**record, "is_new": True}
+    except Exception as e:
+        log.error(f"Failed to registed device {outlet_id}: {e}")
+        return {"error": "Failed to register device", "details": str(e)}
 
 
 
@@ -179,24 +205,22 @@ def update_device_credentials(device_id: str, order_api_url: str, order_api_toke
     Update device with API credentials after admin login.
     """
     try:
-        update_url = f"{outlet_devices_url}?device_id=eq.{device_id}"
-
-        body = {
-            "order_api_url": order_api_url,
-            "order_api_token": order_api_token,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-
-        res = requests.patch(update_url, headers=supabase_headers(), json=body)
-
-        if res.status_code in (204, 200):
-            log.info(f"Updated credentials for device {device_id}")
-            return {"success": True, "message": "Credentials updated successfully"}
-        
-        else:
-            log.error(f"Failed to update credentials for device {device_id}: {res.text}")
-            return {"error": "Failed to update credentials", "details": res.text}
-
+        with get_db_connection() as (conn, cur):
+            update_query = """
+                UPDATE outlet_devices 
+                SET order_api_url = %s, order_api_key = %s
+                WHERE device_id = %s
+            """
+            
+            cur.execute(update_query, (order_api_url, order_api_token, device_id))
+            conn.commit()
+            
+            if cur.rowcount > 0:
+                log.info(f"Updated credentials for device {device_id}")
+                return {"success": True, "message": "Credentials updated successfully"}
+            else:
+                return {"error": "Device not found"}
+    
     except Exception as e:
         log.error(f"Error updating device credentials: {e}")
         return {"error": "Update failed", "details": str(e)}
@@ -243,34 +267,38 @@ def update_heartbeat(device_id: str, status: str):
     if not device_id:
         return jsonify({"error": "Missing Device ID!"}), 400
     
-    now = datetime.now(timezone.utc).isoformat()
-    update_url = f"{outlet_devices_url}?device_id=eq.{device_id}"
+    try:
+        with get_db_connection() as (conn, cur):
+            now = datetime.now(timezone.utc)
+
+            update_query = """
+                UPDATE outlet_devices 
+                SET device_status = %s, last_seen = %s
+                WHERE device_id = %s
+                RETURNING device_id
+            """
+            
+            cur.execute(update_query, (status, now, device_id))
+            result = cur.fetchone()
+            conn.commit()
+
+            if result:
+                return jsonify({
+                    "message": "Heartbeat updated successfully",
+                    "device_id": device_id,
+                    "status": status,
+                    "timestamp": now.isoformat()
+                }), 200
+            else:
+                return jsonify({
+                    "message": "Device not found",
+                    "device_id": device_id,
+                    "status": "offline"
+                }), 404
     
-    body = {
-        "device_status": status,
-        "timestamp": now,
-        "last_seen": now
-    }
-
-    res = requests.patch(update_url, headers=supabase_headers(), json=body)
-
-    if res.status_code == 200 and res.text.strip() == "[]":
-        return jsonify({
-            "message": "Device not found",
-            "device_id": device_id,
-            "status": "offline"
-        }), 404
-
-    if res.status_code in (204, 200):
-        return jsonify({
-            "message": "Heartbeat updated successfully",
-            "device_id": device_id,
-            "status": status,
-            "timestamp": now
-        }), 200
-
-    
-    return jsonify({"error": "Failed to update device", "details": res.text}), 500
+    except Exception as e:
+        log.error(f"Failed to update heartbeat for {device_id}: {e}")
+        return jsonify({"error": "Failed to update device", "details": str(e)}), 500
 
 
 # --------------------------
@@ -280,14 +308,31 @@ def get_all_devices():
     """
     Returns all registered devices in the system (for debugging).
     """
-    query_url = f"{outlet_devices_url}?select=*"
-
-    res = requests.get(query_url, headers=supabase_headers())
-
-    if not res.ok:
-        return jsonify({"error": "Failed to fetch devices"}), 500
-
-    return jsonify({"devices": res.json()}), 200
+    try:
+        with get_db_connection() as (conn, cur):
+            cur.execute("SELECT * FROM outlet_devices ORDER BY last_seen DESC")
+            devices = cur.fetchall()
+            
+            # Convert to list of dicts
+            device_list = []
+            for device in devices:
+                device_dict = {
+                    "device_id": device[0],
+                    "device_name": device[1],
+                    "device_status": device[2],
+                    "device_location": device[3],
+                    "active": device[4],
+                    "last_seen": device[5],
+                    "order_api_url": device[6],
+                    "order_api_key": device[7]
+                }
+                device_list.append(device_dict)
+            
+            return jsonify({"devices": device_list}), 200
+    
+    except Exception as e:
+        log.error(f"Failed to fetch devices: {e}")
+        return jsonify({"error": "Failed to fetch devices", "details": str(e)}), 500
 
 
 
