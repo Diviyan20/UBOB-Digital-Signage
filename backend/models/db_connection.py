@@ -14,12 +14,12 @@ def get_db_connection():
     conn = None
     cur = None
     try:
-        conn = psycopg2.connect(
-            database=os.getenv("POSTGRESQL_DB"),
-            host="localhost",
-            user=os.getenv("POSTGRESQL_DB_USER"),
-            password=os.getenv("POSTGRESQL_PWD"),
-            port="5432")
+        database_url = os.getenv("DATABASE_URL")
+        
+        if not database_url:
+            raise ValueError("DATABASE_URL Environment Variable is invalid or does not exist!")
+        
+        conn = psycopg2.connect(database_url)
         
         cur = conn.cursor()
 
