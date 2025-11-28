@@ -1,50 +1,164 @@
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+# UBOB Digital Signage System
+A production-grade digital signage solution built for Android TV devices.
+Frontend developed with React Native, backend powered by Flask (Python), integrated with Odoo and PostgreSQL, and designed for deployment on AWS using best-practice cloud architecture.
 
-## Get started
 
-1. Install dependencies
+## 📌 Overview
+This system is designed for restaurant outlets to display promotional content, outlet information, updated orders, and operational data. Devices periodically communicate with the backend to validate outlet identity, fetch updated media, and send heartbeat notifications.
 
-   ```bash
-   npm install
-   ```
+The system is optimized for:
 
-2. Start the app
+- Low bandwidth
 
-   ```bash
-   npx expo start
-   ```
+- High availability
 
-In the output, you'll find options to open the app in a
+- Horizontal scaling
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Cloud-native deployment
+## ⚛️ Tech Stack
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+**Frontend** 
+- **React Native (Android TV)**
 
-## Get a fresh project
+- Communicates via REST with Flask backend
 
-When you're ready, run:
+- Caches images locally
+
+- Sends periodic heartbeat (every 30s)
+- Fetches: 
+    - Promotion Images
+    - Promotion Metadata
+    - Outlet branding assets
+
+**Backend** 
+- **Python Flask API**
+- Controllers:
+    - **device_controller** – login          validation, heartbeat writes, order tracking
+    - **media_controller** - fetch promotions/images from Odo
+    - **outlet_controller** - fetch outlet logos and metadata
+
+- Background scheduler (APScheduler): checks stale devices
+
+
+## 💾 Data Sources
+    
+- **Odoo External API**
+    - Promotion images (base64)
+    - Promotion metadata
+    - Outlet branding assets
+
+- **PostgreSQL**
+    - Outlet validation
+    - Heartbeat monitoring
+    - Token storage
+    - Order tracking metadata
+## ☁️ AWS Deployment Architecture
+
+**Core AWS Components**
+
+- **VPC** (Company's existing VPC)
+- Subnets
+    - **Public Subnet** → Elastic Beanstalk (Flask API)
+    - **Private Subnet** → RDS PostgreSQL
+- **Internet Gateway** → allows devices to reach Flask API
+- **NAT Gateway** → allows Flask backend to call external Odoo API
+- **AWS WAF** → security layer filtering App→API traffic
+- **CloudFront** → CDN + security + caching layer when scaling to >200 outlets
+
+**Traffic Flow**
+
+`Signage App → CloudFront (optional) → WAF → Elastic Beanstalk (Flask)
+↘︎ Odoo API (external)
+ → RDS (private) `
+
+**Security Groups**
+| Component  | Allowed From |
+| ------------- | ------------- |
+| CloudFront/WAF  | Internet |
+| Elastic Beanstalk | WAF only |
+| RDS PostgreSQL  | EB only  |
+
+**Scaling Plan**
+| Phase  |  Method |
+| ------------- | ------------- |
+| Now | Single EB instance (public subnet) |
+| Later (>150–200 devices) | Move EB behind ALB + Auto Scaling + CloudFront |
+
+## 🔗 API Endpoints
+
+#### Device
 
 ```bash
-npm run reset-project
+  POST /device/validate
+  POST /device/heartbeat
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+| Method | Endpoint     | Description                |
+| :-------- | :------- | :------------------------- |
+| `POST` | `/device/validate` | Validate outlet ID at login |
+| `POST` | `/device/heartbeat` | Update device heartbeat timestamp |
 
-## Learn more
+#### Media
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+  GET /media/promotions
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+| Method | Endpoint     | Description                |
+| :-------- | :------- | :------------------------- |
+| `GET` | `/media/promotions` | Fetch all promotion images + metadata |
 
-## Join the community
+#### Outlet
 
-Join our community of developers creating universal apps.
+```bash
+  GET /outlet/logo
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| Method | Endpoint     | Description                |
+| :-------- | :------- | :------------------------- |
+| `GET` | `/outlet/logo` | Fetch logo/branding image |
+
+
+## 🗄 Database Schema (PostgreSQL + RDS)
+    
+**outlet_devices**
+- id (PRIMARY KEY)
+- device_name
+- device_id
+- device_location
+- active
+- last_seen
+- order_tracking_url
+- access_token
+
+## ⚙️ Local Development
+#### Requirements
+- Python ≥ 3.10
+
+- Node.js ≥ 18
+
+- Android SDK / Android Studio
+
+- PostgreSQL (local or remote)
+
+#### Setup
+```bash
+  # Backend 
+  cd backend/
+  python -m venv venv source venv/bin/activate
+  pip install -r requirements.txt 
+  python application.py
+
+  # Frontend 
+  cd signage-app/ 
+  npm install / yarn install 
+  npm run android / npx expo start
+```
+
+## 🛠️ Testing
+- Local testing with mocked Odoo API
+
+- Remote test database (e.g., Supabase, Render PostgreSQL)
+
+- Test network latency with throttling
