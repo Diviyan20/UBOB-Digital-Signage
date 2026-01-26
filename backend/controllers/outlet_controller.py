@@ -1,13 +1,22 @@
-import os, io, base64, json, gc, threading, requests, logging, hashlib
-from dataclasses import dataclass
-from typing import Optional, Dict, Tuple, List
-from pathlib import Path
-from dotenv import load_dotenv
-from flask import send_file, jsonify, abort
-from PIL import Image as PILImage
+import base64
+import gc
+import hashlib
+import io
+import json
+import logging
+import os
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from functools import lru_cache
-from func_timeout import func_timeout, FunctionTimedOut
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import requests
+from dotenv import load_dotenv
+from flask import abort, jsonify, send_file
+from func_timeout import FunctionTimedOut, func_timeout
+from PIL import Image as PILImage
 
 load_dotenv()
 
@@ -51,16 +60,20 @@ log = logging.getLogger(__name__)
 # DATA STRUCTURES
 # ----------------
 
+
 @dataclass
 class OutletImageMetadata:
     """Metadata for a cached outlet image"""
+
     id: str
     name: Optional[str]
     image: str  # Image URL
 
+
 @dataclass
 class CachedOutletImage:
     """Represent a cached outlet image with metadata and bytes"""
+
     meta: OutletImageMetadata
     image_bytes: bytes
 
@@ -68,6 +81,7 @@ class CachedOutletImage:
 # -------------
 # CACHE MANAGER
 # -------------
+
 
 class OutletImageCacheManager:
     """Manages disk-based outlet image cache with size limits and cleanup."""
@@ -79,7 +93,7 @@ class OutletImageCacheManager:
         self.lock = threading.Lock()
         self._index: Dict[str, int] = {}  # {filename: size_bytes}
         self._load_index()
-    
+
     def _load_index(self) -> None:
         """Load cache index from disk."""
         if not self.index_file.exists():
@@ -91,7 +105,7 @@ class OutletImageCacheManager:
         except Exception as e:
             log.warning(f"Failed to load outlet cache index: {e}")
             self._index = {}
-        
+
     def _save_index(self) -> None:
         """Save cache index to disk."""
         try:
@@ -99,43 +113,42 @@ class OutletImageCacheManager:
                 json.dump(self._index, f)
         except Exception as e:
             log.error(f"Failed to save outlet cache index: {e}")
-        
-    
+
     def get_total_size_bytes(self) -> int:
         return sum(self._index.values())
-    
+
     def get_total_size_mb(self) -> float:
         """Get total cache size in Megabytes (MB)"""
         return self.get_total_size_bytes() / (1024 * 1024)
-    
+
     def has_image(self, image_id: str) -> bool:
         """Check if image exists in the cache"""
         filename = f"{image_id}.png"
         file_path = self.cache_dir / filename
         return file_path.exists() and filename in self._index
-    
+
     def get_image_path(self, image_id: str) -> Path:
         """Get file path for the image ID"""
         return self.cache_dir / f"{image_id}.png"
-    
+
     def load_image(self, image_id: str) -> Optional[bytes]:
         """Load image bytes from the disk cache"""
         file_path = self.get_image_path(image_id)
 
         if not file_path.exists():
             return None
-        
+
         try:
             with open(file_path, "rb") as f:
                 return f.read()
-            
+
         except Exception as e:
             log.warning(f"Failed to load cached outlet image {image_id}: {e}")
-            
+
             # Remove from index if the file is corrupted
             self._remove_from_index(image_id)
             return None
-        
+
     def save_image(self, image_id: str, image_bytes: bytes) -> bool:
         """Save image to disk cache and update index"""
         filename = f"{image_id}.png"
@@ -150,33 +163,35 @@ class OutletImageCacheManager:
             with self.lock:
                 self._index[filename] = size
                 self._save_index()
-            
+
             # Trigger cleanup if needed
             self._cleanup_if_needed()
             return True
-        
+
         except Exception as e:
             log.error(f"Failed to save outlet image {image_id}: {e}")
             return False
-        
+
     def _remove_from_index(self, image_id: str) -> None:
         """Remove image from the index"""
         filename = f"{image_id}.png"
         if filename in self._index:
             del self._index[filename]
             self._save_index()
-    
+
     def _cleanup_if_needed(self) -> None:
         """Cleanup cache if exceeds file size limit"""
         # First, sync index with actual files on disk
         self._sync_index_with_disk()
-        
+
         total_size = self.get_total_size_bytes()
 
         if total_size <= self.max_size_bytes:
             return
-        
-        log.info(f"🧹 Outlet cache cleanup triggered ({self.get_total_size_mb():.2f} MB)")
+
+        log.info(
+            f"🧹 Outlet cache cleanup triggered ({self.get_total_size_mb():.2f} MB)"
+        )
 
         # Get all cached files with their creation times
         files_with_times = []
@@ -195,7 +210,7 @@ class OutletImageCacheManager:
                 # File doesn't exist, remove from index
                 image_id = filename.replace(".png", "")
                 self._remove_from_index(image_id)
-        
+
         # Sort by creation time (Oldest first)
         files_with_times.sort(key=lambda x: x[2])
 
@@ -206,7 +221,7 @@ class OutletImageCacheManager:
         for filename, file_path, _, actual_size in files_with_times:
             if total_size <= target_size:
                 break
-                
+
             try:
                 # Double-check file exists before deletion (race condition protection)
                 if not file_path.exists():
@@ -217,19 +232,19 @@ class OutletImageCacheManager:
                             del self._index[filename]
                             total_size -= index_size
                     continue
-                
+
                 # Get actual file size
                 file_size = file_path.stat().st_size
                 file_path.unlink()
-                
+
                 with self.lock:
                     if filename in self._index:
                         del self._index[filename]
-                
+
                 total_size -= file_size
                 deleted_count += 1
-            
-            except (OSError, FileNotFoundError) as e:
+
+            except (OSError, FileNotFoundError):
                 # File doesn't exist or was already deleted
                 with self.lock:
                     if filename in self._index:
@@ -240,11 +255,13 @@ class OutletImageCacheManager:
                 log.debug(f"File {filename} was already deleted, removed from index")
             except Exception as e:
                 log.warning(f"Failed to delete {file_path}: {e}")
-        
+
         if deleted_count > 0:
             self._save_index()
-            log.info(f"✅ Deleted {deleted_count} outlet files, cache reduced to {self.get_total_size_mb():.2f} MB")
-    
+            log.info(
+                f"✅ Deleted {deleted_count} outlet files, cache reduced to {self.get_total_size_mb():.2f} MB"
+            )
+
     def _sync_index_with_disk(self) -> None:
         """Sync cache index with actual files on disk, removing orphaned entries."""
         with self.lock:
@@ -253,12 +270,14 @@ class OutletImageCacheManager:
                 file_path = self.cache_dir / filename
                 if not file_path.exists():
                     files_to_remove.append(filename)
-            
+
             if files_to_remove:
                 for filename in files_to_remove:
                     del self._index[filename]
                 self._save_index()
-                log.debug(f"Removed {len(files_to_remove)} orphaned entries from outlet cache index")
+                log.debug(
+                    f"Removed {len(files_to_remove)} orphaned entries from outlet cache index"
+                )
 
 
 # ---------------
@@ -288,15 +307,17 @@ class OutletImageProcessor:
                     img = img.convert("RGBA")
                 elif img.mode not in ("RGB", "RGBA"):
                     img = img.convert("RGB")
-                
+
                 # Resize maintaining aspect ratio
-                img.thumbnail(OutletImageProcessor.MAX_DIMENSIONS, PILImage.Resampling.LANCZOS)
+                img.thumbnail(
+                    OutletImageProcessor.MAX_DIMENSIONS, PILImage.Resampling.LANCZOS
+                )
 
                 # Save as optimized PNG
                 output = io.BytesIO()
                 img.save(output, format="PNG", optimize=True)
                 return output.getvalue()
-        
+
         except Exception as e:
             log.warning(f"Failed to process outlet image {image_id}: {e}")
             return None
@@ -306,22 +327,27 @@ class OutletImageProcessor:
 # OUTLET SERVICE
 # -------------
 
+
 class OutletService:
     """Main service for fetching and managing outlet data and images."""
 
     def __init__(self):
-        self.cache_manager = OutletImageCacheManager(CACHE_DIR, MAX_CACHE_SIZE_BYTES, CACHE_INDEX_FILE)
+        self.cache_manager = OutletImageCacheManager(
+            CACHE_DIR, MAX_CACHE_SIZE_BYTES, CACHE_INDEX_FILE
+        )
         self.memory_cache: Dict[str, CachedOutletImage] = {}
         self.cache_loaded = False
         self.lock = threading.Lock()
         self._outlets_cache = None
         self._outlets_cache_lock = threading.Lock()
-    
+
     def _fetch_raw_outlets_data(self):
         """Fetch raw outlets data from Odoo API."""
         try:
             log.info("📡 Fetching outlets from Odoo...")
-            res = SESSION.post(f"{BASE_URL}/api/get/outlet/regions", json={"ids": []}, timeout=15)
+            res = SESSION.post(
+                f"{BASE_URL}/api/get/outlet/regions", json={"ids": []}, timeout=15
+            )
             res.raise_for_status()
             data = res.json()
 
@@ -342,12 +368,14 @@ class OutletService:
         except Exception as e:
             log.error(f"❌ fetch_outlets: {e}")
             return []
-    
+
     def _fetch_raw_outlet_images_data(self):
         """Fetch raw outlet images data from Odoo API."""
         try:
             log.info("🖼️ Fetching outlet image metadata from Odoo...")
-            res = SESSION.post(f"{BASE_URL}/api/order/session", json={"ids": []}, timeout=20)
+            res = SESSION.post(
+                f"{BASE_URL}/api/order/session", json={"ids": []}, timeout=20
+            )
             res.raise_for_status()
             data = res.json()
 
@@ -358,12 +386,12 @@ class OutletService:
         except Exception as e:
             log.error(f"❌ Failed to fetch outlet images data: {e}")
             return []
-    
+
     def _generate_image_id(self, name: str, img_data: str = "") -> str:
         """Generate a unique ID for an image based on name or data."""
         unique_str = (name or "") + (img_data[:100] or "")
         return hashlib.md5(unique_str.encode("utf-8")).hexdigest()[:10]
-    
+
     def _create_metadata(self, name: str, image_id: str) -> OutletImageMetadata:
         """Create metadata object from item data."""
         return OutletImageMetadata(
@@ -371,19 +399,19 @@ class OutletService:
             name=name,
             image=f"{HOST_URL}/outlet_image/{image_id}",
         )
-    
+
     def get_outlets(self) -> List[dict]:
         """Get outlets list with caching."""
         with self._outlets_cache_lock:
             if self._outlets_cache is None:
                 self._outlets_cache = self._fetch_raw_outlets_data()
             return self._outlets_cache.copy()
-    
+
     def clear_outlets_cache(self):
         """Clear outlets cache (useful for testing or manual refresh)."""
         with self._outlets_cache_lock:
             self._outlets_cache = None
-    
+
     def get_outlet_images(self) -> List[dict]:
         """Fetch outlet images list - returns metadata immediately, processes images async."""
         try:
@@ -404,13 +432,15 @@ class OutletService:
             for item in data:
                 raw_img = (item.get("image") or "").strip()
                 if not raw_img:
-                    log.debug(f"Skipping item with no image data: {item.get('name', 'Unknown')}")
+                    log.debug(
+                        f"Skipping item with no image data: {item.get('name', 'Unknown')}"
+                    )
                     continue
 
                 name = item.get("name", "").strip()
                 if not name:
-                    log.warning(f"Skipping item with no name, using image hash for ID")
-                
+                    log.warning("Skipping item with no name, using image hash for ID")
+
                 image_id = self._generate_image_id(name, raw_img)
                 meta = self._create_metadata(name, image_id)
 
@@ -418,13 +448,17 @@ class OutletService:
                 if self.cache_manager.has_image(image_id):
                     image_bytes = self.cache_manager.load_image(image_id)
                     if image_bytes:
-                        new_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
+                        new_cache[image_id] = CachedOutletImage(
+                            meta=meta, image_bytes=image_bytes
+                        )
                         metadata_list.append(meta.__dict__)
                         log.debug(f"✅ Loaded cached image for {name} (ID: {image_id})")
                         continue
                     else:
-                        log.warning(f"⚠️ Cache index says image exists but failed to load: {image_id}")
-                
+                        log.warning(
+                            f"⚠️ Cache index says image exists but failed to load: {image_id}"
+                        )
+
                 # Queue for processing
                 metadata_list.append(meta.__dict__)
                 processing_tasks.append((image_id, name, raw_img, meta))
@@ -443,22 +477,34 @@ class OutletService:
                 for task in priority_tasks:
                     image_id, name, img_data, meta = task
                     try:
-                        image_bytes = OutletImageProcessor.process_image(img_data, image_id)
+                        image_bytes = OutletImageProcessor.process_image(
+                            img_data, image_id
+                        )
                         if image_bytes:
                             if self.cache_manager.save_image(image_id, image_bytes):
-                                new_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
-                                log.info(f"✅ Processed priority image: {name} (ID: {image_id})")
+                                new_cache[image_id] = CachedOutletImage(
+                                    meta=meta, image_bytes=image_bytes
+                                )
+                                log.info(
+                                    f"✅ Processed priority image: {name} (ID: {image_id})"
+                                )
                             else:
-                                log.error(f"❌ Failed to save image to cache: {name} (ID: {image_id})")
+                                log.error(
+                                    f"❌ Failed to save image to cache: {name} (ID: {image_id})"
+                                )
                         else:
-                            log.warning(f"⚠️ Failed to process image: {name} (ID: {image_id})")
+                            log.warning(
+                                f"⚠️ Failed to process image: {name} (ID: {image_id})"
+                            )
                     except Exception as e:
-                        log.error(f"❌ Error processing priority image {name} (ID: {image_id}): {e}")
+                        log.error(
+                            f"❌ Error processing priority image {name} (ID: {image_id}): {e}"
+                        )
 
                 # Process rest async
                 if remaining_tasks:
                     self._process_images_async(remaining_tasks, new_cache)
-                
+
                 # Update cache with priority items
                 with self.lock:
                     self.memory_cache.update(new_cache)
@@ -471,7 +517,7 @@ class OutletService:
                     self.cache_loaded = True
 
             return metadata_list
-        
+
         except Exception as e:
             log.error(f"Error fetching outlet images: {e}")
             # Return cached data if available
@@ -479,9 +525,12 @@ class OutletService:
                 if self.cache_loaded and self.memory_cache:
                     return [img.meta.__dict__ for img in self.memory_cache.values()]
             return []
-    
-    def _process_images_async(self, tasks: List[Tuple], new_cache: Dict[str, CachedOutletImage]) -> None:
+
+    def _process_images_async(
+        self, tasks: List[Tuple], new_cache: Dict[str, CachedOutletImage]
+    ) -> None:
         """Process images in parallel and update cache."""
+
         def process_task(task):
             image_id, name, img_data, meta = task
             try:
@@ -513,28 +562,39 @@ class OutletService:
                         image_id, image_bytes, meta, error = result
                         if image_bytes:
                             with self.lock:
-                                new_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
+                                new_cache[image_id] = CachedOutletImage(
+                                    meta=meta, image_bytes=image_bytes
+                                )
                             processed_count += 1
-                            log.debug(f"✅ Processed async image: {meta.name} (ID: {image_id})")
+                            log.debug(
+                                f"✅ Processed async image: {meta.name} (ID: {image_id})"
+                            )
                         else:
                             failed_count += 1
-                            log.warning(f"⚠️ Failed to process async image: {meta.name} (ID: {image_id}) - {error}")
+                            log.warning(
+                                f"⚠️ Failed to process async image: {meta.name} (ID: {image_id}) - {error}"
+                            )
 
                 except Exception as e:
                     failed_count += 1
-                    log.error(f"Error processing outlet image in async task: {e}", exc_info=True)
-            
+                    log.error(
+                        f"Error processing outlet image in async task: {e}",
+                        exc_info=True,
+                    )
+
             # Update global cache when all processing is done
             with self.lock:
                 self.memory_cache.update(new_cache)
                 self.cache_loaded = True
-            
-            log.info(f"✅ Processed {processed_count} new outlet images, {failed_count} failed, total cached: {len(new_cache)} items")
+
+            log.info(
+                f"✅ Processed {processed_count} new outlet images, {failed_count} failed, total cached: {len(new_cache)} items"
+            )
             gc.collect()
-        
+
         # Start background processing
         threading.Thread(target=update_cache, daemon=True).start()
-    
+
     def stream_outlet_image(self, image_id: str):
         """Return PNG Image by ID from memory or disk cache, with lazy fetch fallback."""
         try:
@@ -564,27 +624,35 @@ class OutletService:
                             name=None,
                             image=f"{HOST_URL}/outlet_image/{image_id}",
                         )
-                        self.memory_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
+                        self.memory_cache[image_id] = CachedOutletImage(
+                            meta=meta, image_bytes=image_bytes
+                        )
 
                 return send_file(
                     io.BytesIO(image_bytes),
                     mimetype="image/png",
                     as_attachment=False,
-                    download_name=f"{image_id}.png"
+                    download_name=f"{image_id}.png",
                 )
-            
+
             # Step 3: Check if image is currently being processed
             if not self.cache_manager.has_image(image_id):
                 with self.lock:
-                    if image_id not in [img.meta.id for img in self.memory_cache.values()]:
-                        log.info(f"Outlet image {image_id} still processing, returning placeholder")
+                    if image_id not in [
+                        img.meta.id for img in self.memory_cache.values()
+                    ]:
+                        log.info(
+                            f"Outlet image {image_id} still processing, returning placeholder"
+                        )
                         # Do not return placeholder immediately, try lazy loading first
                     else:
-                        log.debug(f"Image {image_id} exists in memory but not processed yet")
+                        log.debug(
+                            f"Image {image_id} exists in memory but not processed yet"
+                        )
 
             # Step 4: Lazy fetch from Odoo API if not in cache
             log.info(f"📡 Lazy fetch for outlet image {image_id} from Odoo API...")
-            
+
             # Try to find this specific image without fetching all images
             found_item = None
             found_name = None
@@ -595,7 +663,7 @@ class OutletService:
                     if cached_img.meta.id == image_id and cached_img.meta.name:
                         found_name = cached_img.meta.name
                         break
-            
+
             # If we have the name, we can be more specific
             if found_name:
                 log.debug(f"Found cached name '{found_name}' for image {image_id}")
@@ -607,10 +675,12 @@ class OutletService:
                     if item.get("name", "").strip() == found_name.strip():
                         found_item = item
                         break
-            
+
             else:
                 # Fallback: fetch all and search (but with better error handling)
-                log.debug(f"No cached name for {image_id}, fetching all outlet images...")
+                log.debug(
+                    f"No cached name for {image_id}, fetching all outlet images..."
+                )
                 data = self._fetch_raw_outlet_images_data()
 
                 if not data:
@@ -631,59 +701,65 @@ class OutletService:
                     if possible_id == image_id:
                         found_item = item
                         break
-            
+
             if found_item:
-                name = found_item.get("name","").strip()
-                raw_img = found_item.get("image","").strip()
+                name = found_item.get("name", "").strip()
+                raw_img = found_item.get("image", "").strip()
 
                 if not raw_img:
                     log.error(f"❌ No image data found for matched item {name}")
                     return abort(404, "No image data found for this outlet")
-            
+
             try:
                 log.info(f"🔄 Processing outlet image {name} (ID: {image_id})...")
-                
-                # Process and cache the image with timeout protection                
-                
+
+                # Process and cache the image with timeout protection
+
                 try:
-                    image_bytes = func_timeout(30, OutletImageProcessor.process_image, args=(raw_img, image_id))
-                    
+                    image_bytes = func_timeout(
+                        30, OutletImageProcessor.process_image, args=(raw_img, image_id)
+                    )
+
                     if not image_bytes:
                         log.error(f"❌ Failed to process image for {name}")
                         return abort(404, "No image data found for this outlet")
-                    
+
                     # Save to disk cache
                     success = self.cache_manager.save_image(image_id, image_bytes)
                     if not success:
                         log.error(f"❌ Failed to save image {name} to cache")
                         return abort(404, "No image data found for this outlet")
-                    
+
                     # Create metadata and update memory cache
                     meta = self._create_metadata(name, image_id)
                     with self.lock:
-                        self.memory_cache[image_id] = CachedOutletImage(meta=meta, image_bytes=image_bytes)
-                    
-                    log.info(f"💾 Successfully cached and serving outlet image {name} (ID: {image_id})")
+                        self.memory_cache[image_id] = CachedOutletImage(
+                            meta=meta, image_bytes=image_bytes
+                        )
+
+                    log.info(
+                        f"💾 Successfully cached and serving outlet image {name} (ID: {image_id})"
+                    )
                     return send_file(
                         io.BytesIO(image_bytes),
                         mimetype="image/png",
                         as_attachment=False,
-                        download_name=f"{image_id}.png"
+                        download_name=f"{image_id}.png",
                     )
-                
+
                 except FunctionTimedOut:
                     log.error(f"⏰ Timeout processing image {name}")
                     return abort(404, "Image processing timeout")
-                    
+
             except Exception as e:
                 log.error(f"⚠️ Failed to process/cache outlet image {name}: {e}")
                 return abort(404, f"Failed to process outlet image: {str(e)}")
-    
+
         except Exception as e:
             # Return placeholder for any error to prevent app crashes
             log.error(f"❌ Error streaming outlet image {image_id}: {e}", exc_info=True)
             return abort(404, f"Error streaming outlet image: {str(e)}")
-    
+
     def get_outlet_images_with_names(self) -> Tuple[dict, int]:
         """Get outlet images combined with outlet names."""
         try:
@@ -691,17 +767,21 @@ class OutletService:
             images = self.get_outlet_images()
 
             outlet_map = {
-                o["outlet_name"].strip().lower(): o 
-                for o in outlets 
+                o["outlet_name"].strip().lower(): o
+                for o in outlets
                 if o.get("outlet_name")
             }
-                    
+
             combined = [
                 {
                     "id": img["id"],
                     "image": img["image"],
-                    "outlet_id": outlet_map.get(img.get("name", "").strip().lower(), {}).get("outlet_id", ""),
-                    "outlet_name": outlet_map.get(img.get("name", "").strip().lower(), {}).get("outlet_name", img.get("name", "")),
+                    "outlet_id": outlet_map.get(
+                        img.get("name", "").lower(), {}
+                    ).get("outlet_id", ""),
+                    "outlet_name": outlet_map.get(
+                        img.get("name", "").lower(), {}
+                    ).get("outlet_name", img.get("name", "")),
                 }
                 for img in images
             ]
@@ -714,9 +794,10 @@ class OutletService:
 
 
 # ---------------
-# GLOBAL INSTANCE 
+# GLOBAL INSTANCE
 # ---------------
 _outlet_service = OutletService()
+
 
 # Public API functions (maintaining backward compatibility)
 @lru_cache(maxsize=1)
@@ -724,23 +805,28 @@ def fetch_outlets():
     """Fetch outlets from Odoo (cached)."""
     return _outlet_service.get_outlets()
 
+
 def fetch_outlet_images():
     """Fetch outlet images - returns metadata immediately, processes images async."""
     return _outlet_service.get_outlet_images()
 
+
 def stream_outlet_image(image_id: str):
     """Stream outlet image by ID."""
     return _outlet_service.stream_outlet_image(image_id)
+
 
 def get_outlet_images_with_names():
     """Get outlet images combined with outlet names."""
     result, status_code = _outlet_service.get_outlet_images_with_names()
     return jsonify(result), status_code
 
+
 # Legacy cache management functions (kept for backward compatibility if needed)
 def get_cache_size_mb():
     """Get current cache size in MB."""
     return _outlet_service.cache_manager.get_total_size_mb()
+
 
 def cleanup_cache():
     """Trigger cache cleanup if needed."""

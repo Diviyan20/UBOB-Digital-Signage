@@ -1,12 +1,12 @@
-import ImageComponent from "@/components/image components/ImageComponent";
-import OutletDisplayComponent from "@/components/image components/OutletImageComponent";
+import ImageComponent from "@/components/image_components/ImageComponent";
+import OutletDisplayComponent from "@/components/image_components/OutletImageComponent";
 import SystemLoginForm from "@/components/login_forms/SystemLoginForm";
 import OrderPreparation from "@/components/OrderPreparation";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 interface DeviceValidationResult {
   can_access_media: boolean;

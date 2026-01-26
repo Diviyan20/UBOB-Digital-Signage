@@ -1,62 +1,55 @@
-import os, logging, psutil, gc, requests
-from sched import scheduler
-from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
-from dotenv import load_dotenv
-from datetime import datetime, timedelta, timezone 
-from apscheduler.schedulers.background import BackgroundScheduler 
-from werkzeug.middleware.proxy_fix import ProxyFix
+import logging
+import os
 
-# ==================
-# CONTROLLER IMPORTS
-# ==================
-from controllers.media_controller import get_media_json, stream_image
-
-from controllers.outlet_controller import (
-    fetch_outlet_images, 
-    stream_outlet_image, 
-    get_outlet_images_with_names)
-
+# Controllers
 from controllers.device_controller import (
-    validate_outlet,
-    register_device, 
+    parse_order_tracking_url,
+    register_device,
+    update_device_credentials,
     update_heartbeat,
     validate_device_for_media,
-    update_device_credentials,
-    parse_order_tracking_url)
+    validate_outlet,
+)
+from controllers.media_controller import get_media_json, stream_image
+from controllers.outlet_controller import (
+    fetch_outlet_images,
+    get_outlet_images_with_names,
+    stream_outlet_image,
+)
+from dotenv import load_dotenv
+from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from models.db_connection import get_db_connection
-
-# LOAD ENVIRONMENT
+# LOAD ENVIRONMENT + APP SETUP
 load_dotenv()
-BASE_URL = os.getenv("ODOO_DATABASE_URL")
-API_TOKEN = os.getenv("ODOO_API_TOKEN")
 
-# FLASK SETUP
 app = Flask(__name__, static_folder="static")
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "max_age": 86400
-    }
-})
 
-# CONNECTION POOLING & TIMEOUT SETTINGS
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 # 50 MB max file size
-app.config['TIMEOUT'] = 300 # 5 minute timeout
+CORS(
+    app,
+    resources={
+        r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization"],
+        }
+    },
+)
 
-# ADDING PROXY FIX
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
-# LOGGING SETUP
+
+# =======
+# LOGGING
+# =======
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
+
 
 # ================
 # DEVICE ENDPOINTS
@@ -67,13 +60,14 @@ def validate_device():
     Comprehensive device validation for media screen access.
     """
     data = request.get_json(force=True)
-    device_id = str(data.get("device_id")).strip() if data.get("device_id") else None
+    device_id = data.get("device_id")
 
     if not device_id:
         return jsonify({"error": "Missing device ID"}), 400
-    
+
     result = validate_device_for_media(device_id)
     return jsonify(result), 200
+
 
 @app.route("/update_credentials", methods=["POST"])
 def update_credentials():
@@ -82,12 +76,12 @@ def update_credentials():
     """
     data = request.get_json(force=True)
 
-    device_id = str(data.get("device_id")).strip()
+    device_id = str(data.get("device_id"))
     full_url = data.get("order_tracking_url")
 
     if not device_id or not full_url:
-        return jsonify({"error": "Missing device_id or order_tracking_url"}), 400
-    
+        return jsonify({"error": "Missing parameters"}), 400
+
     # Parse the URL to extract base URl and access token
     base_url, access_token = parse_order_tracking_url(full_url)
 
@@ -96,16 +90,13 @@ def update_credentials():
 
     result = update_device_credentials(device_id, base_url, access_token)
 
-    if "error" in result:
-        return jsonify(result), 500
-    
-    return jsonify(result), 200
+    status = 200 if "error" not in result else 500
+    return jsonify(result), status
 
 
 # ================
 # OUTLET ENDPOINTS
 # ================
-
 @app.route("/get_outlets", methods=["POST"])
 def get_outlet():
     data = request.get_json(force=True)
@@ -172,18 +163,13 @@ def outlet_images_combined():
 @app.route("/get_media", methods=["GET"])
 def get_media_list():
     log.info("Received GET at /get_media")
-    media_data = get_media_json()
+    media = get_media_json()
 
-    if not media_data:
-        return jsonify({"error":"Failed to fetch media from Odoo"}), 500
+    if not media:
+        return jsonify({"error": "Failed to fetch media from Odoo"}), 500
 
-    
-    safe_copy = [
-        {k: v for k, v in item.items() if k != "raw_img"}
-        for item in media_data
-    ]
-    
-    return jsonify({"message":"Media fetched successfully!", "media":safe_copy}) 
+    safe = [{k: v for k, v in item.items() if k != "raw_img"} for item in media]
+    return jsonify({"media": safe})
 
 
 @app.route("/image/<image_id>", methods=["GET"])
@@ -191,14 +177,13 @@ def serve_image(image_id):
     log.debug(f"Received GET at /image/{image_id}")
     return stream_image(image_id)
 
+
 # ============
 # STATIC FILES
 # ============
 @app.route("/static/<path:filename>")
 def static_files(filename):
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    if not os.path.exists(os.path.join(static_dir, filename)):
-        log.warning(f"⚠️ File not found: {os.path.join(static_dir, filename)}")
     return send_from_directory(static_dir, filename)
 
 
@@ -207,129 +192,14 @@ def static_files(filename):
 # ==================
 @app.route("/heartbeat", methods=["POST"])
 def heartbeat():
-    # Receive heartbeat pings from devices (Outlet codes)
-    # JSON response: {"device_id": "42"}
-    try:
-        data = request.get_json(force=True)
-        log.debug(f"Incoming heartbeat data: {data}")
-    except Exception as e:
-        log.error(f"JSON decode error: {e}")
-        return jsonify({"error":"Invalid JSON payload"}), 400
-    
-    if not data:
-        return jsonify({"error": "Empty request body"}), 400
-    
+    data = request.get_json(force=True)
     device_id = data.get("device_id")
     status = data.get("status")
-    client_timestamp = data.get("timestamp")
-    
+
     if not device_id:
         return jsonify({"error": "Missing device_id"}), 400
 
-    log.info(
-        f"Heartbeat → Device: {device_id}, Status: {status}, "
-        f"Client TS: {client_timestamp}"
-    )
     return update_heartbeat(device_id, status)
-
-
-# =====================
-# INACTIVE DEVICE CHECK
-# ====================
-def check_for_inactive_devices():
-    log.info("Checking for inactive devices...")
-    
-    try:
-        with get_db_connection() as (conn, cur):
-            now = datetime.now(timezone.utc)
-            
-            # 1. Fetch online devices and their last_seen timestamps
-            select_query = """
-                SELECT device_id, device_name, last_seen 
-                FROM outlet_devices 
-                WHERE device_status = 'online'
-            """
-            cur.execute(select_query)
-            devices = cur.fetchall()
-            
-            # 2. Check each device for inactivity (5+ minutes)
-            inactive_threshold = now - timedelta(minutes=5)
-            
-            for device in devices:
-                device_id, device_name, last_seen = device
-                
-                # Skip if no last_seen timestamp
-                if not last_seen:
-                    continue
-                
-                # Convert last_seen to datetime if it's a string
-                if isinstance(last_seen, str):
-                    last_seen_dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
-                else:
-                    last_seen_dt = last_seen
-                
-                # Check if device is inactive
-                if last_seen_dt < inactive_threshold:
-                    log.info(f"Device {device_id} inactive for {(now - last_seen_dt).total_seconds() / 60:.1f} minutes")
-                    
-                    # Mark device as offline
-                    update_query = """
-                        UPDATE outlet_devices 
-                        SET device_status = 'offline' 
-                        WHERE device_id = %s
-                    """
-                    cur.execute(update_query, (device_id,))
-                    
-                    if cur.rowcount > 0:
-                        log.info(f"Marked device {device_id} as offline")
-                    else:
-                        log.warning(f"Failed to update device {device_id}")
-            
-            conn.commit()
-            
-    except Exception as e:
-        log.error(f"Error checking for inactive devices: {e}")
-
-# ==============
-# MEMORY LOGGING
-# ==============
-def log_memory_usage():
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    memory_mb = memory_info.rss / 1024 / 1024 # Convert to mb
-
-    # Get cache size from controllers
-    from controllers.media_controller import _media_service
-    from controllers.outlet_controller import _outlet_service
-
-    media_cache_size = len(_media_service.memory_cache) if hasattr(_media_service, 'memory_cache') else 0
-    outlet_cache_size = len(_outlet_service.memory_cache) if hasattr(_outlet_service, 'memory_cache') else 0
-
-    log.info(f"🧠 Memory: {memory_mb:.1f}MB | Media Cache: {media_cache_size} | Outlet Cache: {outlet_cache_size}")
-
-
-# Add memory endpoint
-@app.route("/memory_stats", methods=["GET"])
-def get_memory_stats():
-    gc.collect()
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-
-    from controllers.media_controller import _media_service
-    from controllers.outlet_controller import _outlet_service
-
-    stats = {
-        "memory_mb": round(memory_info.rss / 1024 / 1024, 1),
-        "memory_percent": round(process.memory_percent(), 1),
-        "media_cache_items": len(_media_service.memory_cache),
-        "outlet_cache_items": len(_outlet_service.memory_cache),
-        "cache_files_media": len(_media_service.cache_manager._index) if hasattr(_media_service, 'cache_manager') else 0,
-        "cache_files_outlet": len(_outlet_service.cache_manager._index) if hasattr(_outlet_service, 'cache_manager') else 0,
-    }
-
-    log_memory_usage() # Log to console
-    return jsonify(stats)
-
 
 # =======================
 # GLOBAL RESPONSE LOGGING
@@ -339,19 +209,10 @@ def log_response_info(response):
     log.info(f"{request.method} {request.path} → {response.status}")
     return response
 
-
-# ==============
-# SCHEDULER INIT
-# ==============
-scheduler = BackgroundScheduler(daemon = True)
-scheduler.add_job(check_for_inactive_devices, "interval", minutes=2) # Scheduled job to check for inactive devices
-scheduler.add_job(func=log_memory_usage, trigger="interval", minutes=4, id="memory_monitor", name="Memory Usage Monitor") # Scheduled job to log memory usage
-scheduler.start()
-
 # ==============
 # 🚀 RUN SERVER
 # ==============
 if __name__ == "__main__":
     log.info("🚀 Starting Flask backend for Digital Signage System...")
-    log.info("🌍 Listening on http://0.0.0.0:5000")
-    app.run(debug=True, threaded=True, host="0.0.0.0", port=5000)
+    log.info("🚀 Flask backend running on port 5000")
+    app.run(debug=True, host="0.0.0.0", port=5000)
