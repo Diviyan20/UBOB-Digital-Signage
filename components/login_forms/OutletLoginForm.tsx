@@ -2,11 +2,11 @@ import { OutletLoginStyles as styles } from '@/styling/OutletLoginStyles';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, Image, Pressable, Text, TextInput, View } from 'react-native';
-import ImagePreloader from '../image components/ImagePreloader';
+import ImagePreloader from '../image_components/ImagePreloader';
 import ErrorOverlayComponent from '../overlays/ErrorOverlayComponent';
 import LoggingInOverlayComponent from '../overlays/LogginInOverlayComponent';
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 const OutletLoginForm: React.FC = () => {
     const [outletId, setOutletId] = useState<string>("");
