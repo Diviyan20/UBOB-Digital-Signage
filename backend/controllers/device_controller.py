@@ -86,7 +86,7 @@ def validate_outlet(outlet_id: str) -> dict:
 
 def get_device_info(device_id: str) -> dict:
     """
-    Get device information from Supabase, including API credentials.
+    Get device information from Postgresql, including API credentials.
     """
     try:
         with get_db_connection() as (conn, cur):
@@ -129,7 +129,7 @@ def get_device_info(device_id: str) -> dict:
 
 def register_device(outlet_id: str, outlet_name: str, region_name: str = None):
     """
-    Register or update device in Supabase
+    Register or update device in Postgresql
     """
     
     try:
@@ -240,7 +240,7 @@ def parse_order_tracking_url(full_url: str) -> tuple:
         parsed = urlparse(full_url)
 
         # Extract the base URL (with path, wihtout query parameters)
-        base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
 
         # Extract access token from query parameters
         query_params = parse_qs(parsed.query)

@@ -17,12 +17,12 @@ load_dotenv()
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
 API_TOKEN = os.getenv("ODOO_API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
-HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://localhost:5000")
+HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://10.0.2.2:5000")
 
 # -----------------------------
 # CACHE DIRECTORY CONFIGURATION
 # -----------------------------
-CACHE_DIR = Path(r"D:/outlet_cache")
+CACHE_DIR = Path(r"C:/outlet_cache")
 MAX_CACHE_SIZE_MB = 15
 MAX_CACHE_SIZE_BYTES = MAX_CACHE_SIZE_MB * 1024 * 1024
 CACHE_INDEX_FILE = CACHE_DIR / "cache_index.json"
