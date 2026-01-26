@@ -86,7 +86,7 @@ def update_credentials():
     base_url, access_token = parse_order_tracking_url(full_url)
 
     if not base_url or not access_token:
-        return jsonify({"error": "Invalid URL format or missing access token"}), 400
+        return jsonify({"error": "Missing Parameters"}), 400
 
     result = update_device_credentials(device_id, base_url, access_token)
 
@@ -140,22 +140,18 @@ def outlet_images():
         return jsonify({"error": "Failed to fetch outlet images from Odoo"}), 500
 
     # Streamline: generator avoids building extra large list copies
-    safe_media = [
-        {k:v for k, v in item.items() if k != "raw_img"}
-        for item in image_data
-    ]
+    safe_media = [{k:v for k, v in item.items() if k != "raw_img"}for item in image_data]
     
-    return jsonify({"message":"Outlet Images fetched successfully!", "media":safe_media})
-
+    return jsonify({"media":safe_media})
 
 @app.route("/outlet_image/<image_id>", methods=["GET"])
 def serve_outlet_images(image_id):
     return stream_outlet_image(image_id)
 
-
 @app.route("/outlet_image_combined", methods=["POST"])
 def outlet_images_combined():
     return get_outlet_images_with_names()
+
 
 # ===============
 # MEDIA ENDPOINTS
