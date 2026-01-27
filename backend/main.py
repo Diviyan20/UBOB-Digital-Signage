@@ -21,10 +21,10 @@ from controllers.outlet_controller import (
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Background Jobs
-from backend.jobs.scheduler import start_scheduler
+from jobs.scheduler import start_scheduler
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # LOAD ENVIRONMENT + APP SETUP
 load_dotenv()
