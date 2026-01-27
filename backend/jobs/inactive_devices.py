@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from backend.models import db_connection
+from models import db_connection
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

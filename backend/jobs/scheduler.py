@@ -2,8 +2,7 @@ import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-
-from backend.jobs.inactive_devices import check_for_inactive_devices
+from jobs.inactive_devices import check_for_inactive_devices
 
 log = logging.getLogger(__name__)
 
