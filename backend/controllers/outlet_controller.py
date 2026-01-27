@@ -11,6 +11,7 @@ from flask import abort, jsonify, send_file
 from PIL import Image
 
 load_dotenv()
+Image.MAX_IMAGE_PIXELS = 20_000_000
 
 # -----------------
 # CONFIG
@@ -54,12 +55,13 @@ def base64_to_png(raw_img: str) -> bytes:
     img_bytes = base64.b64decode(raw_img)
 
     with Image.open(io.BytesIO(img_bytes)) as img:
+        img.load() # Forces full decode
         if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGB")
 
         img.thumbnail((1280, 720))
         out = io.BytesIO()
-        img.save(out, format="PNG", optimize=True)
+        img.save(out, format="PNG")
         return out.getvalue()
 
 
