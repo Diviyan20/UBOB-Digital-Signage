@@ -16,15 +16,22 @@ from controllers.outlet_controller import (
     get_outlet_images_with_names,
     stream_outlet_image,
 )
+
+# Environment and Flask server
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+# Background Jobs
+from backend.jobs.scheduler import start_scheduler
+
 # LOAD ENVIRONMENT + APP SETUP
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
+
+start_scheduler()
 
 CORS(
     app,
