@@ -1,8 +1,11 @@
-import os, psycopg2
-from dotenv import load_dotenv
+import os
 from contextlib import contextmanager
 
+import psycopg2
+from dotenv import load_dotenv
+
 load_dotenv()
+
 
 @contextmanager
 def get_db_connection():
@@ -10,17 +13,19 @@ def get_db_connection():
     - Context manager for database connection
     - Automatically handles connection cleanup
     """
-    
+
     conn = None
     cur = None
     try:
         database_url = os.getenv("DATABASE_URL")
-        
+
         if not database_url:
-            raise ValueError("DATABASE_URL Environment Variable is invalid or does not exist!")
-        
+            raise ValueError(
+                "DATABASE_URL Environment Variable is invalid or does not exist!"
+            )
+
         conn = psycopg2.connect(database_url)
-        
+
         cur = conn.cursor()
 
         # Ensure table exists
@@ -46,7 +51,7 @@ def get_db_connection():
         if conn:
             conn.rollback()
         raise
-    
+
     finally:
         if cur:
             cur.close()

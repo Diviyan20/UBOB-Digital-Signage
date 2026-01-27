@@ -1,8 +1,11 @@
-import os, requests, logging
+import logging
+import os
 from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlparse
+
+import requests
+from dotenv import find_dotenv, load_dotenv
 from flask import jsonify
-from dotenv import load_dotenv, find_dotenv
-from urllib.parse import urlparse, parse_qs
 from models.db_connection import get_db_connection
 
 load_dotenv(find_dotenv())
@@ -277,6 +280,9 @@ def update_heartbeat(device_id: str, status: str):
                 WHERE device_id = %s
                 RETURNING device_id
             """
+            status = status.lower()
+            if status not in ("online", "offline"):
+                status = "online"
             
             cur.execute(update_query, (status, now, device_id))
             result = cur.fetchone()
