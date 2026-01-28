@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ PUBLIC_HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://10.0.2.2:5000")
 BASE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = BASE_DIR / "cache" / "media"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+INDEX_FILE = CACHE_DIR / "index.json"
 
 # -------------
 # LOGGING SETUP
@@ -62,6 +64,51 @@ def fetch_new_from_odoo() -> dict:
     res.raise_for_status()
     return res.json()
 
+def fetch_and_cache_media() -> int:
+        """
+        Fetch media from Odoo and cache images.
+        Returns number of media items processed.
+        """
+        try:
+            response = fetch_new_from_odoo()
+            
+            if not response.get("status"):
+                log.warning("Odoo returned status= False")
+                return 0
+
+            index = load_index()
+            count = 0
+            
+            for block in response.get("data", []):
+                for promo in block.get("promotion", []):
+                    raw_image = promo.get("image")
+                    
+                    if not raw_image:
+                        continue
+                        
+                    name = promo.get("name", "unknown")
+                    description = promo.get("description", "unknown")
+                    image_id = name.lower().replace(" ", "_")
+                    
+                    if not image_exists(image_id):
+                        save_base64_as_png(raw_image,image_id)
+                        log.info(f"Cached media image: {image_id}")
+                    
+                    index[image_id] = {
+                    "name": name,
+                    "description": description,
+                    "image": f"{image_id}.png",
+                    }
+                    
+                    count += 1
+            
+            save_index(index)
+            log.info(f"Media refresh complete. {count} items processed.")
+            return count
+    
+        except Exception as e:
+            log.error(f"Media refresh failed: {e}")
+            return 0
 
 def image_path(image_id: str) -> Path:
     return CACHE_DIR / f"{image_id}.png"
@@ -86,48 +133,44 @@ def save_base64_as_png(base64_data: str, image_id: str) -> None:
         img.thumbnail((1280, 720))
         img.save(image_path(image_id), format="PNG", optimize=True)
 
+def load_index() -> dict:
+    if not INDEX_FILE.exists():
+        return {}
+
+    try:
+        content = INDEX_FILE.read_text().strip()
+        if not content:
+            return {}
+        return json.loads(content)
+    except json.JSONDecodeError:
+        log.warning("index.json is corrupted or empty. Rebuilding.")
+        return {}
+
+def save_index(index: dict):
+    tmp = INDEX_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(index, indent=2))
+    tmp.replace(INDEX_FILE)
 
 # -------------
 # MEDIA SERVICE
 # -------------
 
-
 class MediaService:
+    
     def get_media(self) -> List[dict]:
-        response = fetch_new_from_odoo()
-
-        if not response.get("status"):
-            log.warning("Odoo returned status= FALSE")
-            return []
-
-        media_items: List[MediaItem] = []
-
-        for block in response.get("data", []):
-            for promo in block.get("promotion", []):
-                raw_image = promo.get("image")
-                if not raw_image:
-                    continue
-
-                # Stable ID: name-based (easy to debug)
-                name = promo.get("name", "unknown")
-                description = promo.get("description", "unknown")
-                image_id = name.lower().replace(" ", "_")
-
-                if not image_exists(image_id):
-                    log.info(f"Caching Image: {image_id}")
-                    save_base64_as_png(raw_image, image_id)
-
-                media_items.append(
-                    MediaItem(
-                        id=image_id,
-                        name=name,
-                        description=description,
-                        image=f"{PUBLIC_HOST_URL}/image/{image_id}",
-                    )
-                )
-
-        log.info(f"Returning {len(media_items)} media items.")
-        return [item.__dict__ for item in media_items]
+       index = load_index()
+       items = []
+       
+       for image_id, data in index.items():
+           items.append({
+               "id": image_id,
+               "name": data.get("name"),
+               "description": data.get("description"),
+               "image": f"{PUBLIC_HOST_URL}/image/{image_id}",
+           })
+        
+       return items
+        
 
     def stream_image(self, image_id: str):
         path = image_path(image_id)
