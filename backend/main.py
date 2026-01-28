@@ -10,7 +10,10 @@ from controllers.device_controller import (
     validate_device_for_media,
     validate_outlet,
 )
-from controllers.media_controller import get_media_json, stream_image
+from controllers.media_controller import (
+    get_media_json,
+    stream_image,
+)
 from controllers.outlet_controller import (
     fetch_outlet_images,
     get_outlet_images_with_names,
@@ -21,6 +24,7 @@ from controllers.outlet_controller import (
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from jobs.media_refresh import start_media_scheduler
 
 # Background Jobs
 from jobs.scheduler import start_scheduler
@@ -32,6 +36,7 @@ load_dotenv()
 app = Flask(__name__, static_folder="static")
 
 start_scheduler()
+start_media_scheduler()
 
 CORS(
     app,
@@ -216,6 +221,6 @@ def log_response_info(response):
 # 🚀 RUN SERVER
 # ==============
 if __name__ == "__main__":
-    log.info("🚀 Starting Flask backend for Digital Signage System...")
+    log.info("Starting Flask backend for Digital Signage System...")
     log.info("🚀 Flask backend running on port 5000")
     app.run(debug=True, host="0.0.0.0", port=5000)

@@ -18,10 +18,11 @@ interface MediaItem {
   date_end?: string;
 }
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 const DISPLAY_DURATION = 5000;
 const FADE_DURATION = 400;
 const PREFETCH_BUFFER = 2 //Only Pre-fetches next 2 images instead of all
+const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minute timer for pulling new media
 
 const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
   endpoint = `${SERVER_URL}/get_media`,
@@ -45,14 +46,9 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
    * Moved outside component and memoized to prevent recreation on every render
    * Saves memory and prevent child component re-renders
    */
-  const getImageUrl = useCallback((path?: string | null, bustCache = false) => {
-    if (!path) return null;
-    if (path.startsWith("http")) {
-      return bustCache ? `${path}?t=${Date.now()}` : path;
-    }
-    return bustCache
-      ? `${SERVER_URL}${path}?t=${Date.now()}`
-      : `${SERVER_URL}${path}`;
+  const getImageUrl = useCallback((url?: string | null, bustCache = false) => {
+    if (!url) return null;
+    return bustCache ? `${url}?t=${Date.now()}` : url;
   },[]);
 
   /**
@@ -83,7 +79,10 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
         if (isMounted.current){
           setMediaList(items);
           setErrorVisible(false);
-          setCurrentIndex(0); // Reset to first image
+          
+          if (mediaList.length === 0){
+            setCurrentIndex(0); // Reset to first image
+          }
         }
       
     } catch (err) {
@@ -163,12 +162,19 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
   useEffect(() => {
     isMounted.current = true;
 
-    // Fetch initial data
-    fetchMediaList();
+    fetchMediaList() // Initial Call to fetch media upon mount
+
+    // Fetch initial data (With timer)
+    const refreshTimer = setInterval(() => {
+      console.log("🔄 Refreshing media list");
+      fetchMediaList();
+    }, REFRESH_INTERVAL);
 
     return () =>{
       isMounted.current = false;
-      
+
+      clearInterval(refreshTimer);
+
       // Cancel any ongoing requests
       if (abortControllerRef.current){
         abortControllerRef.current.abort();
