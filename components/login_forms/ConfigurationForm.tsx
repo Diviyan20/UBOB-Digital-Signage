@@ -33,7 +33,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
             const fullUrl = `${baseUrl}/?access_token=${accessToken.trim()}`;
 
             // Update device credentials
-            const response = await fetch(`http://10.0.2.2:5000/update_credentials`, {
+            const response = await fetch(`https://ubob-digital-signage.onrender.com/update_credentials`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
