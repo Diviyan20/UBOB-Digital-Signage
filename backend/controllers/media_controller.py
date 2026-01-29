@@ -77,6 +77,7 @@ def fetch_and_cache_media() -> int:
                 return 0
 
             index = load_index()
+            active_ids = set()
             count = 0
             
             for block in response.get("data", []):
@@ -89,6 +90,7 @@ def fetch_and_cache_media() -> int:
                     name = promo.get("name", "unknown")
                     description = promo.get("description", "unknown")
                     image_id = name.lower().replace(" ", "_")
+                    active_ids.add(image_id)
                     
                     if not image_exists(image_id):
                         save_base64_as_png(raw_image,image_id)
@@ -101,7 +103,7 @@ def fetch_and_cache_media() -> int:
                     }
                     
                     count += 1
-            
+            prune_cache(active_ids, index)
             save_index(index)
             log.info(f"Media refresh complete. {count} items processed.")
             return count
@@ -109,6 +111,19 @@ def fetch_and_cache_media() -> int:
         except Exception as e:
             log.error(f"Media refresh failed: {e}")
             return 0
+
+def prune_cache(active_ids: set[str], index: dict):
+    # Remove stale files
+    for file in CACHE_DIR.glob("*.png"):
+        if file.stem not in active_ids:
+            log.info(f"Deleting expired media file: {file.name}")
+            file.unlink(missing_ok=True)
+    
+    # Remove stale index entries
+    stale_keys = set(index.keys()) - active_ids
+    for key in stale_keys:
+        log.info(f"Removing expired media index: {key}")
+        index.pop(key, None)
 
 def image_path(image_id: str) -> Path:
     return CACHE_DIR / f"{image_id}.png"

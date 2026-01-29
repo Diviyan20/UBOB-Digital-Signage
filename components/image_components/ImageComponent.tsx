@@ -22,7 +22,7 @@ const SERVER_URL = "http://10.0.2.2:5000";
 const DISPLAY_DURATION = 5000;
 const FADE_DURATION = 400;
 const PREFETCH_BUFFER = 2 //Only Pre-fetches next 2 images instead of all
-const REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minute timer for pulling new media
+const REFRESH_INTERVAL = 25 * 60 * 1000; // 25 minute timer for pulling new media
 
 const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
   endpoint = `${SERVER_URL}/get_media`,
@@ -42,7 +42,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(({
   const abortControllerRef = useRef<AbortController | null>(null);
 
   /**
-   * Memozied helper to form valid image URL
+   * Memoized helper to form valid image URL
    * Moved outside component and memoized to prevent recreation on every render
    * Saves memory and prevent child component re-renders
    */
