@@ -124,8 +124,36 @@ const OutletLoginForm: React.FC = () => {
         } 
     };
 
-    const handleAdminLogin = () =>{
-        router.replace("/screens/SystemLoginScreen");
+    const handleAdminLogin = async () =>{
+        // Add a guard so that they must enter something
+        if (!outletId.trim()){
+            Alert.alert("Missing Field", "Please enter your Outlet ID.")
+            return;
+        }
+        const response = await fetch(`${SERVER_URL}/get_outlets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ outlet_id: outletId })
+        });
+
+        const data = await response.json() as { 
+            is_valid: boolean; 
+            outlet_name?: string; 
+            region_name?: string; 
+            device_info?: any 
+        };
+
+        if (response.ok && data.is_valid){
+            router.replace({
+                pathname: "/screens/SystemLoginScreen",
+                params: {outletId} // Pass it to SystemLoginForm to reference it.
+            });
+
+        }
+        else{
+            Alert.alert("Configuration Error", "Outlet ID not Found!")
+        }
+        
     }
 
     // Handle when all images are preloaded
