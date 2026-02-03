@@ -1,5 +1,4 @@
 import { ConfigurationStyles as styles } from "@/styling/ConfigurationStyles";
-import Constants from "expo-constants";
 import { router } from 'expo-router';
 import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
@@ -13,7 +12,16 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
     const [loading, setLoading] = useState<boolean>(false);
 
     // Load base URL from environment variables
-    const baseUrl = Constants.expoConfig?.extra?.ORDER_TRACKING_BASE_URL;
+    const baseUrl = process.env.EXPO_PUBLIC_ORDER_TRACKING_BASE_URL;
+
+    if (!baseUrl) {
+        Alert.alert(
+          "Configuration Error",
+          "Base URL is missing. Please contact admin."
+        );
+        return null;
+      }
+      
 
     const handleSubmit = async () => {
         if (loading) {
