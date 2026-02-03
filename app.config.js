@@ -25,7 +25,7 @@ export default {
       reactCompiler: true
     },
     extra: {
-      ORDER_TRACKING_BASE_URL: process.env.ORDER_TRACKING_BASE_URL,
+      EXPO_PUBLIC_ORDER_TRACKING_BASE_URL: process.env.EXPO_PUBLIC_ORDER_TRACKING_BASE_URL,
       router: {},
       eas: {
         projectId: '9a8ee31b-345f-47d4-a806-9ffe6d107fd8'
