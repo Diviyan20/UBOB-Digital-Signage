@@ -6,6 +6,8 @@ import { View } from "react-native";
 const ConfigurationScreen = () => {
     const { deviceId } = useLocalSearchParams();
 
+    console.log("Device ID: ", deviceId);
+
     return (
         <View style={{ flex: 1 }}>
             <ConfigurationForm deviceId={deviceId as string} />

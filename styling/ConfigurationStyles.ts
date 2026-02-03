@@ -57,8 +57,7 @@ export const ConfigurationStyles = StyleSheet.create({
 
   readOnlyInput: {
     backgroundColor: "#F5F5F5",
-    color: "#666",
-    borderColor: "#DDD",
+    color: "#888888",
   },
 
   loginButton: {
