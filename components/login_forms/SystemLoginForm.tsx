@@ -1,22 +1,68 @@
 import { ConfigurationStyles as styles } from "@/styling/ConfigurationStyles";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 
+const SERVER_URL = "http://10.0.2.2:5000";
+
 const SystemLoginForm: React.FC = () => {
-    const { outletId } = useLocalSearchParams<{ outletId: string }>();
+    const { outletId, outletName } = useLocalSearchParams<{ outletId?: string; outletName?: string }>();
+    
     const [outletIdState, setOutletIdState] = useState<string>(outletId || "");
+    const [outletNameDisplay, setOutletNameDisplay] = useState<string | null>(outletName ?? null);
+    const [outletSearching, setOutletSearching] = useState(false);
     const [username, setUsername] = useState<string>("");
     const [password, setPassword] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
 
-    const handleLogin = async () => {
-        if (loading) {
-            console.log("Login already in progress, ignoring duplicate request");
+    // Show outlet name if provided
+    useEffect(() => {
+        if (outletId && outletName != null) setOutletNameDisplay(outletName);
+    }, [outletId, outletName]);
+
+    // Search for outlet using Debounced Search
+    useEffect(() => {
+        if (outletId) return; // Skip if Outlet ID already provided
+
+        const trimmed = outletIdState.trim();
+        if (!trimmed) {
+            setOutletNameDisplay(null);
             return;
         }
+        const timer = setTimeout(async () => {
+            setOutletSearching(true);
 
+            try {
+                const res = await fetch(`${SERVER_URL}/validate_outlet`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ outlet_id: trimmed }),
+                });
+
+                const data = await res.json();
+
+                if (res.ok && data.is_valid){
+                    setOutletNameDisplay(data.outlet_name ?? "—");
+                }
+            } 
+            
+            catch {
+                setOutletNameDisplay("No outlets");
+            } 
+            
+            finally {
+                setOutletSearching(false);
+            }
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [outletId, outletIdState]);
+
+    const handleLogin = async () => {
+        if (loading) return;
+
+        // Check if all fields filled
         if (!username.trim() || !password.trim()) {
             Alert.alert("Missing Fields", "Please enter both username and password.");
             return;
@@ -28,7 +74,7 @@ const SystemLoginForm: React.FC = () => {
             return;
         }
 
-        // Validate Outlet ID (either from params or user input)
+        // Check Outlet ID
         if (!outletIdState.trim()){
             Alert.alert("Missing Field" ,"Please Enter Outlet ID.");
             return;
@@ -36,15 +82,19 @@ const SystemLoginForm: React.FC = () => {
 
         try {
             setLoading(true);
+
             // Navigate to configuration form
-            router.replace(`/screens/ConfigurationScreen?deviceId=${outletId}` as any);
-        } catch (err) {
-            console.error("Login Error: ", err);
-            Alert.alert(
-                "Login Error",
-                err instanceof Error ? err.message : "An unexpected error occurred. Please try again."
-            );
-        } finally {
+            router.replace({
+                pathname: '/screens/ConfigurationScreen',
+                params: { deviceId: outletIdState.trim() }
+            });
+        } 
+        
+        catch (err) {
+            Alert.alert("Error", "Login Failed");
+        } 
+        
+        finally {
             setLoading(false);
         }
     };
@@ -53,6 +103,7 @@ const SystemLoginForm: React.FC = () => {
         <View style={styles.container}>
             <View style={styles.card}>
                 <Text style={styles.title}>System Configuration</Text>
+                
                 <Text style={styles.label}>Outlet ID</Text>
                 <TextInput
                     style={[
@@ -68,6 +119,12 @@ const SystemLoginForm: React.FC = () => {
                     autoCapitalize="none"
                     autoCorrect={false}
                 />
+
+                {outletNameDisplay != null && (
+                    <Text style={styles.outletNameText}>
+                        {outletSearching ? "Checking…" : `Outlet: ${outletNameDisplay}`}
+                    </Text>
+                )}
                 
                 <Text style={styles.label}>Username</Text>
                 <TextInput
@@ -95,6 +152,7 @@ const SystemLoginForm: React.FC = () => {
                 <Pressable style={styles.loginButton} onPress={handleLogin}>
                     <Text style={styles.loginButtonText}>Log In</Text>
                 </Pressable>
+                
             </View>
         </View>
     )

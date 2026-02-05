@@ -60,6 +60,14 @@ export const ConfigurationStyles = StyleSheet.create({
     color: "#888888",
   },
 
+  outletNameText: {
+    fontSize: 14,
+    color: "#666",
+    marginTop: 4,
+    marginBottom: 20,
+    fontStyle: "italic",
+  },
+
   loginButton: {
     backgroundColor: "#01579B",
     borderRadius: 8,

@@ -7,6 +7,8 @@ interface ConfigurationFormProps {
     deviceId: string;
 }
 
+const SERVER_URL = "http://10.0.2.2:5000";
+
 const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
     const [accessToken, setAccessToken] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
@@ -15,19 +17,13 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
     const baseUrl = process.env.EXPO_PUBLIC_ORDER_TRACKING_BASE_URL;
 
     if (!baseUrl) {
-        Alert.alert(
-          "Configuration Error",
-          "Base URL is missing. Please contact admin."
-        );
+        Alert.alert("Error", "Base URL missing");
         return null;
       }
       
 
     const handleSubmit = async () => {
-        if (loading) {
-            console.log("Submit already in progress, ignoring duplicate request");
-            return;
-        }
+        if (loading) return;
 
         if (!accessToken.trim()) {
             Alert.alert("Missing Field", "Please enter the access token.");
@@ -37,28 +33,28 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
         try {
             setLoading(true);
 
-            // Combine full URL with access token
+            // Build Full URL
             const fullUrl = `${baseUrl}/?access_token=${accessToken.trim()}`;
 
             // Update device credentials
-            const response = await fetch(`https://ubob-digital-signage.onrender.com/update_credentials`, {
+            const response = await fetch(`${SERVER_URL}/configure_device`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
                     device_id: deviceId,
-                    order_tracking_url: fullUrl.trim()
+                    order_tracking_url: fullUrl
                 })
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "Failed to update credentials");
+                throw new Error(data.error || "Configuration Failed!");
             }
 
             Alert.alert(
                 "Success",
-                "System configured successfully! The digital signage will now display order tracking.",
+                "Device Configured Successfully!",
                 [
                     {
                         text: "OK",
@@ -73,13 +69,16 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                 ]
             );
 
-        } catch (err) {
-            console.error("Configuration Error:", err);
+        } 
+        
+        catch (err) {
             Alert.alert(
                 "Configuration Error",
                 err instanceof Error ? err.message : "Could not configure the system. Please check the URL and try again."
             );
-        } finally {
+        } 
+        
+        finally {
             setLoading(false);
         }
     };
@@ -100,6 +99,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                     multiline={true}
                     numberOfLines={2}
                 />
+
                 <Text style={styles.label}>Access Token</Text>
                 <TextInput
                     style={styles.input}
@@ -121,6 +121,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                         {loading ? "Configuring..." : "Configure System"}
                     </Text>
                 </Pressable>
+                
             </View>
         </View>
     );
