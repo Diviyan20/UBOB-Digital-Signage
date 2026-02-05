@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 
-const SERVER_URL = "http://10.0.2.2:5000";
+const SERVER_URL = "https://ubob-digital-signage.onrender.com";
 
 const SystemLoginForm: React.FC = () => {
     const { outletId, outletName } = useLocalSearchParams<{ outletId?: string; outletName?: string }>();
