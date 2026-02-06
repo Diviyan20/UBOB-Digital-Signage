@@ -7,12 +7,7 @@ interface ConfigurationFormProps {
     deviceId: string;
 }
 
-interface OutletProps{
-    outlet_id: string;
-    outlet_name: string;
-}
-
-const SERVER_URL = "http://10.0.2.2:5000";
+const SERVER_URL = "https://ubob-digital-signage.onrender.com";
 
 const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
     const [outletId, setOutletId] = useState<string>(deviceId || "");
