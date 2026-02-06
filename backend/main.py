@@ -15,6 +15,7 @@ from controllers.media_controller import (
 )
 from controllers.outlet_controller import (
     fetch_outlet_images,
+    fetch_outlet_names,
     get_outlet_images_with_names,
     stream_outlet_image,
 )
@@ -140,6 +141,13 @@ def configure_device_route():
 # ================
 # OUTLET ENDPOINTS
 # ================
+@app.route("/get_all_outlets", methods=["GET"])
+def get_all_outlets():
+    """ Get all outlet names from a dropdown search """""
+    outlets = fetch_outlet_names()
+    return jsonify({"outlets": outlets}), 200
+
+
 @app.route("/outlet_image", methods=["POST"])
 def outlet_images():
     image_data = fetch_outlet_images()

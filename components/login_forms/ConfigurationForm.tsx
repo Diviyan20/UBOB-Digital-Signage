@@ -1,6 +1,6 @@
 import { ConfigurationStyles as styles } from "@/styling/ConfigurationStyles";
 import { router } from 'expo-router';
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 interface ConfigurationFormProps {
@@ -10,6 +10,14 @@ interface ConfigurationFormProps {
 const SERVER_URL = "https://ubob-digital-signage.onrender.com";
 
 const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
+    const [outletId, setOutletId] = useState<string>(deviceId || "");
+    const [outletSearch, setOutletSearch] = useState<string>("");
+    const [outletList, setOutletList] = useState<OutletProps[]>([]);
+    const [filteredOutlets, setFilteredOutlets] = useState<OutletProps[]>([]);
+    const [showDropdown, setShowDropdown] = useState<boolean>(false);
+    const [selectedOutletName, setSelectedOutletName] = useState<string>("");
+
+
     const [accessToken, setAccessToken] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
 
@@ -21,6 +29,50 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
         return null;
       }
       
+    // Fetch all outlets on mount
+    useEffect(() =>{
+        fetchAllOutlets();
+    }, []);
+
+    // Filter outlets when search changes
+    useEffect(() =>{
+        if (outletSearch.trim() === ""){
+            setFilteredOutlets([]);
+            setShowDropdown(false);
+            return;
+        }
+        const filtered = outletList.filter(outlet =>
+            outlet.outlet_id.startsWith(outletSearch) ||
+            outlet.outlet_name.toLowerCase().includes(outletSearch.toLowerCase())
+        );
+        setFilteredOutlets(filtered);
+        setShowDropdown(filtered.length > 0 );
+    }, [outletSearch, outletList]);
+
+    const fetchAllOutlets = async () =>{
+        try{
+            const response = await fetch(`${SERVER_URL}/get_all_outlets`,{
+                method: "GET",
+                headers: {"Content-Type": "application/json"}
+            });
+
+            const data = await response.json()
+
+            if (response.ok && data.is_valid){
+                setOutletList(data.outlets);
+            }
+        }
+            catch(err){
+                console.error("Failed to fetch outlets: "), err;
+            }
+        };
+
+        const handleOutletSelect = (outlet: OutletProps) => {
+            setOutletId(outlet.outlet_id);
+            setOutletSearch(outlet.outlet_id);
+            setSelectedOutletName(outlet.outlet_name);
+            setShowDropdown(false);
+        };
 
     const handleSubmit = async () => {
         if (loading) return;
