@@ -1,64 +1,28 @@
 import { ConfigurationStyles as styles } from "@/styling/ConfigurationStyles";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Alert, Pressable, Text, TextInput, View } from 'react-native';
+import React, { useState } from "react";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
+import OutletDropdown from "../input_fields/OutletDropdown";
 
-
-const SERVER_URL = "http://10.0.2.2:5000";
 
 const SystemLoginForm: React.FC = () => {
-    const { outletId, outletName } = useLocalSearchParams<{ outletId?: string; outletName?: string }>();
-    
-    const [outletIdState, setOutletIdState] = useState<string>(outletId || "");
-    const [outletNameDisplay, setOutletNameDisplay] = useState<string | null>(outletName ?? null);
-    const [outletSearching, setOutletSearching] = useState(false);
+    // Get params from navigation
+    const {outletId: navOutletId, outletName: navOutletName} = useLocalSearchParams<{
+        outletId?: string;
+        outletName?: string;
+    }>();
+
+    const [outletId, setOutletId] = useState<string>(navOutletId || "");
+    const [outletName, setOutletName] = useState<string>("");
     const [username, setUsername] = useState<string>("");
     const [password, setPassword] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
 
-    // Show outlet name if provided
-    useEffect(() => {
-        if (outletId && outletName != null) setOutletNameDisplay(outletName);
-    }, [outletId, outletName]);
-
-    // Search for outlet using Debounced Search
-    useEffect(() => {
-        if (outletId) return; // Skip if Outlet ID already provided
-
-        const trimmed = outletIdState.trim();
-        if (!trimmed) {
-            setOutletNameDisplay(null);
-            return;
-        }
-        const timer = setTimeout(async () => {
-            setOutletSearching(true);
-
-            try {
-                const res = await fetch(`${SERVER_URL}/validate_outlet`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({ outlet_id: trimmed }),
-                });
-
-                const data = await res.json();
-
-                if (res.ok && data.is_valid){
-                    setOutletNameDisplay(data.outlet_name ?? "—");
-                }
-            } 
-            
-            catch {
-                setOutletNameDisplay("No outlets");
-            } 
-            
-            finally {
-                setOutletSearching(false);
-            }
-        }, 400);
-
-        return () => clearTimeout(timer);
-    }, [outletId, outletIdState]);
-
+    const handleOutletChange = (id: string, name: string) =>{
+        setOutletId(id);
+        setOutletName(name);
+    }
+    
     const handleLogin = async () => {
         if (loading) return;
 
@@ -75,7 +39,7 @@ const SystemLoginForm: React.FC = () => {
         }
 
         // Check Outlet ID
-        if (!outletIdState.trim()){
+        if (!outletId.trim()){
             Alert.alert("Missing Field" ,"Please Enter Outlet ID.");
             return;
         }
@@ -86,7 +50,7 @@ const SystemLoginForm: React.FC = () => {
             // Navigate to configuration form
             router.replace({
                 pathname: '/screens/ConfigurationScreen',
-                params: { deviceId: outletIdState.trim() }
+                params: { deviceId: outletId.trim() }
             });
         } 
         
@@ -104,27 +68,12 @@ const SystemLoginForm: React.FC = () => {
             <View style={styles.card}>
                 <Text style={styles.title}>System Configuration</Text>
                 
-                <Text style={styles.label}>Outlet ID</Text>
-                <TextInput
-                    style={[
-                        styles.input,
-                        outletId && styles.readOnlyInput
-                    ]}
-                    placeholder="Enter Outlet ID"
-                    placeholderTextColor="#BDBDBD"
-                    value={outletIdState}
-                    onChangeText={setOutletIdState}
-                    editable={!outletId}
-                    keyboardType="numeric"
-                    autoCapitalize="none"
-                    autoCorrect={false}
+                <OutletDropdown
+                    value={outletId}
+                    onChange={handleOutletChange}
+                    disabled={!!navOutletId}
+                    placeholder="Search Outlet ID..."
                 />
-
-                {outletNameDisplay != null && (
-                    <Text style={styles.outletNameText}>
-                        {outletSearching ? "Checking…" : `Outlet: ${outletNameDisplay}`}
-                    </Text>
-                )}
                 
                 <Text style={styles.label}>Username</Text>
                 <TextInput
@@ -157,5 +106,6 @@ const SystemLoginForm: React.FC = () => {
         </View>
     )
 }
+
 
 export default SystemLoginForm;

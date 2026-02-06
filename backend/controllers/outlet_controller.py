@@ -73,27 +73,30 @@ def fetch_outlet_names():
     """
     /api/get/outlet/regions → outlet id + name
     """
-    res = requests.post(
-        f"{ODOO_BASE_URL}/api/get/outlet/regions",
-        json={"ids": []},
-        headers=HEADERS,
-        timeout=15,
-    )
-    res.raise_for_status()
-    data = res.json()
+    try:
+        res = requests.post(
+            f"{ODOO_BASE_URL}/api/get/outlet/regions",
+            json={"ids": []},
+            headers=HEADERS,
+            timeout=15,
+        )
+        res.raise_for_status()
+        data = res.json()
 
-    outlets = {}
-    for region in data.get("data", []):
-        for outlet in region.get("pos_shops", []):
-            name = outlet.get("name")
-            if name:
-                outlets[normalize(name)] = {
-                    "outlet_id": outlet.get("id"),
-                    "outlet_name": name,
-                }
+        outlets = []
+        for region in data.get("data", []):
+            for outlet in region.get("pos_shops", []):
+                outlets.append({
+                    "outlet_id": str(outlet.get("id")),
+                    "outlet_name": outlet.get("name")
+                })
 
-    log.info(f"Loaded {len(outlets)} outlets")
-    return outlets
+        log.info(f"Loaded {len(outlets)} outlets")
+        return outlets
+    
+    except Exception as e:
+        log.error(f"Error fetching outlets: {e}")
+        return []
 
 
 def fetch_outlet_images_raw():
