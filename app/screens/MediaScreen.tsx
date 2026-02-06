@@ -6,7 +6,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 interface DeviceValidationResult {
   can_access_media: boolean;
