@@ -122,10 +122,17 @@ def fetch_outlet_images():
     Returns:
     [{ id, outlet_name, image }]
     """
-    outlets = fetch_outlet_names()
+    outlets_list = fetch_outlet_names()
     images_raw = fetch_outlet_images_raw()
 
-    results = []
+    outlets = {}
+    
+    for outlet in outlets_list:
+        name = outlet.get("outlet_name", "").strip()
+        if name:
+            outlets[normalize(name)] = outlet
+    
+    results =[]
 
     for item in images_raw:
         name = (item.get("name") or "").strip()

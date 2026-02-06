@@ -2,7 +2,7 @@ import { dropdownStyles } from "@/styling/DropdownStyle";
 import React, { useEffect, useState } from "react";
 import { FlatList, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 interface OutletProps{
     outlet_id: string;
@@ -90,6 +90,7 @@ const OutletDropdown: React.FC<OutletDropdownProps> = ({
         value={searchText}
         onChangeText={handleTextChange}
         editable={!disabled}
+        keyboardType="numeric"
         autoCapitalize="none"
     />
 

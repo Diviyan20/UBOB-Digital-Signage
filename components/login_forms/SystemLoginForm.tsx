@@ -5,8 +5,6 @@ import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import OutletDropdown from "../input_fields/OutletDropdown";
 
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
-
 const SystemLoginForm: React.FC = () => {
     // Get params from navigation
     const {outletId: navOutletId, outletName: navOutletName} = useLocalSearchParams<{
