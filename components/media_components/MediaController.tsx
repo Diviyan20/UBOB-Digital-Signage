@@ -8,7 +8,6 @@ const VIDEO_INTERVAL = 3 * 60 * 1000; // 3 minutes
 
 const MediaController: React.FC = () => {
     const [mediaState, setMediaState] = useState<MediaState>("IMAGES_PLAYING");
-    const [cycleId, setCycleId] = useState(0);
     const videoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isMounted = useRef(true);
 
@@ -40,7 +39,6 @@ const MediaController: React.FC = () => {
     
       const handleAllVideosFinished = useCallback(() => {
         console.log("✅ All videos finished, returning to images");
-        setCycleId(prev => prev + 1) // Force a new video cycle
         setMediaState("IMAGES_PLAYING");
       }, []);
     
@@ -49,8 +47,6 @@ const MediaController: React.FC = () => {
           {mediaState === "IMAGES_PLAYING" && <ImageComponent />}
           {mediaState === "VIDEOS_PLAYING" && (
             <VideoComponent 
-            key={cycleId}
-            cycleId={cycleId}
             onAllVideosFinished={handleAllVideosFinished} />
           )}
         </>

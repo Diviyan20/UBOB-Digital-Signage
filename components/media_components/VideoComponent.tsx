@@ -6,10 +6,9 @@ import { promotionVideos } from "./Videos";
 
 interface VideoComponentProps {
     onAllVideosFinished: () => void;
-    cycleId: number;
 }
 
-const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished, cycleId }) => {
+const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished }) => {
     const { width, height } = useWindowDimensions();
     const styles = MediaStyles(width, height);
 
@@ -17,10 +16,6 @@ const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished, cy
     const isMounted = useRef(true);
 
     const currentVideo = promotionVideos[currentIndex];
-
-    useEffect(() =>{
-        setCurrentIndex(0);
-    }, [cycleId])
 
     const player = useVideoPlayer(currentVideo?.videoURI, (player) => {
         player.loop = false;
@@ -34,7 +29,8 @@ const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished, cy
         const nextIndex = currentIndex + 1;
 
         if (nextIndex >= promotionVideos.length) {
-            // All videos finished
+            // All videos finished - reset index and notify
+            setCurrentIndex(0);
             onAllVideosFinished();
         }
         else {
@@ -72,7 +68,7 @@ const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished, cy
     return (
         <View style={styles.card}>
           <VideoView
-            key={`${cycleId}-${currentIndex}`}
+            key={currentIndex}
             player={player}
             style={styles.image}
             contentFit="cover"
