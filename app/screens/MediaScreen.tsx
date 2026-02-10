@@ -1,6 +1,6 @@
-import ImageComponent from "@/components/image_components/ImageComponent";
 import OutletDisplayComponent from "@/components/image_components/OutletImageComponent";
 import SystemLoginForm from "@/components/login_forms/SystemLoginForm";
+import MediaController from "@/components/media_components/MediaController";
 import OrderPreparation from "@/components/OrderPreparation";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -129,7 +129,7 @@ const MediaScreen = () => {
     <View style={styles.container}>
       <View style={styles.topRow}>
         <View style={styles.leftColumn}>
-          <ImageComponent />
+          <MediaController />
         </View>
         <View style={styles.rightColumn}>
           <OrderPreparation orderTrackingUrl={getOrderTrackingUrl()}/>

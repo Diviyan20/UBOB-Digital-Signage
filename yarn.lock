@@ -3724,6 +3724,11 @@ expo-updates-interface@~2.0.0:
   resolved "https://registry.yarnpkg.com/expo-updates-interface/-/expo-updates-interface-2.0.0.tgz#7721cb64c37bcb46b23827b2717ef451a9378749"
   integrity sha512-pTzAIufEZdVPKql6iMi5ylVSPqV1qbEopz9G6TSECQmnNde2nwq42PxdFBaUEd8IZJ/fdJLQnOT3m6+XJ5s7jg==
 
+expo-video@^3.0.15:
+  version "3.0.15"
+  resolved "https://registry.yarnpkg.com/expo-video/-/expo-video-3.0.15.tgz#38921dab5bc877572b64728acb58097716239aa7"
+  integrity sha512-KmxHVCtOBb1fnxXL6DpgLbEe7Qlv/vHNGTLfz0u/eY8fBC9s5cncD2BhPunEffrGvNMftBzYMYDaO86x+IYpnA==
+
 expo-web-browser@~15.0.8:
   version "15.0.9"
   resolved "https://registry.yarnpkg.com/expo-web-browser/-/expo-web-browser-15.0.9.tgz#248b8de8f901e68e89944c85a46ee40205190f59"
