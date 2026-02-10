@@ -45,6 +45,7 @@ app-example
 /ios
 /android
 /env
+/assets
 
 # Runtime caches
 controllers/cache/
