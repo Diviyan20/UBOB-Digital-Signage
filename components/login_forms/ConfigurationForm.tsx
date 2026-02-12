@@ -7,7 +7,7 @@ interface ConfigurationFormProps {
     deviceId: string;
 }
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
 const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
     const [accessToken, setAccessToken] = useState<string>("");

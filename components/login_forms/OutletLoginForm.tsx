@@ -6,7 +6,7 @@ import ImagePreloader from '../image_components/ImagePreloader';
 import ErrorOverlayComponent from '../overlays/ErrorOverlayComponent';
 import LoggingInOverlayComponent from '../overlays/LogginInOverlayComponent';
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
 const OutletLoginForm: React.FC = () => {
     const [outletId, setOutletId] = useState<string>("");

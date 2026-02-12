@@ -10,7 +10,7 @@ interface ImageItem {
   outlet_id?: string;
 }
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 const PREFETCH_BUFFER = 5 // Prefetch 5 images for marquee effect
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(({
