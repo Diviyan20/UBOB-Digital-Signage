@@ -93,7 +93,7 @@ def get_device_info(device_id: str) -> dict:
     try:
         with get_db_connection() as (conn,cur):
             query = """
-                SELECT * FROM active_outlets WHERE device_id = %s
+                SELECT * FROM active_outlets WHERE outlet_id = %s
             """
             cur.execute(query, [device_id])
             
@@ -103,10 +103,10 @@ def get_device_info(device_id: str) -> dict:
                 return None
             
             return{
-                "device_id": device[0],
-                "device_name": device[1],
-                "device_status": device[2],
-                "device_location": device[3],
+                "outlet_id": device[0],
+                "outlet_name": device[1],
+                "outlet_status": device[2],
+                "outlet_location": device[3],
                 "active": device[4],
                 "last_seen": device[5],
                 "order_api_url": device[6],
@@ -141,13 +141,13 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
                 # Update Existing device
                 update_query = """
                     UPDATE active_outlets 
-                    SET device_name = %s,
-                        device_location = %s,
-                        device_status = 'online',
+                    SET outlet_name = %s,
+                        outlet_location = %s,
+                        outlet_status = 'online',
                         last_seen = %s,
                         order_api_url = %s,
                         order_api_key = %s
-                    WHERE device_id = %s
+                    WHERE outlet_id = %s
                     RETURNING *
                 """
                 cur.execute(update_query, (outlet_name, region_name, now, order_api_url, order_api_key, outlet_id))
@@ -156,7 +156,7 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
                 # Insert new device
                 query = """
                     INSERT INTO active_outlets 
-                    (device_id, device_name, device_status, device_location, 
+                    (outlet_id, outlet_name, outlet_status, outlet_location, 
                      active, last_seen, order_api_url, order_api_key)
                     VALUES (%s, %s, 'online', %s, %s, %s, %s, %s)
                     RETURNING *
@@ -168,10 +168,10 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
                 
             return{
                 "success": True,
-                "device_id": device[0],
-                "device_name": device[1],
-                "device_status": device[2],
-                "device_location": device[3],
+                "outlet_id": device[0],
+                "outlet_name": device[1],
+                "outlet_status": device[2],
+                "outlet_location": device[3],
                 "order_api_url": device[6],
                 "order_api_key": device[7]
             }
@@ -232,9 +232,9 @@ def update_heartbeat(device_id: str, status: str):
 
             update_query = """
                 UPDATE active_outlets 
-                SET device_status = %s, last_seen = %s
-                WHERE device_id = %s
-                RETURNING device_id
+                SET outlet_status = %s, last_seen = %s
+                WHERE outlet_id = %s
+                RETURNING outlet_id
             """
             cur.execute(update_query, (status.lower(), now, device_id))
             result = cur.fetchone()
@@ -243,7 +243,7 @@ def update_heartbeat(device_id: str, status: str):
             if result:
                 return jsonify({
                     "message": "Heartbeat updated",
-                    "device_id": device_id,
+                    "outlet_id": device_id,
                     "status": status
                 }), 200
             else:
