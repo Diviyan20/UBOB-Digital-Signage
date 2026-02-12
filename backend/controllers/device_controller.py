@@ -93,7 +93,7 @@ def get_device_info(device_id: str) -> dict:
     try:
         with get_db_connection() as (conn,cur):
             query = """
-                SELECT * FROM outlet_devices WHERE device_id = %s
+                SELECT * FROM active_outlets WHERE device_id = %s
             """
             cur.execute(query, [device_id])
             
@@ -140,7 +140,7 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
 
                 # Update Existing device
                 update_query = """
-                    UPDATE outlet_devices 
+                    UPDATE active_outlets 
                     SET device_name = %s,
                         device_location = %s,
                         device_status = 'online',
@@ -155,7 +155,7 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
             else:
                 # Insert new device
                 query = """
-                    INSERT INTO outlet_devices 
+                    INSERT INTO active_outlets 
                     (device_id, device_name, device_status, device_location, 
                      active, last_seen, order_api_url, order_api_key)
                     VALUES (%s, %s, 'online', %s, %s, %s, %s, %s)
@@ -231,7 +231,7 @@ def update_heartbeat(device_id: str, status: str):
                 status = "online"
 
             update_query = """
-                UPDATE outlet_devices 
+                UPDATE active_outlets 
                 SET device_status = %s, last_seen = %s
                 WHERE device_id = %s
                 RETURNING device_id
