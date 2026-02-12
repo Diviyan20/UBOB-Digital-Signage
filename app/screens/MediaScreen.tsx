@@ -6,7 +6,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-const SERVER_URL = "http://10.0.2.2:5000";
+const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
 interface DeviceValidationResult {
   can_access_media: boolean;
@@ -16,7 +16,7 @@ interface DeviceValidationResult {
 }
 
 const MediaScreen = () => {
-  const { outletId } = useLocalSearchParams();
+  const { outlet_id } = useLocalSearchParams();
   const [deviceValidation, setDeviceValidation] = useState<DeviceValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +27,7 @@ const MediaScreen = () => {
         const response = await fetch(`${SERVER_URL}/validate_device`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ device_id: outletId })
+          body: JSON.stringify({ outlet_id: outlet_id })
         });
 
         const data = await response.json();
@@ -46,7 +46,7 @@ const MediaScreen = () => {
     };
 
     validateDevice();
-  }, [outletId]);
+  }, [outlet_id]);
 
   useEffect(() => {
     // Only start heartbeat if device is validated and can access media
@@ -57,7 +57,7 @@ const MediaScreen = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              device_id: outletId,
+              outlet_id: outlet_id,
               status: "online",
               timestamp: new Date().toISOString(),
             })
@@ -75,7 +75,7 @@ const MediaScreen = () => {
 
       return () => clearInterval(interval);
     }
-  }, [deviceValidation, outletId]);
+  }, [deviceValidation, outlet_id]);
 
   const getOrderTrackingUrl = (): string | undefined =>{
     if(deviceValidation?.device_info){
