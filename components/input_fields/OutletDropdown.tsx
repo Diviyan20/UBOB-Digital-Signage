@@ -2,7 +2,7 @@ import { dropdownStyles } from "@/styling/DropdownStyle";
 import React, { useEffect, useState } from "react";
 import { FlatList, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-const SERVER_URL = "https://ubob-digital-signage.onrender.com";
+const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
 interface OutletProps{
     outlet_id: string;
@@ -11,7 +11,7 @@ interface OutletProps{
 
 interface OutletDropdownProps{
     value: string;
-    onChange: (outletId: string, outletName: string) => void;
+    onChange: (outlet_id: string, outlet_name: string) => void;
     disabled?: boolean;
     placeholder?: string;
 }

@@ -82,63 +82,63 @@ def validate_outlet(outlet_id: str) -> dict:
 
 
 # =====================
-# GET DEVICE INFO
+# GET OUTLET INFO
 # =====================
 
-def get_device_info(device_id: str) -> dict:
+def get_device_info(outlet_id: str) -> dict:
     """
-    Get device information from Database.
-    Returns device data, or None if not found.
+    Get outlet information from Database.
+    Returns outlet data, or None if not found.
     """
     try:
         with get_db_connection() as (conn,cur):
             query = """
                 SELECT * FROM active_outlets WHERE outlet_id = %s
             """
-            cur.execute(query, [device_id])
+            cur.execute(query, [outlet_id])
             
-            device = cur.fetchone()
+            outlet = cur.fetchone()
 
-            if not device:
+            if not outlet:
                 return None
             
             return{
-                "outlet_id": device[0],
-                "outlet_name": device[1],
-                "outlet_status": device[2],
-                "outlet_location": device[3],
-                "active": device[4],
-                "last_seen": device[5],
-                "order_api_url": device[6],
-                "order_api_key": device[7]
+                "outlet_id": outlet[0],
+                "outlet_name": outlet[1],
+                "outlet_status": outlet[2],
+                "outlet_location": outlet[3],
+                "active": outlet[4],
+                "last_seen": outlet[5],
+                "order_api_url": outlet[6],
+                "order_api_key": outlet[7]
             }
     
     except Exception as e:
-        log.error(f"Failed to get device info for {device_id}: {e}")
+        log.error(f"Failed to get outlet info for {outlet_id}: {e}")
         return None
 
 
 # ===================
-# REGISTER DEVICE
+# REGISTER OUTLET
 # ===================
 
 def register_device(outlet_id:str, outlet_name:str, region_name:str, 
                     order_api_url:str, order_api_key:str) -> dict:
     """
-    Register device with all info in one step.
-    Creates a new device, or updates existing one.
+    Register outlet with all info in one step.
+    Creates a new field for the outlet, or updates existing one.
     """
     try:
         with get_db_connection() as (conn, cur):
             now = datetime.now(timezone.utc)
             
-            # Check if devices exists
+            # Check if outlet exists
             existing= get_device_info(outlet_id)
 
             if existing:
-                log.info(f"Device already registered: {outlet_id}")
+                log.info(f"Outlet already registered: {outlet_id}")
 
-                # Update Existing device
+                # Update Existing outlet
                 update_query = """
                     UPDATE active_outlets 
                     SET outlet_name = %s,
@@ -153,7 +153,7 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
                 cur.execute(update_query, (outlet_name, region_name, now, order_api_url, order_api_key, outlet_id))
             
             else:
-                # Insert new device
+                # Insert new outlet
                 query = """
                     INSERT INTO active_outlets 
                     (outlet_id, outlet_name, outlet_status, outlet_location, 
@@ -163,21 +163,21 @@ def register_device(outlet_id:str, outlet_name:str, region_name:str,
                 """
                 cur.execute(query, (outlet_id, outlet_name, region_name, now, now, order_api_url, order_api_key))
 
-                device = cur.fetchone()
+                outlet = cur.fetchone()
                 conn.commit()
                 
             return{
                 "success": True,
-                "outlet_id": device[0],
-                "outlet_name": device[1],
-                "outlet_status": device[2],
-                "outlet_location": device[3],
-                "order_api_url": device[6],
-                "order_api_key": device[7]
+                "outlet_id": outlet[0],
+                "outlet_name": outlet[1],
+                "outlet_status": outlet[2],
+                "outlet_location": outlet[3],
+                "order_api_url": outlet[6],
+                "order_api_key": outlet[7]
             }
                  
     except Exception as e:
-        log.error(f"Failed to registed device {outlet_id}: {e}")
+        log.error(f"Failed to register outlet {outlet_id}: {e}")
         return {"success": False, "error": str(e)}
 
 # ============================
@@ -215,12 +215,12 @@ def parse_order_tracking_url(full_url: str) -> tuple:
 # HEARTBEAT MONITORING
 # ==========================
 
-def update_heartbeat(device_id: str, status: str):
+def update_heartbeat(outlet_id: str, status: str):
     """
-    Update device heartbeat status.
+    Update heartbeat status.
     """
-    if not device_id:
-        return jsonify({"error": "Missing Device ID!"}), 400
+    if not outlet_id:
+        return jsonify({"error": "Missing Outlet ID!"}), 400
     
     try:
         with get_db_connection() as (conn, cur):
@@ -236,62 +236,62 @@ def update_heartbeat(device_id: str, status: str):
                 WHERE outlet_id = %s
                 RETURNING outlet_id
             """
-            cur.execute(update_query, (status.lower(), now, device_id))
+            cur.execute(update_query, (status.lower(), now, outlet_id))
             result = cur.fetchone()
             conn.commit()
 
             if result:
                 return jsonify({
                     "message": "Heartbeat updated",
-                    "outlet_id": device_id,
+                    "outlet_id": outlet_id,
                     "status": status
                 }), 200
             else:
-                return jsonify({"error": "Device not found"}), 404
+                return jsonify({"error": "Outlet not found"}), 404
     
     except Exception as e:
-        log.error(f"Error Updating Heartbeat for Device {device_id}: {e}")
+        log.error(f"Error Updating Heartbeat for Outlet {outlet_id}: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 # ========================
 # VALIDATE FOR MEDIA
 # ========================
-def validate_device_for_media(device_id: str) -> dict:
+def validate_device_for_media(outlet_id: str) -> dict:
     """
-    Check if device can access media screen.
+    Check if outlet can access media screen.
     Returns what to show: media, config form, or error
     """
     # 1. Validate outlet exists in Odoo
-    outlet= validate_outlet(device_id)
-    if not outlet.get("is_valid"):
+    odoo_outlet= validate_outlet(outlet_id)
+    if not odoo_outlet.get("is_valid"):
         return{
             "can_access_media": False,
             "reason": "invalid_outlet",
-            "error": outlet.get("error")
+            "error": odoo_outlet.get("error")
         }
 
-    # 2. Check if device is registered
-    device= get_device_info(device_id)
+    # 2. Check if outlet is registered
+    db_outlet= get_device_info(outlet_id)
 
-    if not device:
+    if not db_outlet:
         return {
             "can_access_media": False,
             "reason": "missing_credentials",
-            "outlet_info": outlet
+            "outlet_info": db_outlet
         }
     
-    # 3. Check device has credentials
-    if not device["order_api_url"] or not device["order_api_key"]:
+    # 3. Check outlet has credentials
+    if not db_outlet["order_api_url"] or not db_outlet["order_api_key"]:
         return {
             "can_access_media": False,
             "reason": "missing_credentials",
-            "outlet_info": outlet
+            "outlet_info": odoo_outlet
         }
     
     # Everything Checks Out!
     return{
         "can_access_media": True,
-        "outlet_info": outlet,
-        "device_info": device
+        "outlet_info": odoo_outlet,
+        "device_info": db_outlet
     }

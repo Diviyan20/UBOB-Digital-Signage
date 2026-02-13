@@ -1,6 +1,6 @@
-import OutletDisplayComponent from "@/components/image_components/OutletImageComponent";
 import SystemLoginForm from "@/components/login_forms/SystemLoginForm";
 import MediaController from "@/components/media_components/MediaController";
+import OutletDisplayComponent from "@/components/media_components/OutletImageComponent";
 import OrderPreparation from "@/components/OrderPreparation";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -16,7 +16,7 @@ interface DeviceValidationResult {
 }
 
 const MediaScreen = () => {
-  const { outletId } = useLocalSearchParams();
+  const { outlet_id } = useLocalSearchParams();
   const [deviceValidation, setDeviceValidation] = useState<DeviceValidationResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +27,7 @@ const MediaScreen = () => {
         const response = await fetch(`${SERVER_URL}/validate_device`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ device_id: outletId })
+          body: JSON.stringify({ outlet_id: outlet_id })
         });
 
         const data = await response.json();
@@ -46,7 +46,7 @@ const MediaScreen = () => {
     };
 
     validateDevice();
-  }, [outletId]);
+  }, [outlet_id]);
 
   useEffect(() => {
     // Only start heartbeat if device is validated and can access media
@@ -57,7 +57,7 @@ const MediaScreen = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              device_id: outletId,
+              outlet_id: outlet_id,
               status: "online",
               timestamp: new Date().toISOString(),
             })
@@ -75,7 +75,7 @@ const MediaScreen = () => {
 
       return () => clearInterval(interval);
     }
-  }, [deviceValidation, outletId]);
+  }, [deviceValidation, outlet_id]);
 
   const getOrderTrackingUrl = (): string | undefined =>{
     if(deviceValidation?.device_info){

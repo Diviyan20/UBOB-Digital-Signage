@@ -4,12 +4,12 @@ import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View } from 'react-native';
 
 interface ConfigurationFormProps {
-    deviceId: string;
+    outlet_id: string;
 }
 
 const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
-const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
+const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ outlet_id }) => {
     const [accessToken, setAccessToken] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
 
@@ -40,7 +40,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
-                    device_id: deviceId,
+                    outlet_id: outlet_id,
                     order_tracking_url: fullUrl
                 })
             });
@@ -61,7 +61,7 @@ const ConfigurationForm: React.FC<ConfigurationFormProps> = ({ deviceId }) => {
                             // Navigate back to media screen - it will now show the order preparation component
                             router.replace({
                                 pathname: '/screens/MediaScreen',
-                                params: { outletId: deviceId }
+                                params: { outlet_id: outlet_id }
                             });
                         }
                     }

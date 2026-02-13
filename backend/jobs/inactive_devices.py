@@ -13,9 +13,9 @@ def check_for_inactive_devices():
     with db_connection.get_db_connection() as (conn, cur):
         try:
             query = """
-            SELECT device_id, last_seen
-            FROM outlet_devices
-            WHERE device_status = 'online'
+            SELECT outlet_id, last_seen
+            FROM active_outlets
+            WHERE outlet_status = 'online'
         """
             cur.execute(query)
             devices = cur.fetchall()
@@ -26,9 +26,9 @@ def check_for_inactive_devices():
             
                 if last_seen < threshold:
                     query = """
-                    UPDATE outlet_devices
-                    SET device_status = 'offline'
-                    WHERE device_id = %s
+                    UPDATE active_outlets
+                    SET outlet_status = 'offline'
+                    WHERE outlet_id = %s
                     """
                     cur.execute(query, (device_id,))
                     log.info(f"Device {device_id} marked offline")

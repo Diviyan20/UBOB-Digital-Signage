@@ -2,14 +2,14 @@ import { OutletLoginStyles as styles } from '@/styling/OutletLoginStyles';
 import { router } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Alert, Image, Pressable, Text, TextInput, View } from 'react-native';
-import ImagePreloader from '../image_components/ImagePreloader';
+import ImagePreloader from '../media_components/ImagePreloader';
 import ErrorOverlayComponent from '../overlays/ErrorOverlayComponent';
 import LoggingInOverlayComponent from '../overlays/LogginInOverlayComponent';
 
 const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
 const OutletLoginForm: React.FC = () => {
-    const [outletId, setOutletId] = useState<string>("");
+    const [outlet_id, setOutletId] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
     const [errorVisible, setErrorVisible] = useState(false);
     const [status, setStatus] = useState<"loading" | "fetching_promotions" | "preloading_images" | "success" | "error" | undefined>();
@@ -21,7 +21,7 @@ const OutletLoginForm: React.FC = () => {
     // Regular login - Only validate outlet and show media screen
     const handleLogin = async () => {
         if (loading) return;
-        if (!outletId.trim()) return;
+        if (!outlet_id.trim()) return;
 
         try {
             setLoading(true);
@@ -31,7 +31,7 @@ const OutletLoginForm: React.FC = () => {
             const response = await fetch(`${SERVER_URL}/validate_outlet`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({outlet_id: outletId})
+                body: JSON.stringify({outlet_id: outlet_id})
             });
 
             const data = await response.json()
@@ -57,7 +57,7 @@ const OutletLoginForm: React.FC = () => {
                         setTimeout(() => {
                             router.replace({
                                 pathname: '/screens/MediaScreen',
-                                params: {outletId}
+                                params: {outlet_id}
                             });
                         }, 1500);
                         return;
@@ -71,7 +71,7 @@ const OutletLoginForm: React.FC = () => {
                     setTimeout(() => {
                         router.replace({
                             pathname: '/screens/MediaScreen',
-                            params: {outletId}
+                            params: {outlet_id}
                         });
                     }, 1500);
                 }
@@ -94,13 +94,13 @@ const OutletLoginForm: React.FC = () => {
 
     // Admin login - Validate outlet then move to System Login
     const handleAdminLogin = async () =>{
-        const trimmed = outletId.trim();
+        const trimmed = outlet_id.trim();
 
         if (trimmed){
             const response = await fetch(`${SERVER_URL}/get_outlets`, {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({outlet_id: outletId})
+                body: JSON.stringify({outlet_id: outlet_id})
             });
         
         const data = await response.json() 
@@ -108,7 +108,7 @@ const OutletLoginForm: React.FC = () => {
         if (response.ok && data.is_valid){
             router.replace({
                 pathname: "/screens/SystemLoginScreen",
-                params: {outletId: trimmed, outletName: data.outlet_name} // Pass it to SystemLoginForm to reference it.
+                params: {outlet_id: trimmed, outletName: data.outlet_name} // Pass it to SystemLoginForm to reference it.
             });
             return;
 
@@ -130,10 +130,10 @@ const OutletLoginForm: React.FC = () => {
         setTimeout(() => {
             router.replace({
                 pathname: '/screens/MediaScreen',
-                params: {outletId}
+                params: {outlet_id}
             });
         }, 1500);
-    }, [outletId]);
+    }, [outlet_id]);
 
     const handlePreloadingProgress = useCallback((loaded: number, total: number) => {
         setPreloadingProgress({loaded, total});
@@ -175,7 +175,7 @@ const OutletLoginForm: React.FC = () => {
                     style={styles.input}
                     placeholder="Enter Outlet ID"
                     placeholderTextColor="#BDBDBD"
-                    value={outletId}
+                    value={outlet_id}
                     onChangeText={setOutletId}
                     keyboardType="numeric"
                     autoCapitalize="none"

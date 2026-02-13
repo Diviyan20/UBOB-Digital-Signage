@@ -88,16 +88,16 @@ def validate_outlet_route():
 @app.route("/validate_device", methods=["POST"])
 def validate_device_route():
     """
-    Check if device can access media screen.
+    Check if outlet can access media screen.
     Returns what MediaScreen should display
     """
     data = request.get_json(force=True)
-    device_id = data.get("device_id")
+    outlet_id = data.get("outlet_id")
     
-    if not device_id:
+    if not outlet_id:
         return jsonify({"error": "Missing Device ID"}), 400
 
-    result = validate_device_for_media(device_id)
+    result = validate_device_for_media(outlet_id)
     return jsonify(result), 200
 
 @app.route("/configure_device", methods=["POST"])
@@ -107,14 +107,14 @@ def configure_device_route():
     Main registration point (ONLY done in Configuration Form)
     """
     data = request.get_json(force=True)
-    device_id = data.get("device_id")
+    outlet_id = data.get("outlet_id")
     full_url = data.get("order_tracking_url")
     
-    if not device_id and not full_url:
-        return jsonify({"error": "Missing device_id or order_tracking_url"}), 400
+    if not outlet_id and not full_url:
+        return jsonify({"error": "Missing outlet_id or order_tracking_url"}), 400
     
     # 1. Validate outlet exists
-    outlet = validate_outlet(device_id)
+    outlet = validate_outlet(outlet_id)
     if not outlet.get("is_valid"):
         return jsonify({"error": "Invalid Outlet"}), 400
     
@@ -125,7 +125,7 @@ def configure_device_route():
     
     # 3. Register Device
     result = register_device(
-        outlet_id=device_id,
+        outlet_id=outlet_id,
         outlet_name=outlet["outlet_name"],
         region_name=outlet["region_name"],
         order_api_url=base_url,
@@ -205,13 +205,13 @@ def static_files(filename):
 @app.route("/heartbeat", methods=["POST"])
 def heartbeat():
     data = request.get_json(force=True)
-    device_id = data.get("device_id")
+    outlet_id = data.get("outlet_id")
     status = data.get("status")
 
-    if not device_id:
+    if not outlet_id:
         return jsonify({"error": "Missing device_id"}), 400
 
-    return update_heartbeat(device_id, status)
+    return update_heartbeat(outlet_id, status)
 
 # =======================
 # GLOBAL RESPONSE LOGGING

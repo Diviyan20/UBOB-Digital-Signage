@@ -7,12 +7,12 @@ import OutletDropdown from "../input_fields/OutletDropdown";
 
 const SystemLoginForm: React.FC = () => {
     // Get params from navigation
-    const {outletId: navOutletId, outletName: navOutletName} = useLocalSearchParams<{
-        outletId?: string;
+    const {outlet_id: navOutletId, outletName: navOutletName} = useLocalSearchParams<{
+        outlet_id?: string;
         outletName?: string;
     }>();
 
-    const [outletId, setOutletId] = useState<string>(navOutletId || "");
+    const [outlet_id, setOutletId] = useState<string>(navOutletId || "");
     const [outletName, setOutletName] = useState<string>("");
     const [username, setUsername] = useState<string>("");
     const [password, setPassword] = useState<string>("");
@@ -39,7 +39,7 @@ const SystemLoginForm: React.FC = () => {
         }
 
         // Check Outlet ID
-        if (!outletId.trim()){
+        if (!outlet_id.trim()){
             Alert.alert("Missing Field" ,"Please Enter Outlet ID.");
             return;
         }
@@ -50,7 +50,7 @@ const SystemLoginForm: React.FC = () => {
             // Navigate to configuration form
             router.replace({
                 pathname: '/screens/ConfigurationScreen',
-                params: { deviceId: outletId.trim() }
+                params: { outlet_id: outlet_id.trim() }
             });
         } 
         
@@ -69,7 +69,7 @@ const SystemLoginForm: React.FC = () => {
                 <Text style={styles.title}>System Configuration</Text>
                 
                 <OutletDropdown
-                    value={outletId}
+                    value={outlet_id}
                     onChange={handleOutletChange}
                     disabled={!!navOutletId}
                     placeholder="Search Outlet ID..."

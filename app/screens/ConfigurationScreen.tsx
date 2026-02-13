@@ -4,13 +4,13 @@ import React from "react";
 import { View } from "react-native";
 
 const ConfigurationScreen = () => {
-    const { deviceId } = useLocalSearchParams();
+    const { outlet_id } = useLocalSearchParams<{outlet_id?: string}>();
 
-    console.log("Device ID: ", deviceId);
+    console.log("Device ID: ", outlet_id);
 
     return (
         <View style={{ flex: 1 }}>
-            <ConfigurationForm deviceId={deviceId as string} />
+            <ConfigurationForm outlet_id={outlet_id || ""} />
         </View>
     );
 };
