@@ -59,7 +59,7 @@ def base64_to_png(raw_img: str) -> bytes:
         if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGB")
 
-        img.thumbnail((1280, 720))
+        img.thumbnail((640, 360))
         out = io.BytesIO()
         img.save(out, format="PNG")
         return out.getvalue()

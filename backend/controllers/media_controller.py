@@ -145,7 +145,7 @@ def save_base64_as_png(base64_data: str, image_id: str) -> None:
         if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGB")
 
-        img.thumbnail((1280, 720))
+        img.thumbnail((640, 360))
         img.save(image_path(image_id), format="PNG", optimize=True)
 
 def load_index() -> dict:
