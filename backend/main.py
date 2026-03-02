@@ -3,8 +3,8 @@ import os
 
 # CONTROLLERS
 from controllers.device_controller import (
+    get_outlet_info,
     update_heartbeat,
-    validate_device_for_media,
     validate_outlet,
 )
 from controllers.media_controller import (
@@ -13,7 +13,6 @@ from controllers.media_controller import (
 )
 from controllers.outlet_controller import (
     fetch_outlet_images,
-    fetch_outlet_names,
     get_outlet_images_with_names,
     stream_outlet_image,
 )
@@ -83,30 +82,17 @@ def validate_outlet_route():
     else:
         return jsonify(result), 404
 
-@app.route("/validate_device", methods=["POST"])
-def validate_device_route():
-    """
-    Check if outlet can access media screen.
-    Returns what MediaScreen should display
-    """
-    data = request.get_json(force=True)
-    outlet_id = data.get("outlet_id")
-    
-    if not outlet_id:
-        return jsonify({"error": "Missing Device ID"}), 400
-
-    result = validate_device_for_media(outlet_id)
-    return jsonify(result), 200
-
 # ================
 # OUTLET ENDPOINTS
 # ================
-@app.route("/get_all_outlets", methods=["GET"])
-def get_all_outlets():
-    """ Get all outlet names from a dropdown search """""
-    outlets = fetch_outlet_names()
-    return jsonify({"outlets": outlets}), 200
+@app.route("/outlet_info/<outlet_id>", methods=["GET"])
+def outlet_info_route(outlet_id):
+    result = get_outlet_info(outlet_id)
 
+    if not result:
+        return jsonify({"error": "Outlet not found"}), 404
+
+    return jsonify(result), 200
 
 @app.route("/outlet_image", methods=["POST"])
 def outlet_images():

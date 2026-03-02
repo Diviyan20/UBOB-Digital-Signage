@@ -11,6 +11,10 @@ const OrderPreparation: React.FC<OrderPreparationProps> = ({orderTrackingUrl}) =
     // Use dynamic URL, otherwise fallback to hardcoded version
     const EXPO_PUBLIC_ORDER_TRACKING_BASE_URL = orderTrackingUrl || Constants.expoConfig?.extra?.EXPO_PUBLIC_ORDER_TRACKING_BASE_URL;
     
+    if (!EXPO_PUBLIC_ORDER_TRACKING_BASE_URL) {
+        return null;
+      };
+    
     return(
         <>
         <View style={styles.container}>

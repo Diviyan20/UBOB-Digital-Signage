@@ -7,15 +7,14 @@ import { StyleSheet, Text, View } from "react-native";
 
 const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
-interface OutletProps {
-  can_access_media: boolean;
-  reason?: string;
-  outlet_info?: any;
+interface OutletInfo{
+  order_api_url: string;
+  order_api_key: string;
 }
 
 const MediaScreen = () => {
   const { outlet_id } = useLocalSearchParams();
-  const [outlet_props, setOutletProps] = useState<OutletProps | null>(null);
+  const [outletInfo, setOutletInfo] = useState<OutletInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,19 +43,36 @@ const MediaScreen = () => {
       sendHeartbeat();
 
       return () => clearInterval(interval);
-  }, [outlet_props, outlet_id]);
+  }, [outletInfo, outlet_id]);
+
+  useEffect(() =>{
+    const fetchOutletInfo = async () =>{
+      try{
+        const response = await fetch(`${SERVER_URL}/outlet_info/${outlet_id}`);
+        const data = await response.json();
+
+        if(!response.ok){
+          throw new Error(data.error || "Failed to fetch outlet info");
+        }
+        setOutletInfo(data);
+      }
+      catch(err:any){
+        setError(err.messsage);
+      }
+    };
+    if (outlet_id){
+      fetchOutletInfo();
+    }
+  },[outlet_id]);
 
   const getOrderTrackingUrl = (): string | undefined =>{
-    if(outlet_props?.outlet_info){
-      const {order_api_url, order_api_key} = outlet_props.outlet_info;
-      if (order_api_url && order_api_key){
-        // Construct the full URL: base_url + pos-order-tracking + access_token
-        console.log("URL: ", `${order_api_url}?access_token=${order_api_key}`);
-        return `${order_api_url}?access_token=${order_api_key}`
+      if (!outletInfo?.order_api_url && !outletInfo?.order_api_key){
+        return undefined;
       }
-    }
-    return undefined; // Fall back to hardcoded URL in OrderPreparation component
-  }
+      else{
+        return `${outletInfo.order_api_url}?access_token=${outletInfo.order_api_key}`;
+      }
+  };
 
   if (error) {
     return (
