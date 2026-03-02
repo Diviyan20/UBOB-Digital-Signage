@@ -113,7 +113,6 @@ def update_heartbeat_status(outlet_id: str, status: str):
                     WHERE outlet_id = %s
                     RETURNING outlet_id
                 """
-            print(f"Updating heartbeat for ID: '{outlet_id}'")
             cur.execute(query, (status.lower(), now, outlet_id))
             result = cur.fetchone()
             conn.commit()
@@ -127,6 +126,26 @@ def update_heartbeat_status(outlet_id: str, status: str):
     
     except Exception as e:
         raise ValueError(f"Error Updating Heartbeat for Outlet {outlet_id}: {e}")    
+
+def search_online_devices():
+    with get_db_connection() as (conn, cur):
+        query = """
+            SELECT outlet_id, last_seen
+            FROM active_outlets
+            WHERE outlet_status = 'online'
+        """
+        cur.execute(query)
+        return cur.fetchall()
+
+def mark_device_offline(outlet_id):
+    with get_db_connection() as (conn, cur):
+        query = """
+                UPDATE active_outlets
+                SET outlet_status = 'offline'
+                WHERE outlet_id = %s
+            """
+        cur.execute(query,(outlet_id,))
+        conn.commit()
 
 def test_connection():
     with get_db_connection() as (conn, cur):
