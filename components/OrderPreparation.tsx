@@ -8,14 +8,14 @@ interface OrderPreparationProps{
 }
 
 const OrderPreparation: React.FC<OrderPreparationProps> = ({orderTrackingUrl}) =>{
-    // Use dyanmic URL, otherwise fallback to hardcoded version
-    const ORDER_TRACKING_URL = orderTrackingUrl || Constants.expoConfig?.extra?.ORDER_TRACKING_URL;;
+    // Use dynamic URL, otherwise fallback to hardcoded version
+    const EXPO_PUBLIC_ORDER_TRACKING_BASE_URL = orderTrackingUrl || Constants.expoConfig?.extra?.EXPO_PUBLIC_ORDER_TRACKING_BASE_URL;
     
     return(
         <>
         <View style={styles.container}>
             <WebView
-            source={{ uri: ORDER_TRACKING_URL }}
+            source={{ uri: EXPO_PUBLIC_ORDER_TRACKING_BASE_URL }}
             style={styles.webview}
             javaScriptEnabled={true}
             domStorageEnabled={true}

@@ -3,8 +3,6 @@ import os
 
 # CONTROLLERS
 from controllers.device_controller import (
-    parse_order_tracking_url,
-    register_device,
     update_heartbeat,
     validate_device_for_media,
     validate_outlet,
@@ -100,44 +98,6 @@ def validate_device_route():
     result = validate_device_for_media(outlet_id)
     return jsonify(result), 200
 
-@app.route("/configure_device", methods=["POST"])
-def configure_device_route():
-    """
-    Register device with all credentials.
-    Main registration point (ONLY done in Configuration Form)
-    """
-    data = request.get_json(force=True)
-    outlet_id = data.get("outlet_id")
-    full_url = data.get("order_tracking_url")
-    
-    if not outlet_id and not full_url:
-        return jsonify({"error": "Missing outlet_id or order_tracking_url"}), 400
-    
-    # 1. Validate outlet exists
-    outlet = validate_outlet(outlet_id)
-    if not outlet.get("is_valid"):
-        return jsonify({"error": "Invalid Outlet"}), 400
-    
-    # 2. Parse URL to get base URL and Access Token
-    base_url, token = parse_order_tracking_url(full_url)
-    if not base_url and not token:
-        return jsonify({"error": "Invalid URL format"}), 400
-    
-    # 3. Register Device
-    result = register_device(
-        outlet_id=outlet_id,
-        outlet_name=outlet["outlet_name"],
-        region_name=outlet["region_name"],
-        order_api_url=base_url,
-        order_api_key=token
-    )
-    
-    if result.get("success"):
-        return jsonify(result), 200
-    else:
-        return jsonify({"error": "Registration failed."}), 500
-        
-
 # ================
 # OUTLET ENDPOINTS
 # ================
@@ -206,12 +166,12 @@ def static_files(filename):
 def heartbeat():
     data = request.get_json(force=True)
     outlet_id = data.get("outlet_id")
-    status = data.get("status")
+    outlet_status = data.get("outlet_status")
 
     if not outlet_id:
         return jsonify({"error": "Missing device_id"}), 400
 
-    return update_heartbeat(outlet_id, status)
+    return update_heartbeat(outlet_id, outlet_status)
 
 # =======================
 # GLOBAL RESPONSE LOGGING

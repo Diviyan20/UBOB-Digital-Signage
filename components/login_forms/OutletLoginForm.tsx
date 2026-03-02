@@ -92,38 +92,6 @@ const OutletLoginForm: React.FC = () => {
         } 
     };
 
-    // Admin login - Validate outlet then move to System Login
-    const handleAdminLogin = async () =>{
-        const trimmed = outlet_id.trim();
-
-        if (trimmed){
-            const response = await fetch(`${SERVER_URL}/get_outlets`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({outlet_id: outlet_id})
-            });
-        
-        const data = await response.json() 
-
-        if (response.ok && data.is_valid){
-            router.replace({
-                pathname: "/screens/SystemLoginScreen",
-                params: {outlet_id: trimmed, outletName: data.outlet_name} // Pass it to SystemLoginForm to reference it.
-            });
-            return;
-
-        }
-        Alert.alert("Error", "Outlet ID not found!")
-        return;
-    }
-
-    // No Outlet ID: Go to System Login and enter it there
-    router.replace({
-        pathname: "/screens/SystemLoginScreen",
-        params: {},
-    });
-};
-
     // Handle all preloaded Images
     const handleImagesPreloaded = useCallback(() => {
         setStatus("success");
@@ -184,11 +152,6 @@ const OutletLoginForm: React.FC = () => {
                 <Pressable style={styles.loginButton} onPress={handleLogin}>
                     <Text style={styles.loginButtonText}>Log In</Text>
                 </Pressable>
-
-                <Pressable style={styles.adminButton} onPress={handleAdminLogin}>
-                    <Text style={styles.adminButtonText}>Login as Admin</Text>
-                </Pressable>
-
             </View>
         
             {errorVisible && (
