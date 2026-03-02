@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from models import db_connection
+from models.active_outlets import get_db_connection
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -10,7 +10,7 @@ def check_for_inactive_devices():
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(minutes=5)
     
-    with db_connection.get_db_connection() as (conn, cur):
+    with get_db_connection() as (conn, cur):
         try:
             query = """
             SELECT outlet_id, last_seen

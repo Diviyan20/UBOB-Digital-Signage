@@ -1,64 +1,33 @@
-import SystemLoginForm from "@/components/login_forms/SystemLoginForm";
 import MediaController from "@/components/media_components/MediaController";
 import OutletDisplayComponent from "@/components/media_components/OutletImageComponent";
 import OrderPreparation from "@/components/OrderPreparation";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 const SERVER_URL = "https://ubob-digital-signage-z2p4.onrender.com";
 
-interface DeviceValidationResult {
-  can_access_media: boolean;
-  reason?: string;
-  outlet_info?: any;
-  device_info?: any;
+interface OutletInfo{
+  order_api_url: string;
+  order_api_key: string;
 }
 
 const MediaScreen = () => {
   const { outlet_id } = useLocalSearchParams();
-  const [deviceValidation, setDeviceValidation] = useState<DeviceValidationResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [outletInfo, setOutletInfo] = useState<OutletInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const validateDevice = async () => {
-      try {
-        const response = await fetch(`${SERVER_URL}/validate_device`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ outlet_id: outlet_id })
-        });
-
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || "Validation failed");
-        }
-
-        setDeviceValidation(data);
-      } catch (err) {
-        console.error("Device validation error:", err);
-        setError(err instanceof Error ? err.message : "Unknown error");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    validateDevice();
-  }, [outlet_id]);
-
-  useEffect(() => {
     // Only start heartbeat if device is validated and can access media
-    if (deviceValidation?.can_access_media) {
       const sendHeartbeat = async () => {
         try {
+          console.log("Sending Heartbeat.")
           const response = await fetch(`${SERVER_URL}/heartbeat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               outlet_id: outlet_id,
-              status: "online",
+              outlet_status: "online",
               timestamp: new Date().toISOString(),
             })
           });
@@ -70,56 +39,45 @@ const MediaScreen = () => {
         }
       };
 
-      const interval = setInterval(sendHeartbeat, 120000); // Send heartbeat every 10 seconds
+      const interval = setInterval(sendHeartbeat, 120000); // Send heartbeat every 2 minutes
       sendHeartbeat();
 
       return () => clearInterval(interval);
+  }, [outletInfo, outlet_id]);
+
+  useEffect(() =>{
+    const fetchOutletInfo = async () =>{
+      try{
+        const response = await fetch(`${SERVER_URL}/outlet_info/${outlet_id}`);
+        const data = await response.json();
+
+        if(!response.ok){
+          throw new Error(data.error || "Failed to fetch outlet info");
+        }
+        setOutletInfo(data);
+      }
+      catch(err:any){
+        setError(err.messsage);
+      }
+    };
+    if (outlet_id){
+      fetchOutletInfo();
     }
-  }, [deviceValidation, outlet_id]);
+  },[outlet_id]);
 
   const getOrderTrackingUrl = (): string | undefined =>{
-    if(deviceValidation?.device_info){
-      const {order_api_url, order_api_key} = deviceValidation.device_info;
-      if (order_api_url && order_api_key){
-        // Construct the full URL: base_url + pos-order-tracking + access_token
-        console.log("URL: ", `${order_api_url}?access_token=${order_api_key}`);
-        return `${order_api_url}?access_token=${order_api_key}`
+      if (!outletInfo?.order_api_url && !outletInfo?.order_api_key){
+        return undefined;
       }
-    }
-    return undefined; // Fall back to hardcoded URL in OrderPreparation component
-  }
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Validating device...</Text>
-      </View>
-    );
-  }
+      else{
+        return `${outletInfo.order_api_url}?access_token=${outletInfo.order_api_key}`;
+      }
+  };
 
   if (error) {
     return (
       <View style={[styles.container, styles.centered]}>
         <Text style={styles.errorText}>Error: {error}</Text>
-      </View>
-    );
-  }
-
-  // If device doesn't have credentials, show admin login
-  if (!deviceValidation?.can_access_media && deviceValidation?.reason === "missing_credentials") {
-    return (
-      <SystemLoginForm />
-    );
-  }
-
-  // If device validation failed for other reasons
-  if (!deviceValidation?.can_access_media) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>
-          Device validation failed: {deviceValidation?.reason}
-        </Text>
       </View>
     );
   }
