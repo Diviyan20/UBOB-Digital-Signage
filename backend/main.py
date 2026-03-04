@@ -1,17 +1,18 @@
 import logging
 import os
 
-# CONTROLLERS
-from controllers.device_controller import (
-    get_outlet_info,
-    update_heartbeat,
-    validate_outlet,
-)
 from controllers.media_controller import (
     get_media_json,
     stream_image,
 )
+
+# CONTROLLERS
 from controllers.outlet_controller import (
+    get_outlet_info,
+    update_heartbeat,
+    validate_outlet,
+)
+from controllers.outlet_image_controller import (
     fetch_outlet_images,
     get_outlet_images_with_names,
     stream_outlet_image,
@@ -75,7 +76,7 @@ def validate_outlet_route():
     if not outlet_id:
         return jsonify({"error": "Missing device ID"}), 400
 
-    result = validate_outlet(str(outlet_id).strip())
+    result = validate_outlet(outlet_id)
     
     if result.get("is_valid"):
         return jsonify(result), 200
