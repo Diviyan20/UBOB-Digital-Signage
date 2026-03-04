@@ -1,183 +1,135 @@
-import base64
-import hashlib
-import io
 import logging
 import os
-from pathlib import Path
 
-import requests
-from dotenv import load_dotenv
-from flask import abort, jsonify, send_file
-from PIL import Image
+from controllers.outlet_service import fetch_all_outlet_data
+from dotenv import find_dotenv, load_dotenv
+from flask import jsonify
+from models.active_outlets import get_outlet_information, update_heartbeat_status
 
-load_dotenv()
-Image.MAX_IMAGE_PIXELS = 20_000_000
+load_dotenv(find_dotenv())
 
-# -----------------
-# CONFIG
-# -----------------
-ODOO_BASE_URL = os.getenv("ODOO_DATABASE_URL")
+ODOO_DATABASE_URL = os.getenv("ODOO_DATABASE_URL")
 ODOO_API_TOKEN = os.getenv("ODOO_API_TOKEN")
-PUBLIC_HOST = os.getenv("PUBLIC_HOST_URL", "http://10.0.2.2:5000")
 
-HEADERS = {
-    "Authorization": f"Bearer {ODOO_API_TOKEN}",
-    "Content-Type": "application/json",
-}
 
-CACHE_DIR = Path(__file__).parent / "cache" / "outlets"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+# ==========================
+# HELPERS - ODOO HEADERS
+# ==========================
 
-logging.basicConfig(level=logging.INFO)
+def odoo_headers():
+    """ Generate headers for Odoo API requests with authentication token. """
+    return{
+        "Authorization": f"Bearer {ODOO_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+# ================
+# LOGGING SETUP
+# ================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
 log = logging.getLogger(__name__)
 
-# -----------------
-# HELPERS
-# -----------------
 
-def normalize(name: str) -> str:
-    return name.strip().lower()
+# =====================
+# OUTLET VALIDATION
+# =====================
 
-
-def image_path(image_id: str) -> Path:
-    return CACHE_DIR / f"{image_id}.png"
-
-
-def generate_image_id(name: str, raw_img: str) -> str:
-    seed = f"{name}:{raw_img[:50]}"
-    return hashlib.md5(seed.encode()).hexdigest()[:10]
-
-
-def base64_to_png(raw_img: str) -> bytes:
-    if "," in raw_img:
-        raw_img = raw_img.split(",", 1)[1]
-
-    img_bytes = base64.b64decode(raw_img)
-
-    with Image.open(io.BytesIO(img_bytes)) as img:
-        img.load() # Forces full decode
-        if img.mode not in ("RGB", "RGBA"):
-            img = img.convert("RGB")
-
-        img.thumbnail((640, 360))
-        out = io.BytesIO()
-        img.save(out, format="PNG")
-        return out.getvalue()
-
-
-# -----------------
-# FETCHERS
-# -----------------
-
-def fetch_outlet_names():
-    """
-    /api/get/outlet/regions → outlet id + name
-    """
-    try:
-        res = requests.post(
-            f"{ODOO_BASE_URL}/api/get/outlet/regions",
-            json={"ids": []},
-            headers=HEADERS,
-            timeout=15,
-        )
-        res.raise_for_status()
-        data = res.json()
-
-        outlets = []
-        for region in data.get("data", []):
-            for outlet in region.get("pos_shops", []):
-                outlets.append({
-                    "outlet_id": str(outlet.get("id")),
-                    "outlet_name": outlet.get("name")
-                })
-
-        log.info(f"Loaded {len(outlets)} outlets")
-        return outlets
+def validate_outlet(outlet_id: str) -> dict:
+    outlets = fetch_all_outlet_data()
     
-    except Exception as e:
-        log.error(f"Error fetching outlets: {e}")
-        return []
-
-
-def fetch_outlet_images_raw():
-    """
-    /api/order/session → outlet images (base64)
-    """
-    res = requests.post(
-        f"{ODOO_BASE_URL}/api/order/session",
-        json={"ids": []},
-        headers=HEADERS,
-        timeout=20,
-    )
-    res.raise_for_status()
-    return res.json().get("data", [])
-
-
-# -----------------
-# PUBLIC API
-# -----------------
-
-def fetch_outlet_images():
-    """
-    Returns:
-    [{ id, outlet_name, image }]
-    """
-    outlets_list = fetch_outlet_names()
-    images_raw = fetch_outlet_images_raw()
-
-    outlets = {}
+    for outlet in outlets:
+        if outlet["outlet_id"] == outlet_id:
+            return {
+                "is_valid": True,
+                **outlet
+            }
     
-    for outlet in outlets_list:
-        name = outlet.get("outlet_name", "").strip()
-        if name:
-            outlets[normalize(name)] = outlet
+    return{
+        "is_valid": False,
+        "error":"Outlet not found"
+    }
+
+# =====================
+# GET OUTLET INFO
+# =====================
+
+def get_outlet_info(outlet_id: str) -> dict:
+    """
+    Get outlet information from Postgresql Database.
+    """
+    outlet = get_outlet_information(outlet_id)
+    return outlet
+
+# ==========================
+# HEARTBEAT MONITORING
+# ==========================
+
+def update_heartbeat(outlet_id: str, outlet_status: str):
+    """
+    Update heartbeat status.
+    """
+    if not outlet_id:
+        return jsonify({
+            "error": "Missing Outlet ID"
+        }), 400
     
-    results =[]
+    if outlet_status.lower() not in ("online", "offline"):
+        outlet_status = "online"
+    
+    result = update_heartbeat_status(outlet_id, outlet_status)
+    
+    if result:
+        return jsonify({
+            "message":"Heartbeat Updates",
+            "outlet_id": outlet_id,
+            "status": outlet_status
+        }), 200
+    
+    else:
+        return jsonify({"error": "Outlet not found"}), 404
 
-    for item in images_raw:
-        name = (item.get("name") or "").strip()
-        raw_img = (item.get("image") or "").strip()
+# ========================
+# VALIDATE FOR MEDIA
+# ========================
+def validate_device_for_media(outlet_id: str) -> dict:
+    """
+    Check if outlet can access media screen.
+    Returns what to show: media, config form, or error
+    """
+    # 1. Validate outlet exists in Odoo
+    odoo_outlet= validate_outlet(outlet_id)
+    if not odoo_outlet.get("is_valid"):
+        return{
+            "can_access_media": False,
+            "reason": "invalid_outlet",
+            "error": odoo_outlet.get("error")
+        }
 
-        if not name or not raw_img:
-            continue
+    # 2. Check if outlet is registered
+    outlet= get_outlet_information(outlet_id)
 
-        key = normalize(name)
-        outlet = outlets.get(key)
-
-        if not outlet:
-            log.debug(f"No outlet match for image: {name}")
-            continue
-
-        image_id = generate_image_id(name, raw_img)
-        path = image_path(image_id)
-
-        if not path.exists():
-            try:
-                path.write_bytes(base64_to_png(raw_img))
-                log.info(f"Cached outlet image: {name}")
-            except Exception as e:
-                log.warning(f"Failed to cache image for {name}: {e}")
-                continue
-
-        results.append({
-            "id": image_id,
-            "outlet_name": outlet["outlet_name"],
-            "image": f"{PUBLIC_HOST}/outlet_image/{image_id}",
-        })
-
-    log.info(f"Returning {len(results)} outlet images")
-    return results
-
-
-def get_outlet_images_with_names():
-    return jsonify({
-        "media": fetch_outlet_images()
-    }), 200
-
-
-def stream_outlet_image(image_id: str):
-    path = image_path(image_id)
-    if not path.exists():
-        abort(404, "Image not found")
-
-    return send_file(path, mimetype="image/png", as_attachment=False)
+    if not outlet:
+        return {
+            "can_access_media": False,
+            "reason": "missing_credentials",
+            "outlet_info": outlet
+        }
+    
+    # 3. Check outlet has credentials
+    if not outlet["order_api_url"] or not outlet["order_api_key"]:
+        return {
+            "can_access_media": False,
+            "reason": "missing_credentials",
+            "outlet_info": odoo_outlet
+        }
+    
+    # Everything Checks Out!
+    return{
+        "can_access_media": True,
+        "outlet_info": odoo_outlet,
+        "device_info": outlet
+    }
