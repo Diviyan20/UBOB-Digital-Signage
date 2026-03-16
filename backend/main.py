@@ -173,5 +173,5 @@ def log_response_info(response):
 # ==============
 if __name__ == "__main__":
     log.info("Starting Flask backend for Digital Signage System...")
-    log.info("🚀 Flask backend running on port 5000")
+    log.info("🚀 Flask backend running")
     app.run(debug=True, host="0.0.0.0", port=5000)
