@@ -33,23 +33,6 @@ def get_db_connection():
         )
 
         cur = conn.cursor()
-
-        # Ensure table exists
-        create_script = """
-            CREATE TABLE IF NOT EXISTS active_outlets (
-                outlet_id VARCHAR(255) PRIMARY KEY,
-                outlet_name VARCHAR(255) NOT NULL,
-                outlet_status VARCHAR(50) NOT NULL,
-                outlet_location VARCHAR(255),
-                active TIMESTAMP WITH TIME ZONE,
-                last_seen TIMESTAMP WITH TIME ZONE NOT NULL,
-                order_api_url TEXT,
-                order_api_key TEXT
-            )
-        """
-        cur.execute(create_script)
-        conn.commit()
-
         yield conn, cur
 
     except psycopg2.Error as e:
