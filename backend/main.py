@@ -1,12 +1,11 @@
 import logging
 import os
 
+# CONTROLLERS
 from controllers.media_controller import (
     get_media_json,
     stream_image,
 )
-
-# CONTROLLERS
 from controllers.outlet_controller import (
     get_outlet_info,
     update_heartbeat,
