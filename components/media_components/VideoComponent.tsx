@@ -5,17 +5,21 @@ import { Text, useWindowDimensions, View } from "react-native";
 import { promotionVideos } from "./Videos";
 
 interface VideoComponentProps {
+    videos: typeof promotionVideos
     onAllVideosFinished: () => void;
 }
 
-const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished }) => {
+const VideoComponent: React.FC<VideoComponentProps> = ({ videos, onAllVideosFinished }) => {
     const { width, height } = useWindowDimensions();
     const styles = MediaStyles(width, height);
 
     const [currentIndex, setCurrentIndex] = useState(0);
+    const currentIndexRef = useRef(0);
     const isMounted = useRef(true);
 
-    const currentVideo = promotionVideos[currentIndex];
+    const currentVideo = videos[currentIndex];
+    const cardWidth = width > 1200 ? width * 0.25 : width > 800 ? width * 0.35 : width * 0.5;
+    const cardHeight = height * 0.80;
 
     const player = useVideoPlayer(currentVideo?.videoURI, (player) => {
         player.loop = false;
@@ -23,21 +27,28 @@ const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished }) 
         player.play();
     });
 
+    // Keep ref in sync with state
+    useEffect(() => {
+        currentIndexRef.current = currentIndex;
+    }, [currentIndex]);
+
     const handleVideoEnd = useCallback(() => {
         if (!isMounted.current) return;
 
-        const nextIndex = currentIndex + 1;
+        const nextIndex = currentIndexRef.current + 1;
 
-        if (nextIndex >= promotionVideos.length) {
+        if (nextIndex >= videos.length) {
             // All videos finished - reset index and notify
             setCurrentIndex(0);
+            currentIndexRef.current = 0;
             onAllVideosFinished();
         }
         else {
             // Play next video
             setCurrentIndex(nextIndex);
+            currentIndexRef.current = nextIndex;
         }
-    }, [currentIndex, onAllVideosFinished]);
+    }, [onAllVideosFinished]);
 
     useEffect(() => {
         isMounted.current = true;
@@ -46,10 +57,11 @@ const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished }) 
         };
     }, []);
 
+    // Listener event now only re-runs when player changes, not on every index change
     useEffect(() => {
         const subscription = player.addListener("playToEnd", () => {
-                // Video finished playing
-                handleVideoEnd();
+            // Video finished playing
+            handleVideoEnd();
         });
 
         return () => {
@@ -65,21 +77,42 @@ const VideoComponent: React.FC<VideoComponentProps> = ({ onAllVideosFinished }) 
         );
     }
 
+    if (currentVideo.rotate) {
+        return (
+            <View style={styles.portraitCard}>
+                <VideoView
+                    key={currentIndex}
+                    player={player}
+                    style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        width: cardHeight,
+                        height: cardWidth,
+                        transform: [
+                            { translateX: -cardHeight / 2 },
+                            { translateY: -cardWidth / 2 },
+                            { rotate: "180deg" },
+                        ],
+                    }}
+                    contentFit="contain"
+                    nativeControls={false}
+                />
+            </View>
+        );
+    }
+
     return (
         <View style={styles.card}>
-          <VideoView
-            key={currentIndex}
-            player={player}
-            style={styles.image}
-            contentFit="cover"
-            nativeControls={false}
-          />
-    
-          <View style={styles.textContainer}>
-            <Text style={styles.title}>{currentVideo.name}</Text>
-          </View>
+            <VideoView
+                key={currentIndex}
+                player={player}
+                style={styles.image}
+                contentFit="contain"
+                nativeControls={false}
+            />
         </View>
-      );
-    };
-    
-    export default VideoComponent;
+    );
+};
+
+export default VideoComponent;
