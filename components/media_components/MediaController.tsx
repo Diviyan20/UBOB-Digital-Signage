@@ -5,7 +5,7 @@ import { promotionVideos } from "./Videos";
 
 type MediaState = "IMAGES_PLAYING" | "VIDEOS_PLAYING";
 
-const IMAGE_INTERVAL = 60 * 1000;
+const IMAGE_INTERVAL = 3 * 60 * 1000;
 
 const MediaController: React.FC = () => {
     const [mediaState, setMediaState] = useState<MediaState>("IMAGES_PLAYING");
