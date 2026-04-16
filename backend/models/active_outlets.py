@@ -1,7 +1,9 @@
+import json
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+import boto3
 import psycopg2
 from dotenv import find_dotenv, load_dotenv
 
@@ -14,20 +16,34 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")
 DB_PORT = os.getenv("DB_PORT")
 
+def get_db_credentials():
+    secret_arn = os.getenv("DB_SECRET_ARN")
+    
+    client = boto3.client("secretsmanager")
+    
+    response = client.get_secret_value(SecretId=secret_arn)
+    secret = json.loads(response["SecretString"])
+    
+    return{
+        "username":secret["username"],
+        "password:":secret["password"]
+    }
+
 @contextmanager
 def get_db_connection():
     """
     - Context manager for database connection
     - Automatically handles connection cleanup
     """
+    creds = get_db_credentials()
     conn = None
     cur = None
     try:
 
         conn = psycopg2.connect(
             database = DB_NAME,
-            user = DB_USERNAME,
-            password = DB_PASSWORD,
+            user = creds["username"],
+            password = creds["password"],
             host = DB_HOSTNAME,
             port = DB_PORT
         )

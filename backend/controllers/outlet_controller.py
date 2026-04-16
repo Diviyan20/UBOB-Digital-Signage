@@ -1,135 +1,42 @@
-import logging
-import os
-
 from controllers.outlet_service import fetch_all_outlet_data
-from dotenv import find_dotenv, load_dotenv
-from flask import jsonify
+from flask import Blueprint, jsonify, request
 from models.active_outlets import get_outlet_information, update_heartbeat_status
 
-load_dotenv(find_dotenv())
+outlet_bp = Blueprint("outlet", __name__)
 
-ODOO_DATABASE_URL = os.getenv("ODOO_DATABASE_URL")
-ODOO_API_TOKEN = os.getenv("ODOO_API_TOKEN")
+@outlet_bp.route("/validate_outlet", methods=["POST"])
+def validate_outlet_route():
+    data = request.get_json()
+    outlet_id = data.get("outlet_id")
 
-
-# ==========================
-# HELPERS - ODOO HEADERS
-# ==========================
-
-def odoo_headers():
-    """ Generate headers for Odoo API requests with authentication token. """
-    return{
-        "Authorization": f"Bearer {ODOO_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-
-# ================
-# LOGGING SETUP
-# ================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger(__name__)
-
-
-# =====================
-# OUTLET VALIDATION
-# =====================
-
-def validate_outlet(outlet_id: str) -> dict:
     outlets = fetch_all_outlet_data()
-    
+
     for outlet in outlets:
         if outlet["outlet_id"] == outlet_id:
-            return {
-                "is_valid": True,
-                **outlet
-            }
-    
-    return{
-        "is_valid": False,
-        "error":"Outlet not found"
-    }
+            return jsonify({"is_valid": True, **outlet}), 200
 
-# =====================
-# GET OUTLET INFO
-# =====================
+    return jsonify({"is_valid": False}), 404
 
-def get_outlet_info(outlet_id: str) -> dict:
-    """
-    Get outlet information from Postgresql Database.
-    """
+
+@outlet_bp.route("/outlet_info/<outlet_id>", methods=["GET"])
+def outlet_info(outlet_id):
     outlet = get_outlet_information(outlet_id)
-    return outlet
-
-# ==========================
-# HEARTBEAT MONITORING
-# ==========================
-
-def update_heartbeat(outlet_id: str, outlet_status: str):
-    """
-    Update heartbeat status.
-    """
-    if not outlet_id:
-        return jsonify({
-            "error": "Missing Outlet ID"
-        }), 400
-    
-    if outlet_status.lower() not in ("online", "offline"):
-        outlet_status = "online"
-    
-    result = update_heartbeat_status(outlet_id, outlet_status)
-    
-    if result:
-        return jsonify({
-            "message":"Heartbeat Updates",
-            "outlet_id": outlet_id,
-            "status": outlet_status
-        }), 200
-    
-    else:
-        return jsonify({"error": "Outlet not found"}), 404
-
-# ========================
-# VALIDATE FOR MEDIA
-# ========================
-def validate_device_for_media(outlet_id: str) -> dict:
-    """
-    Check if outlet can access media screen.
-    Returns what to show: media, config form, or error
-    """
-    # 1. Validate outlet exists in Odoo
-    odoo_outlet= validate_outlet(outlet_id)
-    if not odoo_outlet.get("is_valid"):
-        return{
-            "can_access_media": False,
-            "reason": "invalid_outlet",
-            "error": odoo_outlet.get("error")
-        }
-
-    # 2. Check if outlet is registered
-    outlet= get_outlet_information(outlet_id)
 
     if not outlet:
-        return {
-            "can_access_media": False,
-            "reason": "missing_credentials",
-            "outlet_info": outlet
-        }
-    
-    # 3. Check outlet has credentials
-    if not outlet["order_api_url"] or not outlet["order_api_key"]:
-        return {
-            "can_access_media": False,
-            "reason": "missing_credentials",
-            "outlet_info": odoo_outlet
-        }
-    
-    # Everything Checks Out!
-    return{
-        "can_access_media": True,
-        "outlet_info": odoo_outlet,
-        "device_info": outlet
-    }
+        return jsonify({"error": "Not found"}), 404
+
+    return jsonify(outlet), 200
+
+@outlet_bp.route("/heartbeat", methods=["POST"])
+def heartbeat():
+    data = request.get_json()
+
+    outlet_id = data.get("outlet_id")
+    status = data.get("outlet_status")
+
+    result = update_heartbeat_status(outlet_id, status)
+
+    if not result:
+        return jsonify({"error": "Outlet not found"}), 404
+
+    return jsonify({"success": True}), 200

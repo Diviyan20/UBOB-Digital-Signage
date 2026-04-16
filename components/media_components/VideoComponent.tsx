@@ -1,118 +1,118 @@
 import { MediaStyles } from "@/styling/MediaStyles";
-import { useVideoPlayer, VideoView } from 'expo-video';
+import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
-import { promotionVideos } from "./Videos";
 
-interface VideoComponentProps {
-    videos: typeof promotionVideos
-    onAllVideosFinished: () => void;
+export interface VideoItem {
+  videoURI: string;
+  rotate?: boolean;
 }
 
-const VideoComponent: React.FC<VideoComponentProps> = ({ videos, onAllVideosFinished }) => {
-    const { width, height } = useWindowDimensions();
-    const styles = MediaStyles(width, height);
+interface VideoComponentProps {
+  videos: VideoItem[];
+  onAllVideosFinished: () => void;
+}
 
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const currentIndexRef = useRef(0);
-    const isMounted = useRef(true);
+const VideoComponent: React.FC<VideoComponentProps> = ({
+  videos,
+  onAllVideosFinished,
+}) => {
+  const { width, height } = useWindowDimensions();
+  const styles = MediaStyles(width, height);
 
-    const currentVideo = videos[currentIndex];
-    const cardWidth = width > 1200 ? width * 0.25 : width > 800 ? width * 0.35 : width * 0.5;
-    const cardHeight = height * 0.80;
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const currentIndexRef = useRef(0);
+  const isMounted = useRef(true);
 
-    const player = useVideoPlayer(currentVideo?.videoURI, (player) => {
-        player.loop = false;
-        player.staysActiveInBackground = true;
-        player.play();
-    });
+  const currentVideo = videos?.[currentIndex];
 
-    // Keep ref in sync with state
-    useEffect(() => {
-        currentIndexRef.current = currentIndex;
-    }, [currentIndex]);
+  const cardWidth =
+    width > 1200 ? width * 0.25 : width > 800 ? width * 0.35 : width * 0.5;
+  const cardHeight = height * 0.8;
 
-    const handleVideoEnd = useCallback(() => {
-        if (!isMounted.current) return;
+  const player = useVideoPlayer(currentVideo?.videoURI, (player) => {
+    player.loop = false;
+    player.staysActiveInBackground = true;
+    player.play();
+  });
 
-        const nextIndex = currentIndexRef.current + 1;
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
-        if (nextIndex >= videos.length) {
-            // All videos finished - reset index and notify
-            setCurrentIndex(0);
-            currentIndexRef.current = 0;
-            onAllVideosFinished();
-        }
-        else {
-            // Play next video
-            setCurrentIndex(nextIndex);
-            currentIndexRef.current = nextIndex;
-        }
-    }, [onAllVideosFinished]);
+  const handleVideoEnd = useCallback(() => {
+    if (!isMounted.current || !videos?.length) return;
 
-    useEffect(() => {
-        isMounted.current = true;
-        return () => {
-            isMounted.current = false;
-        };
-    }, []);
+    const nextIndex = currentIndexRef.current + 1;
 
-    // Listener event now only re-runs when player changes, not on every index change
-    useEffect(() => {
-        const subscription = player.addListener("playToEnd", () => {
-            // Video finished playing
-            handleVideoEnd();
-        });
-
-        return () => {
-            subscription.remove();
-        };
-    }, [player, handleVideoEnd]);
-
-    if (!currentVideo) {
-        return (
-            <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-                <Text>No videos available</Text>
-            </View>
-        );
+    if (nextIndex >= videos.length) {
+      setCurrentIndex(0);
+      currentIndexRef.current = 0;
+      onAllVideosFinished();
+    } else {
+      setCurrentIndex(nextIndex);
+      currentIndexRef.current = nextIndex;
     }
+  }, [videos, onAllVideosFinished]);
 
-    if (currentVideo.rotate) {
-        return (
-            <View style={styles.portraitCard}>
-                <VideoView
-                    key={currentIndex}
-                    player={player}
-                    style={{
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        width: cardHeight,
-                        height: cardWidth,
-                        transform: [
-                            { translateX: -cardHeight / 2 },
-                            { translateY: -cardWidth / 2 },
-                            { rotate: "180deg" },
-                        ],
-                    }}
-                    contentFit="contain"
-                    nativeControls={false}
-                />
-            </View>
-        );
-    }
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
+  useEffect(() => {
+    if (!player) return;
+
+    const subscription = player.addListener("playToEnd", handleVideoEnd);
+    return () => subscription.remove();
+  }, [player, handleVideoEnd]);
+
+  if (!currentVideo) {
     return (
-        <View style={styles.card}>
-            <VideoView
-                key={currentIndex}
-                player={player}
-                style={styles.image}
-                contentFit="contain"
-                nativeControls={false}
-            />
-        </View>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>No videos available</Text>
+      </View>
     );
+  }
+
+  if (currentVideo.rotate) {
+    return (
+      <View style={styles.portraitCard}>
+        <VideoView
+          key={currentIndex}
+          player={player}
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            width: cardHeight,
+            height: cardWidth,
+            transform: [
+              { translateX: -cardHeight / 2 },
+              { translateY: -cardWidth / 2 },
+              { rotate: "180deg" },
+            ],
+          }}
+          contentFit="contain"
+          nativeControls={false}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.card}>
+      <VideoView
+        key={currentIndex}
+        player={player}
+        style={styles.image}
+        contentFit="contain"
+        nativeControls={false}
+      />
+    </View>
+  );
 };
 
 export default VideoComponent;
