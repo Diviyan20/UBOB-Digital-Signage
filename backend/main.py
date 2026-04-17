@@ -1,5 +1,6 @@
 import logging
 
+from asgiref.wsgi import WsgiToAsgi
 from controllers.admin_controller import admin_bp
 from controllers.media_controller import media_bp
 from controllers.outlet_controller import outlet_bp
@@ -46,7 +47,8 @@ log = logging.getLogger(__name__)
 # ==============
 # 🚀 RUN SERVER
 # ==============
-handler = Mangum(app)
+asgi_app = WsgiToAsgi(app)
+handler = Mangum(asgi_app, lifespan="off")
 if __name__ == "__main__":
     log.info("Starting Flask backend for Digital Signage System...")
     log.info("🚀 Flask backend running")
