@@ -1,9 +1,11 @@
 import logging
 
-# BLUEPRINTS
-from controllers import media_bp, video_bp
 from controllers.admin_controller import admin_bp
+from controllers.media_controller import media_bp
 from controllers.outlet_controller import outlet_bp
+
+# BLUEPRINTS
+from controllers.video_controller import video_bp
 
 # FLASK
 from flask import Flask

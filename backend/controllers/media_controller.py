@@ -9,7 +9,7 @@ from typing import List, Optional
 
 import requests
 from dotenv import load_dotenv
-from flask import abort, send_file
+from flask import Blueprint, abort, jsonify, send_file
 from PIL import Image
 
 # -----------------------------------
@@ -39,6 +39,21 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
+
+
+# ---------
+# BLUEPRINT
+# --------- 
+media_bp = Blueprint("media", __name__)
+
+@media_bp.route("/get_media", methods=["GET"])
+def get_media():
+    media = get_media_json()
+    return jsonify({"media": media}), 200
+
+@media_bp.route("/image/<image_id>")
+def image(image_id):
+    return stream_image(image_id)
 
 # ----------------
 # DATA STRUCTURES
