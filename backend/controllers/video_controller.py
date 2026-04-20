@@ -18,31 +18,35 @@ log = logging.getLogger(__name__)
 
 video_bp = Blueprint("video", __name__)
 
-@video_bp.route("/videos/<outlet_id>", methods=["GET"])
-def videos(outlet_id):
-    log.info(f"Fetching videos for {outlet_id}")
+@video_bp.route("/videos", methods=["GET"])
+def videos():
+    log.info("Fetching videos from S3 Bucket....")
 
-    videos = get_videos_for_outlet(outlet_id)
+    videos = get_videos_for_outlet()
 
     return jsonify(videos or []), 200
 
 
-def list_videos_for_outlet(outlet_id: str):
-    prefix = f"outlets/{outlet_id}"
+def list_videos_for_outlet():
+    log.info(f"Listing all S3 objects in bucket: {BUCKET}")
     
-    response = s3.list_objects_v2(
-        Bucket=BUCKET,
-        Prefix=prefix
-    )
+    response = s3.list_objects_v2(Bucket=BUCKET)
     
     if "Contents" not in response:
+        log.warning("No objects found in S3 bucket")
         return []
 
-    return [
+    keys = [
         obj["Key"]
         for obj in response["Contents"]
         if obj["Key"].endswith(".mp4")
     ]
+    
+    log.info(f"Found {len(keys)} video(s):")
+    for key in keys:
+        log.info(f"  - {key}")
+    
+    return keys
 
 def generate_signed_url(key: str):
     return s3.generate_presigned_url(
@@ -54,14 +58,16 @@ def generate_signed_url(key: str):
         ExpiresIn=3600
     )
 
-def get_videos_for_outlet(outlet_id: str):
-    keys = list_videos_for_outlet(outlet_id)
+def get_videos_for_outlet():
+    keys = list_videos_for_outlet()
 
     videos = []
     for key in keys:
+        url = generate_signed_url(key)
+        log.info(f"Generated signed URL for {key}: {url[:80]}...") # Truncate so it doesn't flood the console
         videos.append({
-            "videoURI": generate_signed_url(key),
+            "videoURI": url,
             "rotate": False
         })
-
+    log.info(f"Returning {len(videos)} video(s).")
     return videos

@@ -1,5 +1,4 @@
-const SERVER_URL =
-  "https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com";
+const SERVER_URL = "http://10.0.2.2:5000";
 
 export const api = {
   validateOutlet: `${SERVER_URL}/validate_outlet`,
@@ -10,5 +9,5 @@ export const api = {
   media: `${SERVER_URL}/get_media`,
   outletImages: `${SERVER_URL}/outlet_image_combined`,
 
-  videos: (outletId: string) => `${SERVER_URL}/videos/${outletId}`,
+  videos: (outletId: string) => `${SERVER_URL}/videos`,
 };
