@@ -3,13 +3,10 @@ import os
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
-from dotenv import load_dotenv
 from flask import Blueprint, jsonify
 
-load_dotenv()
-
-BUCKET = os.getenv("VIDEO_BUCKET_NAME")
-AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-5")
+BUCKET = os.environ("VIDEO_BUCKET_NAME")
+AWS_REGION = os.environ("AWS_REGION", "ap-southeast-5")
 
 s3 = boto3.client(
     "s3",
