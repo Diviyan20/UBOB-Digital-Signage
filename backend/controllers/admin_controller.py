@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, make_response, request
+from models.active_outlets import register_outlet
 from models.admin_credentials import retrieve_credentials
 from utils.auth import generate_admin_token
 
@@ -29,3 +30,29 @@ def admin_login():
     )
 
     return response
+
+@admin_bp.route("/register_outlet", methods=["POST"])
+def admin_register_outlet():
+    data = request.get_json()
+    
+    outlet_id = data.get("outlet_id")
+    outlet_name = data.get("outlet_name")
+    region_name = data.get("region_name")
+    order_api_url = data.get("order_api_url")
+    order_api_key = data.get("order_api_key")
+    
+    if not all([outlet_id, outlet_name, region_name, order_api_url, order_api_key]):
+        return jsonify({"error": "All fields are required"}), 400
+
+    result = register_outlet(
+        outlet_id=outlet_id,
+        outlet_name=outlet_name,
+        region_name=region_name,
+        order_api_url=order_api_url,
+        order_api_key=order_api_key
+    )
+
+    if not result.get("success"):
+        return jsonify({"error": result.get("error", "Registration failed")}), 409
+
+    return jsonify(result), 201

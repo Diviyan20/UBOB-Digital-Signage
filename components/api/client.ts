@@ -1,5 +1,5 @@
 const SERVER_URL =
-  "https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com/";
+  "https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com";
 
 export const api = {
   validateOutlet: `${SERVER_URL}/validate_outlet`,

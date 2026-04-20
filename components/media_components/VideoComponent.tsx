@@ -30,9 +30,31 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
     width > 1200 ? width * 0.25 : width > 800 ? width * 0.35 : width * 0.5;
   const cardHeight = height * 0.8;
 
+  useEffect(() => {
+    if (!currentVideo?.videoURI) return;
+
+    fetch(currentVideo.videoURI, { method: "HEAD" })
+      .then((res) => {
+        console.log("📡 VIDEO HEAD STATUS:", res.status);
+        console.log("📡 HEADERS:", Object.fromEntries(res.headers.entries()));
+      })
+      .catch((err) => {
+        console.error("❌ HEAD REQUEST FAILED:", err);
+      });
+  }, [currentVideo]);
+
   const player = useVideoPlayer(currentVideo?.videoURI, (player) => {
+    console.log("🎥 Loading video:", currentVideo?.videoURI);
     player.loop = false;
     player.staysActiveInBackground = true;
+
+    player.addListener("statusChange", (status) => {
+      console.log("📊 PLAYER STATUS:", status);
+      if (status.error) {
+        console.error("🚨 VIDEO ERROR:", status.error);
+      }
+    });
+
     player.play();
   });
 
@@ -73,6 +95,14 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>No videos available</Text>
+      </View>
+    );
+  }
+
+  if (!currentVideo.videoURI) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>Invalid video URL</Text>
       </View>
     );
   }

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import ImageComponent from "./ImageComponent";
 import VideoComponent, { VideoItem } from "./VideoComponent";
-import { storage } from "./storage";
 
 type MediaState = "IMAGES_PLAYING" | "VIDEOS_PLAYING";
 
@@ -15,17 +14,17 @@ const MediaController: React.FC = () => {
 
   const indexRef = useRef(0);
   const videoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allVideosRef = useRef<VideoItem[]>([]);
 
   // =========================
   // FETCH VIDEOS (SIGNED URLS)
   // =========================
   const fetchVideos = async () => {
-    const outletId = storage.getString("outlet_id");
-    if (!outletId) return;
-
     try {
-      const res = await fetch(api.videos(outletId));
+      const res = await fetch(api.videos);
       const payload = await res.json();
+
+      console.log("VIDEO PAYLOAD:", payload);
 
       if (!res.ok) {
         throw new Error(payload?.error || "Failed to fetch videos");
@@ -39,10 +38,16 @@ const MediaController: React.FC = () => {
           ? payload.videos
           : [];
 
+      if (!videos.length) {
+        console.error("❌ No videos returned");
+        return;
+      }
       const shuffled = [...videos].sort(() => Math.random() - 0.5);
 
+      allVideosRef.current = shuffled;
       setAllVideos(shuffled);
-      indexRef.current = 0;
+      setCurrentBatch(shuffled);
+      // indexRef.current = 0;
     } catch (err) {
       console.error("Failed to fetch videos:", err);
     }
@@ -57,18 +62,17 @@ const MediaController: React.FC = () => {
   // =========================
   const getNextBatch = (): VideoItem[] => {
     const batchSize = 2;
+    const videos = allVideosRef.current;
 
-    if (!allVideos.length) return [];
+    if (!videos.length) return [];
 
-    const batch = allVideos.slice(
-      indexRef.current,
-      indexRef.current + batchSize,
-    );
+    const batch = videos.slice(indexRef.current, indexRef.current + batchSize);
 
     indexRef.current += batchSize;
 
-    if (indexRef.current >= allVideos.length) {
+    if (indexRef.current >= videos.length) {
       indexRef.current = 0;
+      allVideosRef.current = [...videos].sort(() => Math.random() - 0.5);
       setAllVideos((prev) => [...prev].sort(() => Math.random() - 0.5));
     }
 

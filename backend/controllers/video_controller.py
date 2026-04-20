@@ -2,11 +2,20 @@ import logging
 import os
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
+from dotenv import load_dotenv
 from flask import Blueprint, jsonify
 
-s3 = boto3.client("s3")
-BUCKET = os.getenv("VIDEO_BUCKET_NAME")
+load_dotenv()
 
+BUCKET = os.getenv("VIDEO_BUCKET_NAME")
+AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-5")
+
+s3 = boto3.client(
+    "s3",
+    region_name=AWS_REGION,
+    endpoint_url=f"https://s3.{AWS_REGION}.amazonaws.com"
+)
 
 # LOGGING SETUP
 logging.basicConfig(
@@ -20,11 +29,20 @@ video_bp = Blueprint("video", __name__)
 
 @video_bp.route("/videos", methods=["GET"])
 def videos():
+    if not BUCKET:
+        log.error("VIDEO_BUCKET_NAME is not set")
+        return jsonify({
+            "error": "Server misconfiguration: VIDEO_BUCKET_NAME missing"
+        }), 500
+        
     log.info("Fetching videos from S3 Bucket....")
 
-    videos = get_videos_for_outlet()
-
-    return jsonify(videos or []), 200
+    try:
+        payload = get_videos_for_outlet()
+        return jsonify(payload), 200
+    except (ClientError, BotoCoreError) as e:
+        log.exception("Failed fetching videos from S3: %s", e)
+        return jsonify({"error": "Failed to fetch videos from S3"}), 500
 
 
 def list_videos_for_outlet():
@@ -41,29 +59,20 @@ def list_videos_for_outlet():
         for obj in response["Contents"]
         if obj["Key"].endswith(".mp4")
     ]
-    
-    log.info(f"Found {len(keys)} video(s):")
-    for key in keys:
-        log.info(f"  - {key}")
-    
+    log.info(f"Found {len(keys)} video(s):")    
     return keys
-
-def generate_signed_url(key: str):
-    return s3.generate_presigned_url(
-        "get_object",
-        Params={
-            "Bucket": BUCKET,
-            "Key": key
-        },
-        ExpiresIn=3600
-    )
 
 def get_videos_for_outlet():
     keys = list_videos_for_outlet()
 
     videos = []
     for key in keys:
-        url = generate_signed_url(key)
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": BUCKET, "Key": key},
+            ExpiresIn=3600,  # 1 hour
+        )
+        
         log.info(f"Generated signed URL for {key}: {url[:80]}...") # Truncate so it doesn't flood the console
         videos.append({
             "videoURI": url,
