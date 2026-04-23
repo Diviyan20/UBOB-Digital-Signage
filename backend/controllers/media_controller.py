@@ -17,7 +17,7 @@ from PIL import Image
 # -----------------------------------
 load_dotenv()
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
-API_TOKEN = os.getenv("ODOO_API_TOKEN")
+API_TOKEN = os.getenv("API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
 
 PUBLIC_HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://10.0.2.2:5000")

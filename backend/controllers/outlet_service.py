@@ -3,19 +3,16 @@ import os
 from ast import List
 
 import requests
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # -----------------
 # CONFIG
 # -----------------
 ODOO_DATABASE_URL = os.getenv("ODOO_DATABASE_URL")
-ODOO_API_TOKEN = os.getenv("ODOO_API_TOKEN")
+API_TOKEN = os.getenv("API_TOKEN")
 PUBLIC_HOST = os.getenv("PUBLIC_HOST_URL", "http://10.0.2.2:5000")
 
 HEADERS = {
-    "Authorization": f"Bearer {ODOO_API_TOKEN}",
+    "Authorization": f"Bearer {API_TOKEN}",
     "Content-Type": "application/json",
 }
 
@@ -26,7 +23,7 @@ log = logging.getLogger(__name__)
 # HEADERS
 def odoo_headers():
     return{
-        "Authorization":f"Bearer {ODOO_API_TOKEN}",
+        "Authorization":f"Bearer {API_TOKEN}",
         "Content-Type": "application/json"
     }
 
