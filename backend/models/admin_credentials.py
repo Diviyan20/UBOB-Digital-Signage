@@ -6,9 +6,6 @@ from contextlib import contextmanager
 import bcrypt
 import boto3
 import psycopg2
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # ENVIRONMENT VARIABLES
 OUTLET_DATABASE = os.getenv("OUTLET_DATABASE")
@@ -37,7 +34,7 @@ def get_db_credentials():
     
     return{
         "username":secret["username"],
-        "password:":secret["password"]
+        "password":secret["password"]
     }
     
 @contextmanager

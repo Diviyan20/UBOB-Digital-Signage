@@ -6,10 +6,6 @@ from datetime import datetime, timezone
 
 import boto3
 import psycopg2
-from dotenv import find_dotenv, load_dotenv
-
-find_dotenv()
-load_dotenv()
 
 # ENVIRONMENT VARIABLES
 DB_NAME = os.getenv("OUTLET_DATABASE")
@@ -38,7 +34,7 @@ def get_db_credentials():
     
     return{
         "username":secret["username"],
-        "password:":secret["password"]
+        "password":secret["password"]
     }
 
 @contextmanager

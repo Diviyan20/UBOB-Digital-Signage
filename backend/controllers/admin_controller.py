@@ -7,9 +7,19 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 @admin_bp.route("/login", methods=["POST"])
 def admin_login():
-    data = request.get_json()
+    data = request.get_json(silent=True, force=True)
+        
+    print("RAW BODY:", request.data)
+    print("HEADERS:", dict(request.headers))
+    
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON"}), 400
+
     email = data.get("email")
     password = data.get("password")
+    
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
 
     admin = retrieve_credentials(email, password)
 
@@ -33,7 +43,13 @@ def admin_login():
 
 @admin_bp.route("/register_outlet", methods=["POST"])
 def admin_register_outlet():
-    data = request.get_json()
+    data = request.get_json(silent=True, force=True)
+    
+    print("RAW BODY:", request.data)
+    print("HEADERS:", dict(request.headers))
+    
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON"}), 400
     
     outlet_id = data.get("outlet_id")
     outlet_name = data.get("outlet_name")
