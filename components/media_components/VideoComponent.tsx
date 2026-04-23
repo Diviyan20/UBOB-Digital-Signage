@@ -13,6 +13,9 @@ interface VideoComponentProps {
   onAllVideosFinished: () => void;
 }
 
+const sanitizePresignedUrl = (url?: string) =>
+  (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
+
 const VideoComponent: React.FC<VideoComponentProps> = ({
   videos,
   onAllVideosFinished,
@@ -25,33 +28,30 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
   const isMounted = useRef(true);
 
   const currentVideo = videos?.[currentIndex];
-
-  const cardWidth =
-    width > 1200 ? width * 0.25 : width > 800 ? width * 0.35 : width * 0.5;
-  const cardHeight = height * 0.8;
+  const safeUri = sanitizePresignedUrl(currentVideo?.videoURI);
 
   useEffect(() => {
-    if (!currentVideo?.videoURI) return;
+    if (!safeUri) return;
 
-    fetch(currentVideo.videoURI, { method: "HEAD" })
+    fetch(safeUri, { method: "HEAD" })
       .then((res) => {
-        console.log("📡 VIDEO HEAD STATUS:", res.status);
-        console.log("📡 HEADERS:", Object.fromEntries(res.headers.entries()));
+        console.log("VIDEO HEAD STATUS:", res.status);
+        console.log("HEADERS:", Object.fromEntries(res.headers.entries()));
       })
       .catch((err) => {
-        console.error("❌ HEAD REQUEST FAILED:", err);
+        console.error("HEAD REQUEST FAILED:", err);
       });
-  }, [currentVideo]);
+  }, [safeUri]);
 
-  const player = useVideoPlayer(currentVideo?.videoURI, (player) => {
-    console.log("🎥 Loading video:", currentVideo?.videoURI);
+  const player = useVideoPlayer(safeUri, (player) => {
+    console.log("Loading video:", safeUri);
     player.loop = false;
     player.staysActiveInBackground = true;
 
     player.addListener("statusChange", (status) => {
-      console.log("📊 PLAYER STATUS:", status);
+      console.log("PLAYER STATUS:", status);
       if (status.error) {
-        console.error("🚨 VIDEO ERROR:", status.error);
+        console.error("VIDEO ERROR:", status.error);
       }
     });
 
@@ -99,7 +99,7 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
     );
   }
 
-  if (!currentVideo.videoURI) {
+  if (!safeUri) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>Invalid video URL</Text>
@@ -114,18 +114,10 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
           key={currentIndex}
           player={player}
           style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width: cardHeight,
-            height: cardWidth,
-            transform: [
-              { translateX: -cardHeight / 2 },
-              { translateY: -cardWidth / 2 },
-              { rotate: "180deg" },
-            ],
+            ...styles.portraitVideo,
+            transform: [{ rotate: "180deg" }],
           }}
-          contentFit="contain"
+          contentFit="cover"
           nativeControls={false}
         />
       </View>

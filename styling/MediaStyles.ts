@@ -3,18 +3,19 @@ import { Platform, StyleSheet } from "react-native";
 export const MediaStyles = (width: number, height: number) =>
   StyleSheet.create({
     card: {
-      width: width > 1200 ? width * 0.45 : width > 800 ? width * 0.65 : width * 0.9,
+      width:
+        width > 1200 ? width * 0.45 : width > 800 ? width * 0.65 : width * 0.9,
       height: height * 0.72,
       backgroundColor: "#fff",
       borderRadius: 20,
       padding: width > 800 ? 12 : 6,
-      elevation: 8, // Shadow for Android & TV
-      // Add a visible border for clarity on TV screens
+      elevation: 8,
       borderWidth: Platform.OS === "android" ? 1 : 0,
       borderColor: "#fff",
       alignSelf: "center",
       justifyContent: "center",
       alignItems: "center",
+      overflow: "hidden",
     },
 
     image: {
@@ -22,6 +23,26 @@ export const MediaStyles = (width: number, height: number) =>
       height: height * 0.5,
       resizeMode: "contain",
       marginTop: 10,
+    },
+
+    portraitCard: {
+      width:
+        width > 1200 ? width * 0.35 : width > 800 ? width * 0.5 : width * 0.75,
+      height: height * 0.7,
+      backgroundColor: "#fff",
+      borderRadius: 20,
+      padding: 0,
+      borderWidth: Platform.OS === "android" ? 1 : 0,
+      borderColor: "#fff",
+      alignSelf: "center",
+      justifyContent: "center",
+      alignItems: "center",
+      overflow: "hidden",
+    },
+
+    portraitVideo: {
+      width: "90%",
+      height: "90%",
     },
 
     textContainer: {
@@ -50,19 +71,5 @@ export const MediaStyles = (width: number, height: number) =>
       textAlign: "center",
       color: "#888",
       fontSize: width > 600 ? 12 : 13,
-    },
-
-    portraitCard: {
-      width: width > 1200 ? width * 0.25 : width > 800 ? width * 0.35 : width * 0.5,
-      height: height * 0.70,
-      backgroundColor: "#fff",
-      borderRadius: 20,
-      padding: 0,
-      borderWidth: Platform.OS === "android" ? 1 : 0,
-      borderColor: "#fff",
-      alignSelf: "center",
-      justifyContent: "center",
-      alignItems: "center",
-      overflow: "hidden",
     },
   });

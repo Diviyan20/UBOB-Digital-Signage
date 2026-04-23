@@ -7,6 +7,17 @@ type MediaState = "IMAGES_PLAYING" | "VIDEOS_PLAYING";
 
 const IMAGE_INTERVAL = 3 * 60 * 1000;
 
+const sanitizePresignedUrl = (url: string) =>
+  (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
+
+const normalizeVideos = (items: VideoItem[]): VideoItem[] =>
+  items
+    .map((v) => ({
+      ...v,
+      videoURI: sanitizePresignedUrl(v.videoURI),
+    }))
+    .filter((v) => v.videoURI.startsWith("https://"));
+
 const MediaController: React.FC = () => {
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES_PLAYING");
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
@@ -16,9 +27,6 @@ const MediaController: React.FC = () => {
   const videoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const allVideosRef = useRef<VideoItem[]>([]);
 
-  // =========================
-  // FETCH VIDEOS (SIGNED URLS)
-  // =========================
   const fetchVideos = async () => {
     try {
       const res = await fetch(api.videos);
@@ -30,24 +38,38 @@ const MediaController: React.FC = () => {
         throw new Error(payload?.error || "Failed to fetch videos");
       }
 
-      // Backend returns either:
-      // 1) [{ videoURI, rotate }] OR 2) { videos: [] }
-      const videos: VideoItem[] = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.videos)
-          ? payload.videos
-          : [];
+      // Handles:
+      // 1) direct array: [{ videoURI, rotate }]
+      // 2) wrapped: { videos: [...] }
+      // 3) Lambda proxy style wrapper: { body: "[...]" }
+      let videos: VideoItem[] = [];
 
-      if (!videos.length) {
-        console.error("❌ No videos returned");
+      if (Array.isArray(payload)) {
+        videos = payload;
+      } else if (Array.isArray(payload?.videos)) {
+        videos = payload.videos;
+      } else if (typeof payload?.body === "string") {
+        const parsedBody = JSON.parse(payload.body);
+        videos = Array.isArray(parsedBody)
+          ? parsedBody
+          : Array.isArray(parsedBody?.videos)
+            ? parsedBody.videos
+            : [];
+      }
+
+      const normalizedVideos = normalizeVideos(videos);
+
+      if (!normalizedVideos.length) {
+        console.error("No valid videos returned");
         return;
       }
-      const shuffled = [...videos].sort(() => Math.random() - 0.5);
+
+      const shuffled = [...normalizedVideos].sort(() => Math.random() - 0.5);
 
       allVideosRef.current = shuffled;
       setAllVideos(shuffled);
       setCurrentBatch(shuffled);
-      // indexRef.current = 0;
+      indexRef.current = 0;
     } catch (err) {
       console.error("Failed to fetch videos:", err);
     }
@@ -57,9 +79,6 @@ const MediaController: React.FC = () => {
     fetchVideos();
   }, []);
 
-  // =========================
-  // GET NEXT BATCH
-  // =========================
   const getNextBatch = (): VideoItem[] => {
     const batchSize = 2;
     const videos = allVideosRef.current;
@@ -67,7 +86,6 @@ const MediaController: React.FC = () => {
     if (!videos.length) return [];
 
     const batch = videos.slice(indexRef.current, indexRef.current + batchSize);
-
     indexRef.current += batchSize;
 
     if (indexRef.current >= videos.length) {
@@ -79,19 +97,13 @@ const MediaController: React.FC = () => {
     return batch;
   };
 
-  // =========================
-  // SWITCH TO VIDEOS
-  // =========================
   useEffect(() => {
     if (mediaState !== "IMAGES_PLAYING") return;
 
     videoTimerRef.current = setTimeout(() => {
       const batch = getNextBatch();
-
       setCurrentBatch(batch);
-
-      console.log("🎬 Playing batch:", batch.length);
-
+      console.log("Playing batch:", batch.length);
       setMediaState("VIDEOS_PLAYING");
     }, IMAGE_INTERVAL);
 
@@ -100,21 +112,14 @@ const MediaController: React.FC = () => {
     };
   }, [mediaState, allVideos]);
 
-  // =========================
-  // BACK TO IMAGES + REFRESH
-  // =========================
   const handleVideosFinished = useCallback(async () => {
     await fetchVideos(); // refresh signed URLs
     setMediaState("IMAGES_PLAYING");
   }, []);
 
-  // =========================
-  // RENDER
-  // =========================
   return (
     <>
       {mediaState === "IMAGES_PLAYING" && <ImageComponent />}
-
       {mediaState === "VIDEOS_PLAYING" && (
         <VideoComponent
           videos={currentBatch}
