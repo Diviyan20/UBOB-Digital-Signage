@@ -1,6 +1,12 @@
 import { OutletImageStyle } from "@/styling/OutletImageStyle";
 import { Image } from "expo-image";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Easing,
@@ -8,6 +14,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { api } from "../api/client";
 
 interface ImageItem {
   id?: string;
@@ -16,12 +23,10 @@ interface ImageItem {
   outlet_id?: string;
 }
 
-const SERVER_URL =
-  "https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com";
-const PREFETCH_BUFFER = 5; // Prefetch 5 images for marquee effect
+const PREFETCH_BUFFER = 5;
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
-  ({ endpoint = `${SERVER_URL}/outlet_image_combined` }) => {
+  ({ endpoint = api.outletImages }) => {
     const { width, height } = useWindowDimensions();
     const styles = OutletImageStyle(width, height);
 
@@ -33,29 +38,30 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
     const isMounted = useRef(true);
     const abortControllerRef = useRef<AbortController | null>(null);
     const prefetchCache = useRef<Set<string>>(new Set());
-    const ITEM_W = Math.min(220, Math.round(width * 0.22));
 
-    // Helper to form valid image URL (without cache-busting for better caching)
+    const ITEM_W = useMemo(
+      () => Math.min(220, Math.round(width * 0.22)),
+      [width],
+    );
+
     const getImageUrl = useCallback(
       (path?: string | null, bustCache = false) => {
         if (!path) return null;
-        if (path.startsWith("http")) {
+        if (path.startsWith("http://") || path.startsWith("https://")) {
           return bustCache ? `${path}?t=${Date.now()}` : path;
         }
+        // Fallback only for relative paths
         return bustCache
-          ? `${SERVER_URL}${path}?t=${Date.now()}`
-          : `${SERVER_URL}${path}`;
+          ? `${api.outletImages}${path}?t=${Date.now()}`
+          : `${api.outletImages}${path}`;
       },
       [],
     );
 
-    // Smart prefetching for marquee (Prefetch images that will be visible soon)
     const smartPrefetchForMarquee = useCallback(() => {
       if (images.length === 0) return;
 
       const urlsToPrefetch: string[] = [];
-
-      // For marquee, prefetch more images since scrolling is continuous
       for (let i = 0; i < Math.min(PREFETCH_BUFFER, images.length); i++) {
         const url = getImageUrl(images[i]?.image);
         if (url && !prefetchCache.current.has(url)) {
@@ -65,119 +71,99 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
       }
 
       if (urlsToPrefetch.length > 0) {
-        const prefetchPromises = urlsToPrefetch.map((url) =>
-          Image.prefetch(url).catch(() => null),
-        );
-
-        Promise.all(prefetchPromises).then(() => {
-          console.log(`✅ Prefetched ${urlsToPrefetch.length} marquee images`);
-        });
+        Promise.all(
+          urlsToPrefetch.map((url) => Image.prefetch(url).catch(() => null)),
+        ).catch(() => null);
       }
     }, [images, getImageUrl]);
 
     const fetchOutletImages = useCallback(async () => {
-      // Cancel any ongoing request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      // Create a new abort controller for this request
+      if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       try {
         setLoading(true);
+
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
           signal: abortControllerRef.current.signal,
         });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        const items = data.media || [];
 
-        if (items.length === 0) throw new Error("No Images found");
+        const data = await response.json();
+        const items: ImageItem[] = Array.isArray(data?.media) ? data.media : [];
 
         if (isMounted.current) {
           setImages(items);
-          setImageErrors(new Set()); // Reset errors when fetching new images
-          prefetchCache.current.clear(); // Clear the current cache
+          setImageErrors(new Set());
+          prefetchCache.current.clear();
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") return;
-        console.error("Image Fetch Error:", error);
-
-        if (isMounted.current && images.length === 0)
-          console.error("Error fetching Outlets:", error);
+        console.error("Outlet image fetch error:", error);
+        if (isMounted.current) setImages([]);
       } finally {
         if (isMounted.current) setLoading(false);
       }
-    }, [endpoint, images.length]);
+    }, [endpoint]);
 
-    // Initial prefetch when images load
-    useEffect(() => {
-      if (images.length > 0) {
-        smartPrefetchForMarquee();
-      }
-    }, [images, smartPrefetchForMarquee]);
-
-    // Component mount/unmount cleanup
     useEffect(() => {
       isMounted.current = true;
-      fetchOutletImages(); // Fetch initial data
+      fetchOutletImages();
 
       return () => {
         isMounted.current = false;
         scrollX.stopAnimation();
-
-        // Cancel any ongoing requests
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
+        if (abortControllerRef.current) abortControllerRef.current.abort();
       };
-    }, [fetchOutletImages]);
+    }, [fetchOutletImages, scrollX]);
 
-    // Marquee animation (All images are still rendered for smooth scrolling)
+    useEffect(() => {
+      if (images.length > 0) smartPrefetchForMarquee();
+    }, [images, smartPrefetchForMarquee]);
+
     useEffect(() => {
       if (images.length === 0) return;
 
       const itemWidth = ITEM_W + 8;
       const originalWidth = images.length * itemWidth;
-      const duration = originalWidth * 25;
+      const duration = Math.max(12000, originalWidth * 25);
 
-      const startInfiniteScroll = () => {
-        scrollX.setValue(0);
-        const animate = () => {
-          Animated.timing(scrollX, {
-            toValue: -originalWidth,
-            duration,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          }).start(({ finished }) => {
-            if (finished && isMounted.current) {
-              // Instantly reset position without visual jump (Seamless transition)
-              scrollX.setValue(0);
-              smartPrefetchForMarquee();
-              animate();
-            }
-          });
-        };
-        animate();
+      const animate = () => {
+        Animated.timing(scrollX, {
+          toValue: -originalWidth,
+          duration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished && isMounted.current) {
+            scrollX.setValue(0);
+            smartPrefetchForMarquee();
+            animate();
+          }
+        });
       };
 
-      startInfiniteScroll();
+      scrollX.setValue(0);
+      animate();
+
       return () => scrollX.stopAnimation();
-    }, [images.length, ITEM_W, width, smartPrefetchForMarquee]);
+    }, [images.length, ITEM_W, scrollX, smartPrefetchForMarquee]);
 
     const handleImageError = useCallback((imageId: string) => {
-      setImageErrors((prev) => new Set(prev).add(imageId));
+      setImageErrors((prev) => {
+        const next = new Set(prev);
+        next.add(imageId);
+        return next;
+      });
     }, []);
 
-    if (loading) return <Text>Loading Images....</Text>;
-
+    if (loading) return <Text>Loading Images...</Text>;
     if (images.length === 0) return <Text>No images available.</Text>;
 
-    // All images still rendered here for marquee effect
     const duplicatedImages = [...images, ...images];
 
     return (
@@ -209,23 +195,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
                           transition={200}
                           cachePolicy="memory-disk"
                           recyclingKey={imageId}
-                          onError={(error) => {
-                            console.warn(
-                              `Image load error for ${item.outlet_name} (${imageId}):`,
-                              error,
-                            );
-                            handleImageError(imageId);
-                          }}
-                          onLoadStart={() => {
-                            // Remove from errors if it starts loading successfully
-                            if (imageErrors.has(imageId)) {
-                              setImageErrors((prev) => {
-                                const next = new Set(prev);
-                                next.delete(imageId);
-                                return next;
-                              });
-                            }
-                          }}
+                          onError={() => handleImageError(imageId)}
                         />
                       ) : (
                         <View
@@ -242,6 +212,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
                         </View>
                       )}
                     </View>
+
                     <Text
                       style={{
                         textAlign: "center",
@@ -251,7 +222,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
                         color: "#333",
                         flexWrap: "wrap",
                         width: Math.min(85, width * 0.15),
-                        lineHeight: 10,
+                        lineHeight: 12,
                       }}
                       numberOfLines={2}
                       ellipsizeMode="tail"
@@ -269,4 +240,5 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
   },
 );
 
+OutletDisplayComponent.displayName = "OutletDisplayComponent";
 export default OutletDisplayComponent;

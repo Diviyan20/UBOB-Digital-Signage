@@ -28,7 +28,6 @@ interface MediaItem {
 const DISPLAY_DURATION = 5000;
 const FADE_DURATION = 400;
 const PREFETCH_BUFFER = 2; //Only Pre-fetches next 2 images instead of all
-const REFRESH_INTERVAL = 25 * 60 * 1000; // 25 minute timer for pulling new media
 
 const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.media }) => {
@@ -172,18 +171,10 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
     useEffect(() => {
       isMounted.current = true;
 
-      fetchMediaList(); // Initial Call to fetch media upon mount
-
-      // Fetch initial data (With timer)
-      const refreshTimer = setInterval(() => {
-        console.log("🔄 Refreshing media list");
-        fetchMediaList();
-      }, REFRESH_INTERVAL);
+      fetchMediaList(); // Only fetch once on mount
 
       return () => {
         isMounted.current = false;
-
-        clearInterval(refreshTimer);
 
         // Cancel any ongoing requests
         if (abortControllerRef.current) {
