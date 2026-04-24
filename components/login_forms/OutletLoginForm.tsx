@@ -92,7 +92,7 @@ const OutletLoginForm: React.FC = () => {
         "Connection Error",
         "Could not connect to server. Please check:\n" +
           "1. Flask server is running\n" +
-          "2. Using correct URL (10.0.2.2:5000 for emulator / https://ubob-digital-signage.onrender.com for APK.)\n" +
+          "2. Using correct URL (10.0.2.2:5000 for emulator /  https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com for APK.)\n" +
           "3. Network connection is active",
       );
     }
