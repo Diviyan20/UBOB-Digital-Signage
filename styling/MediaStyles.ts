@@ -25,6 +25,11 @@ export const MediaStyles = (width: number, height: number) =>
       marginTop: 10,
     },
 
+    video: {
+      width: "100%",
+      height: "100%",
+    },
+
     portraitCard: {
       width:
         width > 1200 ? width * 0.35 : width > 800 ? width * 0.5 : width * 0.75,

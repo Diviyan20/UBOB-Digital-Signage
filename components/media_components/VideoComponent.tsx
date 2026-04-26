@@ -129,7 +129,7 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
       <VideoView
         key={currentIndex}
         player={player}
-        style={styles.image}
+        style={styles.video}
         contentFit="contain"
         nativeControls={false}
       />

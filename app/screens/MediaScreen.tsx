@@ -2,9 +2,10 @@ import { api } from "@/components/api/client";
 import MediaController from "@/components/media_components/MediaController";
 import OutletDisplayComponent from "@/components/media_components/OutletImageComponent";
 import OrderPreparation from "@/components/OrderPreparation";
+import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AppState, StyleSheet, Text, View } from "react-native";
 
 interface OutletInfo {
   order_api_url: string;
@@ -15,9 +16,32 @@ const MediaScreen = () => {
   const { outlet_id } = useLocalSearchParams();
   const [outletInfo, setOutletInfo] = useState<OutletInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const appState = useRef(AppState.currentState);
 
+  // Refresh when app comes to foreground from background
   useEffect(() => {
-    // Only start heartbeat if device is validated and can access media
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextState === "active"
+      ) {
+        setRefreshKey((prev) => prev + 1);
+      }
+      appState.current = nextState;
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // Refresh when screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      setRefreshKey((prev) => prev + 1);
+    }, []),
+  );
+
+  // Only start heartbeat if device is validated and can access media
+  useEffect(() => {
     const sendHeartbeat = async () => {
       try {
         console.log("Sending Heartbeat.");
@@ -40,7 +64,6 @@ const MediaScreen = () => {
 
     const interval = setInterval(sendHeartbeat, 120000); // Send heartbeat every 2 minutes
     sendHeartbeat();
-
     return () => clearInterval(interval);
   }, [outletInfo, outlet_id]);
 
@@ -84,7 +107,7 @@ const MediaScreen = () => {
     <View style={styles.container}>
       <View style={styles.topRow}>
         <View style={styles.leftColumn}>
-          <MediaController />
+          <MediaController key={refreshKey} />
         </View>
         <View style={styles.rightColumn}>
           <OrderPreparation orderTrackingUrl={getOrderTrackingUrl()} />
