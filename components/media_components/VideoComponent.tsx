@@ -126,6 +126,12 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
 
   return (
     <View style={styles.card}>
+      <View style={{
+      width: width > 1200 ? width * 0.35 : width > 800 ? width * 0.5 : width * 0.7,
+      height: height * 0.55,
+      justifyContent: "center",
+      alignItems: "center",
+    }}>
       <VideoView
         key={currentIndex}
         player={player}
@@ -133,6 +139,7 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
         contentFit="contain"
         nativeControls={false}
       />
+      </View>
     </View>
   );
 };
