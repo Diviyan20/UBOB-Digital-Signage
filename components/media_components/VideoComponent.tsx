@@ -127,8 +127,8 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
   return (
     <View style={styles.card}>
       <View style={{
-      width: width > 1200 ? width * 0.35 : width > 800 ? width * 0.5 : width * 0.7,
-      height: height * 0.55,
+      width: width > 1200 ? width * 0.2 : width > 800 ? width * 0.35 : width * 0.6,
+      height: height * 0.6,
       justifyContent: "center",
       alignItems: "center",
     }}>

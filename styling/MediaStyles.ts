@@ -6,7 +6,7 @@ export const MediaStyles = (width: number, height: number) =>
       width:
         width > 1200 ? width * 0.45 : width > 800 ? width * 0.65 : width * 0.9,
       height: height * 0.72,
-      backgroundColor: "#fff",
+      backgroundColor: "#FFFFCC",
       borderRadius: 20,
       padding: width > 800 ? 12 : 6,
       elevation: 8,

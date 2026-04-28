@@ -223,6 +223,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
                         flexWrap: "wrap",
                         width: Math.min(85, width * 0.15),
                         lineHeight: 12,
+                        textTransform: "uppercase",
                       }}
                       numberOfLines={2}
                       ellipsizeMode="tail"

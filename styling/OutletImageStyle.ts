@@ -18,7 +18,7 @@ export const OutletImageStyle = (width: number, height: number) => {
     cardFrame: {
       width: "100%",
       height: "125%",
-      backgroundColor: "#fff",
+      backgroundColor: "#FFFFCC",
       elevation: 8,
       borderWidth: Platform.OS === "android" ? 1 : 0,
       borderColor: "rgba(0,0,0,0.1)",
