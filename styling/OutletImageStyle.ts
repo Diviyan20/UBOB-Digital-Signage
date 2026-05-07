@@ -27,32 +27,27 @@ export const OutletImageStyle = (width: number, height: number) => {
       alignItems: "center",
     },
 
-    marqueeWrapper: {
+    pageContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent: "center",
+      alignItems: "center",
       width: "100%",
       height: "100%",
-      overflow: "hidden",
-    },
-
-    marqueeInner: {
-      flexDirection: "row",
-      alignItems: "center",
-      height: "100%",
-      paddingHorizontal: 12,
     },
 
     imageWrapper: {
       width: imageSize,
       height: imageSize,
       marginHorizontal: 8,
-      marginTop: 8,
+      marginTop: 20,
       borderRadius: borderRadius + borderWidth,
-      backgroundColor: "#fff",
       justifyContent: "center",
       alignItems: "center",
       shadowColor: "#000",
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      elevation: 6,
+      borderWidth: 1,
+      borderColor: "rgba(0,0,0,0.5)",
     },
 
     image: {

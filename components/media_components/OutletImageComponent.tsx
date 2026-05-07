@@ -7,13 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Animated,
-  Easing,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+import { Animated, Text, View, useWindowDimensions } from "react-native";
 import { api } from "../api/client";
 
 interface ImageItem {
@@ -23,7 +17,8 @@ interface ImageItem {
   outlet_id?: string;
 }
 
-const PREFETCH_BUFFER = 5;
+const ITEMS_PER_PAGE = 7 // How many outlets shown at once
+const FLIP_INTERVAL = 10000 // 5 seconds before flipping to the next set
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.outletImages }) => {
@@ -32,50 +27,22 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
 
     const [images, setImages] = useState<ImageItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
+    const [currentPage, setCurrentPage] = useState(0);
     const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-    const scrollX = useRef(new Animated.Value(0)).current;
+    const flipAnim = useRef(new Animated.Value(0)).current;
     const isMounted = useRef(true);
     const abortControllerRef = useRef<AbortController | null>(null);
-    const prefetchCache = useRef<Set<string>>(new Set());
 
-    const ITEM_W = useMemo(
-      () => Math.min(220, Math.round(width * 0.22)),
-      [width],
-    );
-
-    const getImageUrl = useCallback(
-      (path?: string | null, bustCache = false) => {
-        if (!path) return null;
-        if (path.startsWith("http://") || path.startsWith("https://")) {
-          return bustCache ? `${path}?t=${Date.now()}` : path;
-        }
-        // Fallback only for relative paths
-        return bustCache
-          ? `${api.outletImages}${path}?t=${Date.now()}`
-          : `${api.outletImages}${path}`;
-      },
-      [],
-    );
-
-    const smartPrefetchForMarquee = useCallback(() => {
-      if (images.length === 0) return;
-
-      const urlsToPrefetch: string[] = [];
-      for (let i = 0; i < Math.min(PREFETCH_BUFFER, images.length); i++) {
-        const url = getImageUrl(images[i]?.image);
-        if (url && !prefetchCache.current.has(url)) {
-          urlsToPrefetch.push(url);
-          prefetchCache.current.add(url);
-        }
+    // Split images into pages of ITEMS_PER_PAGE
+    const pages = useMemo(() =>{
+      const result: ImageItem[][] = [];
+      for (let i=0; i < images.length; i+= ITEMS_PER_PAGE){
+          result.push(images.slice(i, i + ITEMS_PER_PAGE));
       }
 
-      if (urlsToPrefetch.length > 0) {
-        Promise.all(
-          urlsToPrefetch.map((url) => Image.prefetch(url).catch(() => null)),
-        ).catch(() => null);
-      }
-    }, [images, getImageUrl]);
+      return result;
+    }, [images]);
 
     const fetchOutletImages = useCallback(async () => {
       if (abortControllerRef.current) abortControllerRef.current.abort();
@@ -99,7 +66,6 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
         if (isMounted.current) {
           setImages(items);
           setImageErrors(new Set());
-          prefetchCache.current.clear();
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") return;
@@ -116,42 +82,35 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
 
       return () => {
         isMounted.current = false;
-        scrollX.stopAnimation();
         if (abortControllerRef.current) abortControllerRef.current.abort();
       };
-    }, [fetchOutletImages, scrollX]);
+    }, [fetchOutletImages]);
 
+    // Flip timer — fade out, swap page, fade in
     useEffect(() => {
-      if (images.length > 0) smartPrefetchForMarquee();
-    }, [images, smartPrefetchForMarquee]);
+      if (pages.length <= 1) return;
 
-    useEffect(() => {
-      if (images.length === 0) return;
-
-      const itemWidth = ITEM_W + 8;
-      const originalWidth = images.length * itemWidth;
-      const duration = Math.max(12000, originalWidth * 25);
-
-      const animate = () => {
-        Animated.timing(scrollX, {
-          toValue: -originalWidth,
-          duration,
-          easing: Easing.linear,
+      const interval = setInterval(() => {
+        // Fade Out
+        Animated.timing(flipAnim, {
+          toValue: 0.5,
+          duration: 200,
           useNativeDriver: true,
-        }).start(({ finished }) => {
-          if (finished && isMounted.current) {
-            scrollX.setValue(0);
-            smartPrefetchForMarquee();
-            animate();
-          }
-        });
-      };
+        }).start(() =>{
+          // Swap page at the invisible midpoint
+          setCurrentPage(prev => (prev + 1) % pages.length);
+      
+        // Fade In
+        Animated.timing(flipAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }).start();
+      });
+      }, FLIP_INTERVAL);
 
-      scrollX.setValue(0);
-      animate();
-
-      return () => scrollX.stopAnimation();
-    }, [images.length, ITEM_W, scrollX, smartPrefetchForMarquee]);
+      return () => clearInterval(interval);
+    }, [pages.length, flipAnim]);
 
     const handleImageError = useCallback((imageId: string) => {
       setImageErrors((prev) => {
@@ -161,84 +120,91 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
       });
     }, []);
 
+    const opacity = flipAnim.interpolate({
+      inputRange: [0, 0.5,],
+      outputRange: [1, 0],
+    });
+
+    const scale = flipAnim.interpolate({
+      inputRange: [0, 0.5],
+      outputRange: [1, 0.92],
+    });
+
     if (loading) return <Text>Loading Images...</Text>;
     if (images.length === 0) return <Text>No images available.</Text>;
 
-    const duplicatedImages = [...images, ...images];
+    const currentItems = pages[currentPage] || [];
 
     return (
       <View style={styles.container}>
         <View style={styles.cardFrame}>
-          <View style={styles.marqueeWrapper}>
-            <Animated.View
-              style={[
-                styles.marqueeInner,
-                { transform: [{ translateX: scrollX }] },
-              ]}
-            >
-              {duplicatedImages.map((item, i) => {
-                const imageId = item.id || item.outlet_id || `image-${i}`;
-                const uri = getImageUrl(item.image);
-                const hasError = imageErrors.has(imageId);
+          <Animated.View
+            style={[
+              styles.pageContainer,
+              { opacity, transform: [{ scale }] }
+            ]}
+          >
+            {currentItems.map((item, i) => {
+              const imageId = item.id || item.outlet_id || `image-${i}`;
+              const uri = item.image;
+              const hasError = imageErrors.has(imageId);
 
-                return (
-                  <View
-                    key={`${imageId}-${i}`}
-                    style={{ alignItems: "center", marginHorizontal: 8 }}
+              return (
+                <View
+                  key={imageId}
+                  style={{ alignItems: "center", marginHorizontal: 8 }}
+                >
+                  <Animated.View style={[styles.imageWrapper, {
+                    shadowOpacity: flipAnim.interpolate({
+                      inputRange: [0, 0.5],
+                      outputRange: [0.2, 0],
+                    }),
+                    backgroundColor: flipAnim.interpolate({
+                      inputRange: [0, 0.5],
+                      outputRange: ["#ffffff", "transparent"],
+                    }),
+                  }]}>
+                    {uri && !hasError ? (
+                      <Image
+                        source={{ uri }}
+                        style={styles.image}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        recyclingKey={imageId}
+                        priority="low"
+                        onError={() => handleImageError(imageId)}
+                      />
+                    ) : (
+                      <View style={[styles.image, { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" }]}>
+                        <Text style={styles.placeholder}>No Image</Text>
+                      </View>
+                    )}
+                  </Animated.View>
+
+                  <Text
+                    style={{
+                      textAlign: "center",
+                      marginTop: 6,
+                      fontSize: 11,
+                      fontWeight: "bold",
+                      color: "#333",
+                      width: Math.min(85, width * 0.15),
+                      lineHeight: 12,
+                      textTransform: "uppercase",
+                    }}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
                   >
-                    <View style={styles.imageWrapper}>
-                      {uri && !hasError ? (
-                        <Image
-                          source={{ uri }}
-                          style={styles.image}
-                          contentFit="cover"
-                          transition={200}
-                          cachePolicy="memory-disk"
-                          recyclingKey={imageId}
-                          onError={() => handleImageError(imageId)}
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.image,
-                            {
-                              justifyContent: "center",
-                              alignItems: "center",
-                              backgroundColor: "#f0f0f0",
-                            },
-                          ]}
-                        >
-                          <Text style={styles.placeholder}>No Image</Text>
-                        </View>
-                      )}
-                    </View>
-
-                    <Text
-                      style={{
-                        textAlign: "center",
-                        marginTop: 6,
-                        fontSize: 11,
-                        fontWeight: "bold",
-                        color: "#333",
-                        flexWrap: "wrap",
-                        width: Math.min(85, width * 0.15),
-                        lineHeight: 12,
-                        textTransform: "uppercase",
-                      }}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {item.outlet_name || "Unnamed Outlet"}
-                    </Text>
-                  </View>
-                );
-              })}
-            </Animated.View>
-          </View>
+                    {item.outlet_name || "Unnamed Outlet"}
+                  </Text>
+                </View>
+              );
+            })}
+          </Animated.View>
         </View>
       </View>
     );
-  },
+  }
 );
 
 OutletDisplayComponent.displayName = "OutletDisplayComponent";

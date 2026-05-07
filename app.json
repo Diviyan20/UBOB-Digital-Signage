@@ -2,6 +2,7 @@
   "expo": {
     "name": "Digital-Signage-System",
     "slug": "Digital-Signage-System",
+    "icon": "./components/images/Icon.png",
     "version": "1.0.0",
     "orientation": "landscape",
     "scheme": "digitalsignagesystem",
@@ -12,13 +13,24 @@
     },
     "android": {
       "edgeToEdgeEnabled": true,
+      "icon": "./components/images/Icon.png",
+      "favicon": "./components/images/Logo.png",
+      "adaptiveIcon": {
+        "foregroundImage": "components/images/Icon.png",
+        "backgroundColor": "#ffffff"
+      },
       "predictiveBackGestureEnabled": false,
       "package": "com.diviyan.DigitalSignageSystem"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./components/images/Logo.png"
     },
+    "splash":{
+      "image":"./components/images/Logo.png",
+      "resizeMode":"contain"
+    },
+
     "plugins": [
       "expo-router"
     ],

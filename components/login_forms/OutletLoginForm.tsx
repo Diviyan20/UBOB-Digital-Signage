@@ -1,9 +1,11 @@
 import { OutletLoginStyles as styles } from "@/styling/OutletLoginStyles";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React, { useCallback, useState } from "react";
-import { Alert, Image, Pressable, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Alert, Image, Modal, Pressable, Text, View } from "react-native";
 import { api } from "../api/client";
 import ImagePreloader from "../media_components/ImagePreloader";
+import OutletDropdownComponent from "../OutletDropdownComponent";
 import ErrorOverlayComponent from "../overlays/ErrorOverlayComponent";
 import LoggingInOverlayComponent from "../overlays/LogginInOverlayComponent";
 
@@ -11,6 +13,7 @@ const OutletLoginForm: React.FC = () => {
   const [outlet_id, setOutletId] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [errorVisible, setErrorVisible] = useState(false);
+  const [focusedButton, setFocusedButton] = useState<"yes" | "no" | null>(null);
   const [status, setStatus] = useState<
     | "loading"
     | "fetching_promotions"
@@ -25,6 +28,19 @@ const OutletLoginForm: React.FC = () => {
     loaded: number;
     total: number;
   }>({ loaded: 0, total: 0 });
+
+  const [savedOutlet, setSavedOutlet] = useState<{ id: string; name: string } | null>(null);
+  const [showSavedPrompt, setShowSavedPrompt] = useState(false);
+
+  const handleUseSaved = () => {
+    setShowSavedPrompt(false);
+    setOutletId(savedOutlet!.id);
+  };
+  
+  const handleIgnoreSaved = () => {
+    setShowSavedPrompt(false);
+    setSavedOutlet(null);
+  };
 
   // Regular login - Only validate outlet and show media screen
   const handleLogin = async () => {
@@ -47,6 +63,11 @@ const OutletLoginForm: React.FC = () => {
       if (response.ok && data.is_valid) {
         // Store outlet data for later use
         setOutletData(data);
+
+        await AsyncStorage.setItem(
+          "saved_outlet",
+          JSON.stringify({ id: outlet_id, name: data.outlet_name })
+        );
 
         // Fetch outlet images for preloading
         setStatus("fetching_promotions");
@@ -98,6 +119,22 @@ const OutletLoginForm: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const loadSavedOutlet = async () => {
+      try {
+        const saved = await AsyncStorage.getItem("saved_outlet");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setSavedOutlet(parsed);
+          setShowSavedPrompt(true);
+        }
+      } catch (err) {
+        console.warn("Failed to load saved outlet:", err);
+      }
+    };
+    loadSavedOutlet();
+  }, []);
+
   // Handle all preloaded Images
   const handleImagesPreloaded = useCallback(() => {
     setStatus("success");
@@ -148,15 +185,9 @@ const OutletLoginForm: React.FC = () => {
 
       <View style={styles.card}>
         <Text style={styles.label}>Outlet ID</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter Outlet ID"
-          placeholderTextColor="#BDBDBD"
-          value={outlet_id}
-          onChangeText={setOutletId}
-          keyboardType="numeric"
-          autoCapitalize="none"
-        />
+        <OutletDropdownComponent 
+            onSelect={(id) => setOutletId(id)}
+            prefillId={outlet_id}/>
 
         <Pressable style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>Log In</Text>
@@ -186,6 +217,51 @@ const OutletLoginForm: React.FC = () => {
           onError={handlePreloadingError}
         />
       )}
+      {showSavedPrompt && savedOutlet && (
+  <Modal transparent animationType="fade" visible={showSavedPrompt}>
+    <View style={styles.overlay}>
+      <View style={styles.popupCard}>
+        <Text style={styles.title}>Welcome Back!</Text>
+        <Text style={styles.message}>
+          Continue with saved outlet?
+        </Text>
+        <Text style={styles.outletInfo}>
+          {savedOutlet.id} — {savedOutlet.name}
+        </Text>
+        <View style={styles.buttonRow}>
+          <Pressable
+            style={[
+              styles.button,
+              styles.yesButton,
+              focusedButton === "yes" && styles.yesButtonFocused,
+            ]}
+            onPress={handleUseSaved}
+            onFocus={() => setFocusedButton("yes")}
+            onBlur={() => setFocusedButton(null)}
+            onHoverIn={() => setFocusedButton("yes")}
+            onHoverOut={() => setFocusedButton(null)}
+          >
+            <Text style={styles.yesText}>Yes</Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.button,
+              styles.noButton,
+              focusedButton === "no" && styles.noButtonFocused,
+            ]}
+            onPress={handleIgnoreSaved}
+            onFocus={() => setFocusedButton("no")}
+            onBlur={() => setFocusedButton(null)}
+            onHoverIn={() => setFocusedButton("no")}
+            onHoverOut={() => setFocusedButton(null)}
+          >
+            <Text style={styles.noText}>No</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  </Modal>
+)}
     </View>
   );
 };
