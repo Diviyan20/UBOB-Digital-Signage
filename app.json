@@ -2,7 +2,6 @@
   "expo": {
     "name": "Digital-Signage-System",
     "slug": "Digital-Signage-System",
-    "icon": "./components/images/Icon.png",
     "version": "1.0.0",
     "orientation": "landscape",
     "scheme": "digitalsignagesystem",
@@ -13,7 +12,6 @@
     },
     "android": {
       "edgeToEdgeEnabled": true,
-      "icon": "./components/images/Icon.png",
       "favicon": "./components/images/Logo.png",
       "adaptiveIcon": {
         "foregroundImage": "components/images/Icon.png",
