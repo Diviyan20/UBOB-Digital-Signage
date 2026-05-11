@@ -45,7 +45,6 @@ app-example
 /ios
 /android
 /env
-/assets
 backend/layer-build
 
 # Runtime caches
