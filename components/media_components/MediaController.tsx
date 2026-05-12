@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { api, config } from "../api/client";
 import ImageComponent from "./ImageComponent";
 import VideoComponent, { VideoItem } from "./VideoComponent";
 
 type MediaState = "IMAGES_PLAYING" | "VIDEOS_PLAYING";
-
-const IMAGE_INTERVAL = 3 * 60 * 1000;
 
 const sanitizePresignedUrl = (url: string) =>
   (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
@@ -22,6 +20,7 @@ const MediaController: React.FC = () => {
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES_PLAYING");
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
   const [currentBatch, setCurrentBatch] = useState<VideoItem[]>([]);
+  const [stateInterval, setStateInterval] = useState(180000);
 
   const indexRef = useRef(0);
   const videoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,6 +74,23 @@ const MediaController: React.FC = () => {
     }
   };
 
+  // Fetch State Interval from Config
+  useEffect(() =>{
+    const fetchConfig = async () =>{
+      try{
+        const response = await fetch(config);
+        const data = await response.json();
+
+        setStateInterval(data.config.state_interval);
+      }
+      catch(e){
+        console.error("CONFIG ERROR: ", e);
+      }
+    };
+    
+    fetchConfig();
+  } ,[]);
+
   useEffect(() => {
     fetchVideos();
   }, []);
@@ -105,7 +121,7 @@ const MediaController: React.FC = () => {
       setCurrentBatch(batch);
       console.log("Playing batch:", batch.length);
       setMediaState("VIDEOS_PLAYING");
-    }, IMAGE_INTERVAL);
+    }, stateInterval);
 
     return () => {
       if (videoTimerRef.current) clearTimeout(videoTimerRef.current);

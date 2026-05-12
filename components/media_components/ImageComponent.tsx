@@ -14,7 +14,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { api } from "../api/client";
+import { api, config } from "../api/client";
 import ErrorOverlayComponent from "../overlays/ErrorOverlayComponent";
 
 interface MediaItem {
@@ -25,8 +25,6 @@ interface MediaItem {
   date_end?: string;
 }
 
-const DISPLAY_DURATION = 5000;
-const FADE_DURATION = 400;
 const PREFETCH_BUFFER = 2; //Only Pre-fetches next 2 images instead of all
 
 const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
@@ -38,6 +36,10 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
     const [errorVisible, setErrorVisible] = useState(false);
+
+    // Use fallback values for the intervals in case if Lambda fails
+    const [displayDuration, setDisplayDuration] = useState(5000);
+    const [fadeDuration, setFadeDuration] = useState(400);
 
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -57,6 +59,24 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
       },
       [],
     );
+
+    // Fetch Image Display duration and Fade duration from Config
+    useEffect(() =>{
+      const fetchConfig = async () =>{
+        try{
+          const response = await fetch(config);
+          const data = await response.json();
+
+          setDisplayDuration(data.config.image_display_duration);
+          setFadeDuration(data.config.fade_duration);
+        }
+        catch(e){
+          console.error("CONFIG ERROR: ", e);
+        }
+      };
+      
+      fetchConfig();
+    } ,[]);
 
     /**
      * Optimized fetch function with request cancellation
@@ -145,7 +165,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
 
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: FADE_DURATION,
+        duration: fadeDuration,
         easing: Easing.linear,
         useNativeDriver: true,
       }).start(() => {
@@ -154,7 +174,7 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
 
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: FADE_DURATION,
+          duration: fadeDuration,
           easing: Easing.linear,
           useNativeDriver: true,
         }).start();
@@ -191,14 +211,14 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      const totalInterval = DISPLAY_DURATION + FADE_DURATION * 2;
+      const totalInterval = displayDuration + fadeDuration * 2;
 
       // Start image cycle after DISPLAY_DURATION
       timeoutRef.current = setTimeout(() => {
         advanceOnce();
         // Set up interval for continuous cycling
         intervalRef.current = setInterval(advanceOnce, totalInterval);
-      }, DISPLAY_DURATION);
+      }, displayDuration);
 
       return () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
