@@ -1,18 +1,41 @@
+import json
+import logging
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+import boto3
 import psycopg2
-from dotenv import find_dotenv, load_dotenv
 
-find_dotenv()
-load_dotenv()
-# ENVIRONMET VARIABLES
+# ENVIRONMENT VARIABLES
 DB_NAME = os.getenv("OUTLET_DATABASE")
 DB_USERNAME = os.getenv("DB_USERNAME")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")
 DB_PORT = os.getenv("DB_PORT")
+
+# ================
+# LOGGING SETUP
+# ================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+def get_db_credentials():
+    secret_arn = os.getenv("DB_SECRET_ARN")
+    
+    client = boto3.client("secretsmanager")
+    
+    response = client.get_secret_value(SecretId=secret_arn)
+    secret = json.loads(response["SecretString"])
+    
+    return{
+        "username":secret["username"],
+        "password":secret["password"]
+    }
 
 @contextmanager
 def get_db_connection():
@@ -20,14 +43,15 @@ def get_db_connection():
     - Context manager for database connection
     - Automatically handles connection cleanup
     """
+    creds = get_db_credentials()
     conn = None
     cur = None
     try:
 
         conn = psycopg2.connect(
             database = DB_NAME,
-            user = DB_USERNAME,
-            password = DB_PASSWORD,
+            user = creds["username"],
+            password = creds["password"],
             host = DB_HOSTNAME,
             port = DB_PORT
         )
@@ -130,11 +154,49 @@ def mark_device_offline(outlet_id):
         cur.execute(query,(outlet_id,))
         conn.commit()
 
-def test_connection():
-    with get_db_connection() as (conn, cur):
-        query = "SELECT * FROM active_outlets;"
-        cur.execute(query)
-        data = cur.fetchall()
-        
-        for d in data:
-            print(d)
+def register_outlet(outlet_id:str, outlet_name:str, region_name:str, 
+                    order_api_url:str, order_api_key:str):
+    """
+    Register a new outlet into the Database.
+    
+    Utilizes the 'get_db_connection' function to connect to the database.
+    """
+    try:
+        with get_db_connection() as (conn, cur):
+            now = datetime.now(timezone.utc)
+            
+            # Check if outlet exists (use the 'get_outlet_info()' function)
+            existing = get_outlet_information(outlet_id)
+            
+            if existing:
+                return{
+                    "success": False,
+                    "error": "Outlet already exists"
+                }
+            
+            # Register the outlet if it does not exist
+            query = """
+                    INSERT INTO active_outlets 
+                    (outlet_id, outlet_name, outlet_status, outlet_location, 
+                     active, last_seen, order_api_url, order_api_key)
+                    VALUES (%s, %s, 'offline', %s, %s, %s, %s, %s)
+                    RETURNING *
+                """
+            cur.execute(query, (outlet_id, outlet_name, region_name, now, now, order_api_url, order_api_key))
+                
+            outlet = cur.fetchone()
+            conn.commit()
+                
+            return{
+                "success": True,
+                "outlet_id": outlet[0],
+                "outlet_name": outlet[1],
+                "outlet_status": outlet[2],
+                "outlet_location": outlet[3],
+                "order_api_url": outlet[6],
+                "order_api_key": outlet[7]
+            }
+    
+    except Exception as e:
+        log.error(f"Failed to register outlet: {e}")
+        return {"success": False, "error":str(e)}

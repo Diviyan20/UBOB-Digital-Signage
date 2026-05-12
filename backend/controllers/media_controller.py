@@ -4,30 +4,30 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
 import requests
-from dotenv import load_dotenv
-from flask import abort, send_file
+from flask import Blueprint, abort, jsonify, send_file
 from PIL import Image
 
 # -----------------------------------
 # ENVIRONMENT VARIABLES CONFIGURATION
 # -----------------------------------
-load_dotenv()
 BASE_URL = os.getenv("ODOO_DATABASE_URL")
-API_TOKEN = os.getenv("ODOO_API_TOKEN")
+API_TOKEN = os.getenv("API_TOKEN")
 HEADERS = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
 
-PUBLIC_HOST_URL = os.getenv("PUBLIC_HOST_URL", "http://10.0.2.2:5000")
+PUBLIC_HOST_URL = os.getenv("PUBLIC_HOST_URL")
 
 # -----------------------------
 # CACHE DIRECTORY CONFIGURATION
 # ------------------------------
-BASE_DIR = Path(__file__).resolve().parent
-CACHE_DIR = BASE_DIR / "cache" / "media"
+CACHE_ROOT = Path(os.getenv("CACHE_ROOT", "/tmp/digital-signage-cache"))
+CACHE_DIR = CACHE_ROOT / "media"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_TTL_HOURS = 24
 INDEX_FILE = CACHE_DIR / "index.json"
 
 # -------------
@@ -40,10 +40,41 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
+# ---------
+# BLUEPRINT
+# --------- 
+media_bp = Blueprint("media", __name__)
+
+@media_bp.route("/get_media", methods=["GET"])
+def get_media():
+    index = load_index()
+
+    # Prune expired items on every request
+    expired = prune_expired(index)
+
+    if expired:
+        log.info(f"Removed {len(expired)} expired item(s) from cache.")
+
+
+    # Reload index after pruning
+    media = get_media_json()
+    
+    # If cache is empty, fetch from Odoo once and read again
+    if not media:
+        log.info("Cache empty. Refreshing media from Odoo...")
+        count = fetch_and_cache_media()
+        log.info(f"Fetched and cached {count} media item(s).")
+        media = get_media_json()
+    return jsonify({"media": media}), 200
+
+@media_bp.route("/image/<image_id>")
+def image(image_id):
+    return stream_image(image_id)
+
 # ----------------
 # DATA STRUCTURES
 # ----------------
-
 
 @dataclass
 class MediaItem:
@@ -51,7 +82,6 @@ class MediaItem:
     name: Optional[str]
     description: Optional[str]
     image: str  # URL served by backend
-
 
 # -------
 # HELPERS
@@ -100,6 +130,7 @@ def fetch_and_cache_media() -> int:
                     "name": name,
                     "description": description,
                     "image": f"{image_id}.png",
+                    "cached_at": datetime.now(timezone.utc).isoformat()
                     }
                     
                     count += 1
@@ -124,6 +155,31 @@ def prune_cache(active_ids: set[str], index: dict):
     for key in stale_keys:
         log.info(f"Removing expired media index: {key}")
         index.pop(key, None)
+
+def is_expired(cached_at_str:str) -> bool:
+    try:
+        cached_at = datetime.fromisoformat(cached_at_str)
+        return datetime.now(timezone.utc) - cached_at + timedelta(hours=CACHE_TTL_HOURS)
+    except Exception:
+        return True # If timestamp is missing or malformed, treat as expired
+
+def prune_expired(index: dict) -> dict:
+    expired_ids = [
+        image_id for image_id, data in index.items()
+        if is_expired(data.get("cached_at", ""))
+    ]
+
+    for image_id in expired_ids:
+        log.info(f"Expiring cached media: {image_id}")
+        image_path(image_id).unlink(missing_ok=True)
+        index.pop(image_id, None)
+
+    if expired_ids:
+        save_index(index)
+        log.info(f"Pruned {len(expired_ids)} expired media item(s).")
+
+    return expired_ids
+
 
 def image_path(image_id: str) -> Path:
     return CACHE_DIR / f"{image_id}.png"
@@ -178,10 +234,10 @@ class MediaService:
        
        for image_id, data in index.items():
            items.append({
-               "id": image_id,
-               "name": data.get("name"),
-               "description": data.get("description"),
-               "image": f"{PUBLIC_HOST_URL}/image/{image_id}",
+               "id":image_id,
+               "name":data.get("name"),
+               "description":data.get("description"),
+               "image":f"{PUBLIC_HOST_URL}/image/{image_id}",
            })
         
        return items

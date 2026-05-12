@@ -5,6 +5,20 @@ export default {
     name: 'Digital-Signage-System',
     slug: 'Digital-Signage-System',
     version: '1.0.0',
+    icon:"./assets/icon.png",
+    splash:{
+      "image":"./assets/Splashscreen.png",
+      "resizeMode": "contain",
+    },
+    updates: {
+      "url": "https://u.expo.dev/9a8ee31b-345f-47d4-a806-9ffe6d107fd8",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD",
+      "channel": "production"
+    },
+    runtimeVersion: {
+    "policy": "appVersion"
+  },
     orientation: 'landscape',
     scheme: 'digitalsignagesystem',
     userInterfaceStyle: 'automatic',

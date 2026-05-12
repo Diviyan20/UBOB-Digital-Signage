@@ -45,8 +45,11 @@ app-example
 /ios
 /android
 /env
-/assets
+backend/layer-build
 
 # Runtime caches
 controllers/cache/
 backend/controllers/cache/**
+
+# Encryption/Decryption Tools
+backend/password_hasher.py
