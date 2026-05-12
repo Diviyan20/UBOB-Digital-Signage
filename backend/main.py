@@ -4,6 +4,7 @@ import logging
 from controllers.admin_controller import admin_bp
 from controllers.media_controller import media_bp
 from controllers.outlet_controller import outlet_bp
+from controllers.outlet_image_controller import outlet_image_bp
 from controllers.video_controller import video_bp
 from flask import Flask
 from flask_cors import CORS
@@ -11,22 +12,41 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__, static_folder="static")
 
-CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 app.register_blueprint(admin_bp)
 app.register_blueprint(outlet_bp)
+app.register_blueprint(outlet_image_bp)
 app.register_blueprint(media_bp)
 app.register_blueprint(video_bp)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
 
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "https://d3k3f58khrn48v.cloudfront.net",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+}
+
+
 
 def handler(event, context):
     method = event["requestContext"]["http"]["method"]
     path = event.get("rawPath", "/")
     headers = event.get("headers", {})
+
+    # Handle preflight immediately — don't pass to Flask
+    if method == "OPTIONS":
+        return {
+            "statusCode": 200,
+            "headers": CORS_HEADERS,
+            "body": "",
+            "isBase64Encoded": False
+        }
+
     body = event.get("body", "")
     is_base64 = event.get("isBase64Encoded", False)
 
@@ -48,11 +68,28 @@ def handler(event, context):
             content_type=content_type
         )
 
+        response_headers = dict(response.headers)
+        response_headers.update(CORS_HEADERS)
+
+        raw = response.get_data()
+        resp_ct = response.headers.get("Content-Type", "").lower()
+        is_binary = (
+            resp_ct.startswith("image/")
+            or resp_ct.startswith("application/octet-stream")
+            or resp_ct.startswith("video/")
+        )
+        if is_binary:
+            body = base64.b64encode(raw).decode("utf-8")
+            is_b64 = True
+        else:
+            body = raw.decode("utf-8", errors="replace")
+            is_b64 = False
+
         return {
             "statusCode": response.status_code,
-            "headers": dict(response.headers),
-            "body": response.get_data(as_text=True),
-            "isBase64Encoded": False
+            "headers": response_headers,
+            "body": body,
+            "isBase64Encoded": is_b64
         }
 
 

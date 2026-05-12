@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, make_response, request
 from models.active_outlets import register_outlet
 from models.admin_credentials import retrieve_credentials
 from utils.auth import generate_admin_token
+from utils.decorators import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -28,17 +29,17 @@ def admin_login():
 
     token = generate_admin_token(admin_id="1")
 
-    response = make_response(jsonify({"message": "Login Successful"}))
+    return jsonify({"message": "Login Successful", "token": token}), 200
 
-    response.set_cookie(
-        "admin_token",
-        token,
-        httponly=True,
-        secure=True,
-        samesite="None",
-        max_age=1800
-    )
+@admin_bp.route("/check-auth", methods=["GET"])
+@admin_required
+def check_auth():
+    return jsonify({"authenticated": True})
 
+@admin_bp.route("/logout", methods=["POST"])
+def admin_logout():
+    response = make_response(jsonify({"message": "Logged out"}))
+    response.delete_cookie("admin_token")
     return response
 
 @admin_bp.route("/register_outlet", methods=["POST"])

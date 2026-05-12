@@ -17,6 +17,19 @@ def validate_outlet_route():
 
     return jsonify({"is_valid": False}), 404
 
+@outlet_bp.route("/api/outlets", methods=["GET"])
+def get_all_outlets():
+    outlets = fetch_all_outlet_data()
+    
+    if outlets:
+        
+        return jsonify({"outlets": outlets}), 200
+    else:
+        return jsonify({
+            "success": False,
+            "error": "API did not call successfully"
+        }), 405
+
 
 @outlet_bp.route("/outlet_info/<outlet_id>", methods=["GET"])
 def outlet_info(outlet_id):
