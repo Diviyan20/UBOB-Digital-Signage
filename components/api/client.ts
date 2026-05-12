@@ -10,3 +10,5 @@ export const api = {
   outletImages: `${SERVER_URL}/outlet_image_combined`,
   videos: `${SERVER_URL}/videos`,
 };
+
+export const config = `${SERVER_URL}/config`;

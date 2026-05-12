@@ -5,6 +5,7 @@ from controllers.admin_controller import admin_bp
 from controllers.media_controller import media_bp
 from controllers.outlet_controller import outlet_bp
 from controllers.outlet_image_controller import outlet_image_bp
+from controllers.system_config_controller import system_config_bp
 from controllers.video_controller import video_bp
 from flask import Flask
 from flask_cors import CORS
@@ -20,6 +21,7 @@ app.register_blueprint(outlet_bp)
 app.register_blueprint(outlet_image_bp)
 app.register_blueprint(media_bp)
 app.register_blueprint(video_bp)
+app.register_blueprint(system_config_bp)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S")
 log = logging.getLogger(__name__)
@@ -30,8 +32,6 @@ CORS_HEADERS = {
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
 }
-
-
 
 def handler(event, context):
     method = event["requestContext"]["http"]["method"]

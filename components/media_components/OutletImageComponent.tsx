@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import { Animated, Text, View, useWindowDimensions } from "react-native";
-import { api } from "../api/client";
+import { api, config } from "../api/client";
 
 interface ImageItem {
   id?: string;
@@ -17,8 +17,7 @@ interface ImageItem {
   outlet_id?: string;
 }
 
-const ITEMS_PER_PAGE = 7 // How many outlets shown at once
-const FLIP_INTERVAL = 10000 // 5 seconds before flipping to the next set
+const ITEMS_PER_PAGE = 7; // How many outlets shown at once
 
 const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.outletImages }) => {
@@ -29,6 +28,8 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
     const [loading, setLoading] = useState<boolean>(true);
     const [currentPage, setCurrentPage] = useState(0);
     const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+    const [flipInterval, setFlipInterval] = useState(5000);
+    const [fadeDuration, setFadeDuration] = useState(400);
 
     const flipAnim = useRef(new Animated.Value(0)).current;
     const isMounted = useRef(true);
@@ -86,6 +87,24 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
       };
     }, [fetchOutletImages]);
 
+    // Fetch Image Flip interval and Fade duration from Config
+    useEffect(() =>{
+      const fetchConfig = async () =>{
+        try{
+          const response = await fetch(config);
+          const data = await response.json();
+
+          setFlipInterval(data.config.outlet_image_flip_interval);
+          setFadeDuration(data.config.fade_duration);
+        }
+        catch(e){
+          console.error("CONFIG ERROR: ", e);
+        }
+      };
+      
+      fetchConfig();
+    } ,[]);
+
     // Flip timer — fade out, swap page, fade in
     useEffect(() => {
       if (pages.length <= 1) return;
@@ -94,7 +113,7 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
         // Fade Out
         Animated.timing(flipAnim, {
           toValue: 0.5,
-          duration: 200,
+          duration: fadeDuration,
           useNativeDriver: true,
         }).start(() =>{
           // Swap page at the invisible midpoint
@@ -103,11 +122,11 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
         // Fade In
         Animated.timing(flipAnim, {
           toValue: 0,
-          duration: 200,
+          duration: fadeDuration,
           useNativeDriver: true,
         }).start();
       });
-      }, FLIP_INTERVAL);
+      }, flipInterval);
 
       return () => clearInterval(interval);
     }, [pages.length, flipAnim]);
