@@ -7,7 +7,7 @@ interface OrderPreparationProps{
     orderTrackingUrl?: string;
 }
 
-const OrderPreparation: React.FC<OrderPreparationProps> = ({orderTrackingUrl}) =>{
+export const OrderPreparation: React.FC<OrderPreparationProps> = ({orderTrackingUrl}) =>{
     // Use dynamic URL, otherwise fallback to hardcoded version
     const EXPO_PUBLIC_ORDER_TRACKING_BASE_URL = orderTrackingUrl || Constants.expoConfig?.extra?.EXPO_PUBLIC_ORDER_TRACKING_BASE_URL;
     
@@ -44,5 +44,3 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 });
-
-export default OrderPreparation;

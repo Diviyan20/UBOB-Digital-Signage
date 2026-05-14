@@ -1,13 +1,13 @@
-import { ErrorOverlayStyle as styles } from "@/styling/ErrorOverlayStyle";
+import { ErrorOverlayStyle as styles } from "@/styling/OverlayStyles";
 import { Overlay } from "@rneui/themed";
 import React, { useEffect, useRef } from "react";
 import {
+  AccessibilityInfo,
+  Platform,
   Pressable,
   Text,
-  findNodeHandle,
-  AccessibilityInfo,
   View,
-  Platform,
+  findNodeHandle,
 } from "react-native";
 
 interface ErrorOverlayProps {
@@ -16,7 +16,7 @@ interface ErrorOverlayProps {
   onRetry: () => void;
 }
 
-const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
+export const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
   errorType,
   visible,
   onRetry,
@@ -106,5 +106,3 @@ const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
       return null;
   }
 };
-
-export default ErrorOverlayComponent;

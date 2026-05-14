@@ -1,4 +1,4 @@
-import { MediaStyles } from "@/styling/MediaStyles";
+import { ImageStyles } from "@/styling/MediaStyles";
 import { Image } from "expo-image";
 import React, {
   useCallback,
@@ -15,7 +15,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { api, config } from "../api/client";
-import ErrorOverlayComponent from "../overlays/ErrorOverlayComponent";
+import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
 
 interface MediaItem {
   name?: string;
@@ -27,10 +27,10 @@ interface MediaItem {
 
 const PREFETCH_BUFFER = 2; //Only Pre-fetches next 2 images instead of all
 
-const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
+export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.media }) => {
     const { width, height } = useWindowDimensions();
-    const styles = MediaStyles(width, height);
+    const styles = ImageStyles(width, height);
 
     const [mediaList, setMediaList] = useState<MediaItem[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -288,7 +288,3 @@ const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
     );
   },
 );
-
-ImageComponent.displayName = "ImageComponent"; // For debugging
-
-export default ImageComponent;

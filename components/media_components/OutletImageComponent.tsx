@@ -19,7 +19,7 @@ interface ImageItem {
 
 const ITEMS_PER_PAGE = 7; // How many outlets shown at once
 
-const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
+export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.outletImages }) => {
     const { width, height } = useWindowDimensions();
     const styles = OutletImageStyle(width, height);
@@ -225,6 +225,3 @@ const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
     );
   }
 );
-
-OutletDisplayComponent.displayName = "OutletDisplayComponent";
-export default OutletDisplayComponent;
