@@ -1,4 +1,4 @@
-import { MediaStyles } from "@/styling/MediaStyles";
+import { VideoStyles } from "@/styling/MediaStyles";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -16,12 +16,12 @@ interface VideoComponentProps {
 const sanitizePresignedUrl = (url?: string) =>
   (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
 
-const VideoComponent: React.FC<VideoComponentProps> = ({
+export const VideoComponent: React.FC<VideoComponentProps> = ({
   videos,
   onAllVideosFinished,
 }) => {
   const { width, height } = useWindowDimensions();
-  const styles = MediaStyles(width, height);
+  const styles = VideoStyles(width, height);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const currentIndexRef = useRef(0);
@@ -143,5 +143,3 @@ const VideoComponent: React.FC<VideoComponentProps> = ({
     </View>
   );
 };
-
-export default VideoComponent;

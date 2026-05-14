@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, config } from "../api/client";
-import ImageComponent from "./ImageComponent";
-import VideoComponent, { VideoItem } from "./VideoComponent";
+import { ImageComponent } from "./ImageComponent";
+import { VideoComponent, VideoItem } from "./VideoComponent";
 
 type MediaState = "IMAGES_PLAYING" | "VIDEOS_PLAYING";
 
@@ -16,7 +16,7 @@ const normalizeVideos = (items: VideoItem[]): VideoItem[] =>
     }))
     .filter((v) => v.videoURI.startsWith("https://"));
 
-const MediaController: React.FC = () => {
+export const MediaController: React.FC = () => {
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES_PLAYING");
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
   const [currentBatch, setCurrentBatch] = useState<VideoItem[]>([]);
@@ -145,5 +145,3 @@ const MediaController: React.FC = () => {
     </>
   );
 };
-
-export default MediaController;

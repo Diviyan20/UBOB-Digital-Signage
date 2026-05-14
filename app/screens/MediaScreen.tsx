@@ -1,11 +1,12 @@
 import { api } from "@/components/api/client";
-import MediaController from "@/components/media_components/MediaController";
-import OutletDisplayComponent from "@/components/media_components/OutletImageComponent";
-import OrderPreparation from "@/components/OrderPreparation";
+import { MediaController } from "@/components/media_components/MediaController";
+import { OutletDisplayComponent } from "@/components/media_components/OutletImageComponent";
+import { OrderPreparation } from "@/components/OrderPreparation";
+import { MediaScreenStyle as styles } from "@/styling/MediaStyles";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, Text, View } from "react-native";
 
 interface OutletInfo {
   order_api_url: string;
@@ -119,48 +120,4 @@ const MediaScreen = () => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F2F0EF",
-    padding: 10,
-  },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#666",
-  },
-  errorText: {
-    fontSize: 16,
-    color: "#ff4444",
-    textAlign: "center",
-  },
-  topRow: {
-    flex: 3,
-    flexDirection: "row",
-    gap: 10,
-  },
-  leftColumn: {
-    flex: 1,
-    borderRadius: 20,
-    overflow: "hidden",
-  },
-  rightColumn: {
-    flex: 2,
-    borderRadius: 10,
-    overflow: "hidden",
-  },
-  bottomRow: {
-    flex: 1,
-    marginTop: 10,
-    borderRadius: 20,
-    overflow: "hidden",
-  },
-});
-
 export default MediaScreen;
