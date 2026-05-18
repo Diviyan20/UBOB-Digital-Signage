@@ -1,17 +1,5 @@
-import logging
-
 from flask import Blueprint, jsonify
 from models.system_config_model import get_system_config
-
-# ================
-# LOGGING SETUP
-# ================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger(__name__)
 
 system_config_bp = Blueprint(
     "system_config_bp",
@@ -36,9 +24,7 @@ def fetch_system_config():
             }), 200
     
     except Exception as e:
-        log.info(f"SYSTEM CONFIG ERROR: {e}")
-        
         return jsonify({
             "success": False,
-            "message": "Failed to fetch system configuration"
+            "message": str(e)
         }), 500
