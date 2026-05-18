@@ -16,7 +16,7 @@ interface ImagePreloaderProps {
   onError?: (error: string) => void;
 }
 
-const ImagePreloader: React.FC<ImagePreloaderProps> = ({
+export const ImagePreloader: React.FC<ImagePreloaderProps> = ({
   images,
   onAllImagesLoaded,
   onProgress,
@@ -108,5 +108,3 @@ const ImagePreloader: React.FC<ImagePreloaderProps> = ({
   // Don't render anything visible - this is just for preloading
   return null;
 };
-
-export default ImagePreloader;

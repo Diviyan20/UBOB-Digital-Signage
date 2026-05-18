@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -13,16 +12,6 @@ DB_USERNAME = os.getenv("DB_USERNAME")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")
 DB_PORT = os.getenv("DB_PORT")
-
-# ================
-# LOGGING SETUP
-# ================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger(__name__)
 
 def get_db_credentials():
     secret_arn = os.getenv("DB_SECRET_ARN")
@@ -198,5 +187,4 @@ def register_outlet(outlet_id:str, outlet_name:str, region_name:str,
             }
     
     except Exception as e:
-        log.error(f"Failed to register outlet: {e}")
         return {"success": False, "error":str(e)}

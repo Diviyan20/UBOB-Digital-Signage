@@ -1,12 +1,12 @@
 import { dropdownStyles as styles } from "@/styling/DropdownStyle";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Pressable,
-    Text,
-    TextInput,
-    View
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Text,
+  TextInput,
+  View
 } from "react-native";
 import { api } from "./api/client";
 
@@ -21,7 +21,7 @@ interface OutletDropdownProps {
   prefillId?: string;
 }
 
-const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelect, prefillId }) => {
+export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelect, prefillId }) => {
   const [search, setSearch] = useState("");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [filtered, setFiltered] = useState<Outlet[]>([]);
@@ -145,5 +145,3 @@ const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelect, pref
     </View>
   );
 };
-
-export default OutletDropdownComponent;
