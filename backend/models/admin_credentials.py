@@ -1,11 +1,11 @@
 import json
-import logging
 import os
 from contextlib import contextmanager
 
 import bcrypt
 import boto3
 import psycopg2
+from flask import jsonify
 
 # ENVIRONMENT VARIABLES
 OUTLET_DATABASE = os.getenv("OUTLET_DATABASE")
@@ -13,16 +13,6 @@ DB_USERNAME = os.getenv("DB_USERNAME")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")
 DB_PORT = os.getenv("DB_PORT")
-
-# ================
-# LOGGING SETUP
-# ================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger(__name__)
 
 def get_db_credentials():
     secret_arn = os.getenv("DB_SECRET_ARN")
@@ -58,11 +48,13 @@ def get_db_connection():
     
     # Error handling for Connection Error
     except psycopg2.Error as e:
-        log.error(f"Database connection Error: {e}")
         if conn:
             conn.rollback()
-        raise
-
+        return jsonify({
+            "error": "Database connection error",
+            "message": str(e)
+        })
+        
     finally:
         if cur:
             cur.close()
@@ -88,4 +80,7 @@ def retrieve_credentials(email, password):
                 return None  # Wrong password
             
     except psycopg2.Error as e:
-        log.error(f"Database Error: {e}")
+        return jsonify({
+            "error": "Database Error",
+            "message": str(e)
+        })
