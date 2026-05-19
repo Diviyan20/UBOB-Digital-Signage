@@ -168,6 +168,37 @@ export const OutletLoginStyles = StyleSheet.create({
     color: "#333",
     fontWeight: "600",
     fontSize: 15,
+  },
+
+  toggleRow:{
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  
+  toggleButton:{
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    alignItems: "center",
+  },
+
+  toggleButtonActive:{
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
+  },
+
+  toggleText:{
+    color: "#555",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
+  toggleTextActive:{
+    color: "#fff",
   }
   
 });

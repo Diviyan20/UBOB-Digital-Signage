@@ -1,144 +1,163 @@
+import { fetchVideos, VideoItem } from "@/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
-export interface VideoItem {
-  videoURI: string;
-  rotate?: boolean;
-}
-
-interface VideoComponentProps {
-  videos: VideoItem[];
+interface Props {
   onAllVideosFinished: () => void;
 }
 
-const sanitizePresignedUrl = (url?: string) =>
-  (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
-
-export const VideoComponent: React.FC<VideoComponentProps> = ({
-  videos,
+export const VideoComponent = ({
   onAllVideosFinished,
-}) => {
+}: Props) => {
+
   const { width, height } = useWindowDimensions();
   const styles = VideoStyles(width, height);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const currentIndexRef = useRef(0);
+  const [videos, setVideos] = useState<VideoItem[]>([]); // All fetched videos
+  const [currentIndex, setCurrentIndex] = useState(0); // Current playing video index
+
+  // Ref so effects always read the latest list without stale closures
+  const videosRef = useRef<VideoItem[]>([]);
   const isMounted = useRef(true);
 
-  const currentVideo = videos?.[currentIndex];
-  const safeUri = sanitizePresignedUrl(currentVideo?.videoURI);
+  const currentVideo = videos[currentIndex]; //Current video object
+
+  /**
+    * Video player
+   */
+  const player = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
 
   useEffect(() => {
-    if (!safeUri) return;
+    isMounted.current = true;
+    return () => { isMounted.current = false };
+  }, []);
 
-    fetch(safeUri, { method: "HEAD" })
-      .then((res) => {
-        console.log("VIDEO HEAD STATUS:", res.status);
-        console.log("HEADERS:", Object.fromEntries(res.headers.entries()));
-      })
-      .catch((err) => {
-        console.error("HEAD REQUEST FAILED:", err);
-      });
-  }, [safeUri]);
+  /**
+   * Fetch videos on mount
+  */
+  useEffect(() => {
+    const loadVideos = async () => {
+      const fetchedVideos = await fetchVideos();
 
-  const player = useVideoPlayer(safeUri, (player) => {
-    console.log("Loading video:", safeUri);
-    player.loop = false;
-    player.staysActiveInBackground = true;
+      if (!isMounted.current) return;
 
-    player.addListener("statusChange", (status) => {
-      console.log("PLAYER STATUS:", status);
+      videosRef.current = fetchedVideos;
+      setVideos(fetchedVideos);
+    };
+
+    loadVideos();
+  }, []);
+
+  /**
+ * Load current video into player when videos load or index changes
+ */
+  useEffect(() => {
+    if (videosRef.current.length === 0) return;
+
+    const url = videosRef.current[currentIndex]?.videoURI;
+    if (!url) return;
+
+    const load = async () => {
+      try {
+        await player.replaceAsync(url);
+        player.play();
+      } catch (err) {
+        console.error("Failed to load video:", err);
+      }
+    };
+
+    load();
+  }, [currentIndex, videos]); // fires when videos first load, and on every index change
+
+  /**
+   * Move to next video
+   */
+  const playNextVideo = useCallback(() => {
+    if (!isMounted.current) return;
+
+    const nextIndex = currentIndex + 1;
+    /**
+      * Playlist finished
+    */
+    if (nextIndex >= videosRef.current.length) {
+      onAllVideosFinished();
+      return;
+    }
+
+    setCurrentIndex(nextIndex);
+
+  }, [currentIndex, videos, onAllVideosFinished]);
+
+  /**
+   * Listen for video completion
+   */
+  useEffect(() => {
+    if (!player) return;
+
+    const subscription = player.addListener("playToEnd", playNextVideo);
+
+    return () => { subscription.remove() };
+  }, [player, playNextVideo]);
+
+  /*
+    * Listen for playback errors
+  */
+  useEffect(() => {
+    const subscription = player.addListener("statusChange", (status) => {
       if (status.error) {
         console.error("VIDEO ERROR:", status.error);
       }
     });
-
-    player.play();
-  });
-
-  useEffect(() => {
-    currentIndexRef.current = currentIndex;
-  }, [currentIndex]);
-
-  const handleVideoEnd = useCallback(() => {
-    if (!isMounted.current || !videos?.length) return;
-
-    const nextIndex = currentIndexRef.current + 1;
-
-    if (nextIndex >= videos.length) {
-      setCurrentIndex(0);
-      currentIndexRef.current = 0;
-      onAllVideosFinished();
-    } else {
-      setCurrentIndex(nextIndex);
-      currentIndexRef.current = nextIndex;
-    }
-  }, [videos, onAllVideosFinished]);
-
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!player) return;
-
-    const subscription = player.addListener("playToEnd", handleVideoEnd);
     return () => subscription.remove();
-  }, [player, handleVideoEnd]);
+  }, [player])
 
-  if (!currentVideo) {
+  /**
+   * Loading state
+   */
+  if (!videos.length) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text>No videos available</Text>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text>
+          No videos available
+        </Text>
       </View>
     );
   }
 
-  if (!safeUri) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text>Invalid video URL</Text>
-      </View>
-    );
-  }
-
-  if (currentVideo.rotate) {
+  if (currentVideo?.rotate) {
     return (
       <View style={styles.portraitCard}>
-        <VideoView
-          key={currentIndex}
-          player={player}
-          style={{
-            ...styles.portraitVideo,
-            transform: [{ rotate: "180deg" }],
-          }}
-          contentFit="cover"
-          nativeControls={false}
-        />
+        <View style={styles.videoContainer}>
+          <VideoView
+            player={player}
+            style={styles.portraitVideo}
+            contentFit="contain"
+            nativeControls={false}
+          />
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.card}>
-      <View style={{
-      width: width > 1200 ? width * 0.2 : width > 800 ? width * 0.35 : width * 0.6,
-      height: height * 0.6,
-      justifyContent: "center",
-      alignItems: "center",
-    }}>
-      <VideoView
-        key={currentIndex}
-        player={player}
-        style={styles.video}
-        contentFit="contain"
-        nativeControls={false}
-      />
+    <View style={styles.landscapeCard}>
+      <View style={styles.videoContainer}>
+        <VideoView
+          player={player}
+          style={styles.video}
+          contentFit="contain"
+          nativeControls={false}
+        />
       </View>
     </View>
   );

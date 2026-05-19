@@ -28,7 +28,7 @@ interface MediaItem {
 const PREFETCH_BUFFER = 2; //Only Pre-fetches next 2 images instead of all
 
 export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
-  ({ endpoint = api.media }) => {
+  ({ endpoint = api.promotions }) => {
     const { width, height } = useWindowDimensions();
     const styles = ImageStyles(width, height);
 

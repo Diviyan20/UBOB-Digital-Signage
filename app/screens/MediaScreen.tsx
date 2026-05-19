@@ -77,9 +77,12 @@ const MediaScreen = () => {
         if (!response.ok) {
           throw new Error(data.error || "Failed to fetch outlet info");
         }
-        setOutletInfo(data);
-      } catch (err: any) {
-        setError(err.messsage);
+
+        setOutletInfo(data.outlet);
+      } 
+      
+      catch (err: any) {
+        setError(err.message);
       }
     };
     if (outlet_id) {
@@ -88,11 +91,10 @@ const MediaScreen = () => {
   }, [outlet_id]);
 
   const getOrderTrackingUrl = (): string | undefined => {
-    if (!outletInfo?.order_api_url && !outletInfo?.order_api_key) {
+    if (!outletInfo?.order_api_url || !outletInfo?.order_api_key) {
       return undefined;
-    } else {
-      return `${outletInfo.order_api_url}?access_token=${outletInfo.order_api_key}`;
-    }
+    } 
+    return `${outletInfo.order_api_url}?access_token=${outletInfo.order_api_key}`;
   };
 
   if (error) {
