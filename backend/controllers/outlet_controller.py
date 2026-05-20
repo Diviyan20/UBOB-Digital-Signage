@@ -128,7 +128,7 @@ def heartbeat():
 # =====================
 # GET MIXED MEDIA
 # =====================
-@outlet_bp.route("/get_mixed_mdeia", methods=["POST"])
+@outlet_bp.route("/get_mixed_media", methods=["POST"])
 def get_mixed_media():
     """
     Fetches BOTH images and videos from S3

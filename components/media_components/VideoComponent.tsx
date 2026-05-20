@@ -42,11 +42,16 @@ export const VideoComponent = ({
   useEffect(() => {
     const loadVideos = async () => {
       const fetchedVideos = await fetchVideos();
+      console.log("Fetched before slice:", fetchedVideos.length);
 
       if (!isMounted.current) return;
 
-      videosRef.current = fetchedVideos;
-      setVideos(fetchedVideos);
+      const shuffled = [...fetchedVideos].sort(() => Math.random() - 0.5); // Shuffle videos randomly
+
+      const selectedVideos = shuffled.slice(0, 2); // Take only 2 videos
+
+      videosRef.current = selectedVideos;
+      setVideos(selectedVideos);
     };
 
     loadVideos();

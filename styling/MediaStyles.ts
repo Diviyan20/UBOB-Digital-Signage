@@ -13,38 +13,32 @@ export const ImageStyles = (width: number, height: number) =>
       borderWidth: Platform.OS === "android" ? 1 : 0,
       borderColor: "#fff",
       alignSelf: "center",
-      justifyContent: "center",
+      justifyContent: "flex-start",
       alignItems: "center",
       overflow: "hidden",
     },
 
     image: {
       width: "100%",
-      flex: 1,
+      height: height * 0.52,
     },
 
     textContainer: {
-      width: "100%",
+      width: "50%",
       alignItems: "center",
       paddingHorizontal: width > 600 ? 16 : 8,
+      paddingTop: 30,
       paddingBottom: 10,
-    },
-
-    title: {
+  },
+  
+  title: {
       fontSize: width > 1200 ? 26 : width > 600 ? 15 : 16,
       fontWeight: "700",
       color: "#111",
       textAlign: "center",
       marginBottom: 6,
-    },
-
-    description: {
-      fontSize: width > 1200 ? 18 : width > 600 ? 12 : 13,
-      color: "#444",
-      textAlign: "center",
-      lineHeight: width > 800 ? 10 : 16,
-    },
-
+  },
+  
     placeholderText: {
       textAlign: "center",
       color: "#888",

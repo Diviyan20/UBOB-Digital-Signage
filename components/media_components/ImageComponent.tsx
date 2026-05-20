@@ -278,11 +278,6 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
 
         <View style={styles.textContainer}>
           <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
-          {currentMedia.description ? (
-            <Text style={styles.description} numberOfLines={3}>
-              {currentMedia.description}
-            </Text>
-          ) : null}
         </View>
       </Animated.View>
     );

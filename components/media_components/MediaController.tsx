@@ -9,77 +9,68 @@ type MediaState =
   | "IMAGES"
   | "VIDEOS";
 
-  export const MediaController = () =>{
-    /*
-      * Controls current screen mode
-   */
-    const [mediaState, setMediaState] = useState<MediaState>("IMAGES");
+export const MediaController = () => {
 
-    /*
-      * How long images show before videos start
-   */
-    const [stateInterval, setStateInterval] = useState(100); // Used as a fallback if config fails
+  const [mediaState, setMediaState] = useState<MediaState>("IMAGES"); // Controls current screen mode
 
-    /*
-      * Fetch interval config from backend
-   */
-    useEffect(() =>{
-      const fetchConfig = async () =>{
-        try{
-          const response = await fetch(config);
+  /*
+    * How long images show before videos start
+ */
+  const [stateInterval, setStateInterval] = useState(180000); // Used as a fallback if config fails
 
-          const data = await response.json();
-          
-          setStateInterval(
-            data.config.state_interval
-          );
-        } 
+  /*
+    * Fetch interval config from backend
+ */
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch(config);
+        const data = await response.json();
 
-        catch(error){
-          console.error("CONFIG ERROR: ", error);
-        }
-      };
-
-      fetchConfig();
-    }, []);
-
-    /*
-      * Switch from images -> videos
-   */
-
-    useEffect(() =>{
-      if(mediaState !== "IMAGES"){
-        return;
+        setStateInterval(data.config.state_interval);
       }
-
-      const timer = setTimeout(() =>{
-        setMediaState("VIDEOS");
-      }, stateInterval);
-
-      return () => clearTimeout(timer);
-
-    }, [mediaState, stateInterval]);
-
-    /*
-      * Called after all videos finish
-   */
-
-    const handleVideosFinished = () =>{
-      setMediaState("IMAGES");
+      catch (error) {
+        console.error("CONFIG ERROR: ", error);
+      }
     };
+    fetchConfig();
+  }, []);
 
-    return (
-      <>
-        {mediaState === "IMAGES" && (
-          <ImageComponent />
-        )}
-  
-        {mediaState === "VIDEOS" && (
-          <VideoComponent
-            onAllVideosFinished={handleVideosFinished}
-          />
-        )}
-      </>
-    );
+  /*
+    * Switch from images -> videos
+ */
 
-  }
+  useEffect(() => {
+    if (mediaState !== "IMAGES") {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setMediaState("VIDEOS");
+    }, stateInterval);
+
+    return () => clearTimeout(timer);
+  }, [mediaState, stateInterval]);
+
+  /*
+    Called after all videos finish
+ */
+  const handleVideosFinished = () => {
+    setMediaState("IMAGES");
+  };
+
+  return (
+    <>
+      {mediaState === "IMAGES" && (
+        <ImageComponent />
+      )}
+
+      {mediaState === "VIDEOS" && (
+        <VideoComponent
+          onAllVideosFinished={handleVideosFinished}
+        />
+      )}
+    </>
+  );
+
+}

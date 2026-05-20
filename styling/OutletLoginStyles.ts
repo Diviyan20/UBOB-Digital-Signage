@@ -9,8 +9,8 @@ export const OutletLoginStyles = StyleSheet.create({
     paddingHorizontal: 24,
   },
 
-  imageContainer:{
-    width: "35%", 
+  imageContainer: {
+    width: "35%",
     height: "35%",
     resizeMode: "contain",
   },
@@ -66,8 +66,8 @@ export const OutletLoginStyles = StyleSheet.create({
     marginTop: 10,
   },
 
-  adminButton:{
-    backgroundColor:"#01579B",
+  adminButton: {
+    backgroundColor: "#01579B",
     borderRadius: 8,
     width: "100%",
     alignItems: "center",
@@ -81,7 +81,7 @@ export const OutletLoginStyles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  adminButtonText:{
+  adminButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
@@ -93,7 +93,7 @@ export const OutletLoginStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  
+
   popupCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
@@ -170,35 +170,60 @@ export const OutletLoginStyles = StyleSheet.create({
     fontSize: 15,
   },
 
-  toggleRow:{
+  toggleRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
     marginBottom: 16,
+    width: "100%",
   },
-  
-  toggleButton:{
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+
+  toggleButton: {
+    minWidth: 120,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#ccc",
     alignItems: "center",
+    justifyContent: "center",
   },
 
-  toggleButtonActive:{
+  toggleButtonActive: {
     backgroundColor: "#2563EB",
     borderColor: "#2563EB",
   },
 
-  toggleText:{
+  toggleText: {
     color: "#555",
     fontSize: 13,
     fontWeight: "500",
   },
 
-  toggleTextActive:{
+  toggleTextActive: {
     color: "#fff",
-  }
-  
+  },
+
+  focusedButton: {
+    borderColor: "#FFD700",
+    borderWidth: 3,
+    transform: [{ scale: 1.03 }],
+  },
+
+  focusedInputContainer: {
+    width: "100%",
+    borderRadius: 10,
+    borderWidth: 3,
+    borderColor: "#FFD700",
+  },
+
+  disabledButton: {
+    backgroundColor: "#555",
+    opacity: 0.5,
+  },
+
+  disabledText: {
+    color: "#999",
+  },
+
 });
