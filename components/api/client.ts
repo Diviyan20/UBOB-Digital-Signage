@@ -6,9 +6,10 @@ export const api = {
   outletInfo: (outletId: string) => `${SERVER_URL}/outlet_info/${outletId}`,
   outletData: `${SERVER_URL}/api/outlets`,
   heartbeat: `${SERVER_URL}/heartbeat`,
-  media: `${SERVER_URL}/get_media`,
+  promotions: `${SERVER_URL}/get_media`,
   outletImages: `${SERVER_URL}/outlet_image_combined`,
   videos: `${SERVER_URL}/videos`,
+  mixedMedia: `${SERVER_URL}/get_mixed_media`
 };
 
 export const config = `${SERVER_URL}/config`;

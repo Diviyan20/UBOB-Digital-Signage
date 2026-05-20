@@ -10,12 +10,12 @@ Handles:
 import os
 
 import boto3
-from controllers.outlet_service import fetch_all_outlet_data
 from flask import Blueprint, jsonify, request
 from models.active_outlets import (
     get_outlet_information,
     update_heartbeat_status,
 )
+from services.outlet_service import fetch_all_outlet_data
 
 # ===================
 # CREATE BLUEPRINT
@@ -128,7 +128,7 @@ def heartbeat():
 # =====================
 # GET MIXED MEDIA
 # =====================
-@outlet_bp.route("/get_mixed_mdeia", methods=["POST"])
+@outlet_bp.route("/get_mixed_media", methods=["POST"])
 def get_mixed_media():
     """
     Fetches BOTH images and videos from S3
@@ -171,7 +171,7 @@ def get_mixed_media():
     
     # Connect to S3
     try:
-        s3 = boto3.client("s3", region="ap-southeast-5")
+        s3 = boto3.client("s3", region="ap-southeast-5", endpoint_url="https://s3.ap-southeast-5.amazonaws.com")
         bucket = os.getenv("VIDEO_BUCKET_NAME")
         
         if not bucket:

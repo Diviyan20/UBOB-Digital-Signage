@@ -13,38 +13,32 @@ export const ImageStyles = (width: number, height: number) =>
       borderWidth: Platform.OS === "android" ? 1 : 0,
       borderColor: "#fff",
       alignSelf: "center",
-      justifyContent: "center",
+      justifyContent: "flex-start",
       alignItems: "center",
       overflow: "hidden",
     },
 
     image: {
       width: "100%",
-      flex: 1,
+      height: height * 0.52,
     },
 
     textContainer: {
-      width: "100%",
+      width: "50%",
       alignItems: "center",
       paddingHorizontal: width > 600 ? 16 : 8,
+      paddingTop: 30,
       paddingBottom: 10,
-    },
-
-    title: {
+  },
+  
+  title: {
       fontSize: width > 1200 ? 26 : width > 600 ? 15 : 16,
       fontWeight: "700",
       color: "#111",
       textAlign: "center",
       marginBottom: 6,
-    },
-
-    description: {
-      fontSize: width > 1200 ? 18 : width > 600 ? 12 : 13,
-      color: "#444",
-      textAlign: "center",
-      lineHeight: width > 800 ? 10 : 16,
-    },
-
+  },
+  
     placeholderText: {
       textAlign: "center",
       color: "#888",
@@ -54,9 +48,15 @@ export const ImageStyles = (width: number, height: number) =>
 
 export const VideoStyles = (width: number, height: number) =>
   StyleSheet.create({
-    card: {
+
+    /*
+    =====================================
+    LANDSCAPE VIDEO CARD
+    =====================================
+    */
+    landscapeCard: {
       width:
-        width > 1200 ? width * 0.45 : width > 800 ? width * 0.65 : width * 0.9,
+        width > 900 ? width * 0.35 : width > 700 ? width * 0.5 : width * 0.9,
       height: height * 0.72,
       backgroundColor: "#FFFFCC",
       borderRadius: 20,
@@ -67,13 +67,40 @@ export const VideoStyles = (width: number, height: number) =>
       alignSelf: "center",
       justifyContent: "center",
       alignItems: "center",
+      overflow: "hidden"
+    },
+
+    /*
+    =====================================
+    VIDEO WRAPPER
+    Prevents clipping issues
+    =====================================
+    */
+   
+    videoContainer: {
+      width: "100%",
+      height: "100%",
+      justifyContent: "center",
+      alignItems: "center",
       overflow: "hidden",
     },
+
+    /*
+    =====================================
+    LANDSCAPE VIDEO
+    =====================================
+    */
 
     video: {
       width: "100%",
       height: '100%',
     },
+
+    /*
+    =====================================
+    PORTRAIT VIDEO CARD
+    =====================================
+    */
 
     portraitCard: {
       width:
@@ -89,6 +116,12 @@ export const VideoStyles = (width: number, height: number) =>
       alignItems: "center",
       overflow: "hidden",
     },
+
+    /*
+    =====================================
+    PORTRAIT VIDEO
+    =====================================
+    */
 
     portraitVideo: {
       width: "100%",
@@ -137,4 +170,28 @@ export const MediaScreenStyle = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
   },
+});
+
+export const VideoScreenStyle = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+})
+
+export const MixedMediaStyle = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullscreen: {
+    width: "100%",
+    height: "100%",
+  },
+  loadingText: {
+    color: "#fff",
+    fontSize: 18,
+  }
 });

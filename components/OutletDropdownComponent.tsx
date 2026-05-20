@@ -18,10 +18,12 @@ interface Outlet {
 
 interface OutletDropdownProps {
   onSelect: (outletId: string) => void;
+  onFocus?: () => void,
+  onBlur?: () => void,
   prefillId?: string;
 }
 
-export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelect, prefillId }) => {
+export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelect, prefillId, onFocus, onBlur }) => {
   const [search, setSearch] = useState("");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [filtered, setFiltered] = useState<Outlet[]>([]);
@@ -102,6 +104,8 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
           placeholder="Enter Outlet ID or Name..."
           placeholderTextColor="#BDBDBD"
           value={search}
+          onFocus={onFocus}
+          onBlur={onBlur}
           onChangeText={setSearch}
           keyboardType="numeric"
           autoCapitalize="none"
