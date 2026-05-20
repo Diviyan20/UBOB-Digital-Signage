@@ -1,147 +1,76 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { api, config } from "../api/client";
+import React, { useEffect, useState } from "react";
+
+import { config } from "../api/client";
+
 import { ImageComponent } from "./ImageComponent";
-import { VideoComponent, VideoItem } from "./VideoComponent";
+import { VideoComponent } from "./VideoComponent";
 
-type MediaState = "IMAGES_PLAYING" | "VIDEOS_PLAYING";
+type MediaState =
+  | "IMAGES"
+  | "VIDEOS";
 
-const sanitizePresignedUrl = (url: string) =>
-  (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
+export const MediaController = () => {
 
-const normalizeVideos = (items: VideoItem[]): VideoItem[] =>
-  items
-    .map((v) => ({
-      ...v,
-      videoURI: sanitizePresignedUrl(v.videoURI),
-    }))
-    .filter((v) => v.videoURI.startsWith("https://"));
+  const [mediaState, setMediaState] = useState<MediaState>("IMAGES"); // Controls current screen mode
 
-export const MediaController: React.FC = () => {
-  const [mediaState, setMediaState] = useState<MediaState>("IMAGES_PLAYING");
-  const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
-  const [currentBatch, setCurrentBatch] = useState<VideoItem[]>([]);
-  const [stateInterval, setStateInterval] = useState(180000);
+  /*
+    * How long images show before videos start
+ */
+  const [stateInterval, setStateInterval] = useState(180000); // Used as a fallback if config fails
 
-  const indexRef = useRef(0);
-  const videoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const allVideosRef = useRef<VideoItem[]>([]);
-
-  const fetchVideos = async () => {
-    try {
-      const res = await fetch(api.videos);
-      const payload = await res.json();
-
-      console.log("VIDEO PAYLOAD:", payload);
-
-      if (!res.ok) {
-        throw new Error(payload?.error || "Failed to fetch videos");
-      }
-
-      // Handles:
-      // 1) direct array: [{ videoURI, rotate }]
-      // 2) wrapped: { videos: [...] }
-      // 3) Lambda proxy style wrapper: { body: "[...]" }
-      let videos: VideoItem[] = [];
-
-      if (Array.isArray(payload)) {
-        videos = payload;
-      } else if (Array.isArray(payload?.videos)) {
-        videos = payload.videos;
-      } else if (typeof payload?.body === "string") {
-        const parsedBody = JSON.parse(payload.body);
-        videos = Array.isArray(parsedBody)
-          ? parsedBody
-          : Array.isArray(parsedBody?.videos)
-            ? parsedBody.videos
-            : [];
-      }
-
-      const normalizedVideos = normalizeVideos(videos);
-
-      if (!normalizedVideos.length) {
-        console.error("No valid videos returned");
-        return;
-      }
-
-      const shuffled = [...normalizedVideos].sort(() => Math.random() - 0.5);
-
-      allVideosRef.current = shuffled;
-      setAllVideos(shuffled);
-      setCurrentBatch(shuffled);
-      indexRef.current = 0;
-    } catch (err) {
-      console.error("Failed to fetch videos:", err);
-    }
-  };
-
-  // Fetch State Interval from Config
-  useEffect(() =>{
-    const fetchConfig = async () =>{
-      try{
+  /*
+    * Fetch interval config from backend
+ */
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
         const response = await fetch(config);
         const data = await response.json();
 
         setStateInterval(data.config.state_interval);
       }
-      catch(e){
-        console.error("CONFIG ERROR: ", e);
+      catch (error) {
+        console.error("CONFIG ERROR: ", error);
       }
     };
-    
     fetchConfig();
-  } ,[]);
-
-  useEffect(() => {
-    fetchVideos();
   }, []);
 
-  const getNextBatch = (): VideoItem[] => {
-    const batchSize = 2;
-    const videos = allVideosRef.current;
+  /*
+    * Switch from images -> videos
+ */
 
-    if (!videos.length) return [];
-
-    const batch = videos.slice(indexRef.current, indexRef.current + batchSize);
-    indexRef.current += batchSize;
-
-    if (indexRef.current >= videos.length) {
-      indexRef.current = 0;
-      allVideosRef.current = [...videos].sort(() => Math.random() - 0.5);
-      setAllVideos((prev) => [...prev].sort(() => Math.random() - 0.5));
+  useEffect(() => {
+    if (mediaState !== "IMAGES") {
+      return;
     }
 
-    return batch;
-  };
-
-  useEffect(() => {
-    if (mediaState !== "IMAGES_PLAYING") return;
-
-    videoTimerRef.current = setTimeout(() => {
-      const batch = getNextBatch();
-      setCurrentBatch(batch);
-      console.log("Playing batch:", batch.length);
-      setMediaState("VIDEOS_PLAYING");
+    const timer = setTimeout(() => {
+      setMediaState("VIDEOS");
     }, stateInterval);
 
-    return () => {
-      if (videoTimerRef.current) clearTimeout(videoTimerRef.current);
-    };
-  }, [mediaState, allVideos]);
+    return () => clearTimeout(timer);
+  }, [mediaState, stateInterval]);
 
-  const handleVideosFinished = useCallback(async () => {
-    await fetchVideos(); // refresh signed URLs
-    setMediaState("IMAGES_PLAYING");
-  }, []);
+  /*
+    Called after all videos finish
+ */
+  const handleVideosFinished = () => {
+    setMediaState("IMAGES");
+  };
 
   return (
     <>
-      {mediaState === "IMAGES_PLAYING" && <ImageComponent />}
-      {mediaState === "VIDEOS_PLAYING" && (
+      {mediaState === "IMAGES" && (
+        <ImageComponent />
+      )}
+
+      {mediaState === "VIDEOS" && (
         <VideoComponent
-          videos={currentBatch}
           onAllVideosFinished={handleVideosFinished}
         />
       )}
     </>
   );
-};
+
+}

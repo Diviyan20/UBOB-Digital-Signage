@@ -18,7 +18,7 @@ IMAGE_EXTENSIONS = {
     ".webp"
 }
 
-s3 = boto3.client("s3", region_name="ap-southeast-5")
+s3 = boto3.client("s3", region_name="ap-southeast-5", endpoint_url="https://s3.ap-southeast-5.amazonaws.com")
 
 def get_s3_playlist_media(prefix: str):
     """
@@ -102,7 +102,7 @@ def get_video_media(prefix: str):
             if lower_key.endswith(tuple(VIDEO_EXTENSIONS)):
                 videos.append({
                     "type": "video",
-                    "url": url,
+                    "videoURI": url,
                     "rotate": False
                 })
     

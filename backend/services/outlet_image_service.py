@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 
 import requests
-from controllers.outlet_service import fetch_all_outlet_data
 from flask import abort, jsonify, send_file
 from PIL import Image
+from services.outlet_service import fetch_all_outlet_data
 
 # Prevent extremely large image crashes
 Image.MAX_IMAGE_PIXELS = 20_000_000

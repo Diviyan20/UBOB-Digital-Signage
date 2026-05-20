@@ -28,7 +28,7 @@ interface MediaItem {
 const PREFETCH_BUFFER = 2; //Only Pre-fetches next 2 images instead of all
 
 export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
-  ({ endpoint = api.media }) => {
+  ({ endpoint = api.promotions }) => {
     const { width, height } = useWindowDimensions();
     const styles = ImageStyles(width, height);
 
@@ -278,11 +278,6 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
 
         <View style={styles.textContainer}>
           <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
-          {currentMedia.description ? (
-            <Text style={styles.description} numberOfLines={3}>
-              {currentMedia.description}
-            </Text>
-          ) : null}
         </View>
       </Animated.View>
     );
