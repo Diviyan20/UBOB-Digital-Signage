@@ -1,4 +1,4 @@
-import { fetchVideos, VideoItem } from "@/services/MediaService";
+import { fetchSignageVideos, VideoItem } from "@/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -41,7 +41,7 @@ export const VideoComponent = ({
   */
   useEffect(() => {
     const loadVideos = async () => {
-      const fetchedVideos = await fetchVideos();
+      const fetchedVideos = await fetchSignageVideos();
       console.log("Fetched before slice:", fetchedVideos.length);
 
       if (!isMounted.current) return;

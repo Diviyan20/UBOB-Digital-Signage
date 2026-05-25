@@ -52,20 +52,15 @@ class PlaylistService:
         
         return media
 
-    # ========================
-    # VIDEO SIGNAGE PLAYLIST
-    # ========================
-    def get_signage_videos(self, outlet_id:str):
+    # ==============================
+    # SIGNAGE SCREEN VIDEO PLAYLIST
+    # ==============================
+    def get_signage_videos(self):
         """
             - Used for signage screen
-            - Always points to the Videos folder
-            - Example: Selangor/Videos/
-        """
-        # Step 1: Get outlet region
-        region = self.get_outlet_region(outlet_id)
-        
-        # Step 2: Always use the Videos folder
-        prefix = f"{region}/Videos/"
+            - Always points to the Digital-Signage Folder
+        """        
+        prefix = "Digital Signage/"
         
         # Step 3: Fetch only the videos
         videos = get_video_media(prefix)
