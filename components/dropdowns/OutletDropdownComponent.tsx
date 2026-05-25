@@ -8,7 +8,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { api } from "./api/client";
+import { api } from "../api/client";
 
 interface Outlet {
   outlet_id: string;

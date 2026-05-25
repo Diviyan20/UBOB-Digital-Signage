@@ -4,8 +4,9 @@ import { router } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import { Alert, Image, Pressable, Text, View } from "react-native";
 import { api } from "../api/client";
+import { OutletDropdownComponent } from "../dropdowns/OutletDropdownComponent";
+import { SelectDropdown } from "../dropdowns/SelectDropdownComponent";
 import { ImagePreloader } from "../media_components/ImagePreloader";
-import { OutletDropdownComponent } from "../OutletDropdownComponent";
 import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
 import { LoggingInOverlayComponent } from "../overlays/LogginInOverlayComponent";
 import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
@@ -271,19 +272,21 @@ export const OutletLoginForm: React.FC = () => {
 
         {/* Batch Buttons — only visible when Media Player is selected */}
         {screenType === "media" && (
-          <View style={styles.toggleRow}>
-            {[1, 2, 3].map((num) => (
-              <ToggleButton
-                key={num}
-                label={`Batch ${num}`}
-                active={batchNumber === num}
-                focused={focusedButton === `batch-${num}`}
-                onFocus={() => setFocusedButton(`batch-${num}`)}
-                onBlur={() => setFocusedButton(null)}
-                onPress={() => setBatchNumber(num)}
-              />
-            ))}
-          </View>
+           <>
+           <Text style={styles.label}>Batch Number</Text>
+           <SelectDropdown
+               options={[
+                   { label: "Batch 1", value: 1 },
+                   { label: "Batch 2", value: 2 },
+                   { label: "Batch 3", value: 3 },
+               ]}
+               selectedValue={batchNumber}
+               onSelect={(value) => setBatchNumber(value)}
+               focused={focusedButton === "batch"}
+               onFocus={() => setFocusedButton("batch")}
+               onBlur={() => setFocusedButton(null)}
+           />
+       </>
         )}
 
         {/* Orientation — only visible when Media Player is selected */}
@@ -303,6 +306,7 @@ export const OutletLoginForm: React.FC = () => {
                 />
               ))}
             </View>
+            
           </>
         )}
 

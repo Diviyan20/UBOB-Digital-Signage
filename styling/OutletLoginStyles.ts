@@ -4,23 +4,23 @@ export const OutletLoginStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFF",
-    justifyContent: "flex-start",
+    justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
   },
 
   imageContainer: {
-    width: "35%",
-    height: "35%",
+    width: 160,
+    height: 150,
     resizeMode: "contain",
   },
 
   card: {
     width: "90%",
-    maxWidth: 400,
+    maxWidth: 500,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingVertical: 32,
+    paddingVertical: 15,
     paddingHorizontal: 24,
     alignItems: "center",
     shadowColor: "#000",
@@ -31,18 +31,18 @@ export const OutletLoginStyles = StyleSheet.create({
   },
 
   logo: {
-    width: 180,
-    height: 80,
-    marginBottom: 30,
+    width: "100%",
+    height: "100%",
+    marginBottom: 10,
     resizeMode: "contain",
   },
 
   label: {
     alignSelf: "flex-start",
-    fontSize: 16,
+    fontSize: 13,
     color: "#333",
     fontWeight: "500",
-    marginBottom: 6,
+    marginBottom: 4,
   },
 
   input: {
@@ -62,8 +62,8 @@ export const OutletLoginStyles = StyleSheet.create({
     borderRadius: 8,
     width: "100%",
     alignItems: "center",
-    paddingVertical: 12,
-    marginTop: 10,
+    paddingVertical: 10,
+    marginTop: 8,
   },
 
   adminButton: {
@@ -173,15 +173,15 @@ export const OutletLoginStyles = StyleSheet.create({
   toggleRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 10,
     width: "100%",
   },
 
   toggleButton: {
-    minWidth: 120,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    minWidth: 100,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: "#ccc",
@@ -225,5 +225,73 @@ export const OutletLoginStyles = StyleSheet.create({
   disabledText: {
     color: "#999",
   },
+
+  dropdownContainer: {
+    width: "100%",
+    marginBottom: 8,
+    zIndex: 10, // ensures dropdown list sits above elements below it
+},
+
+dropdownTrigger: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#fff",
+},
+
+dropdownTriggerOpen: {
+    borderColor: "#2563EB",
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+},
+
+dropdownTriggerText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+},
+
+dropdownArrow: {
+    fontSize: 11,
+    color: "#666",
+},
+
+dropdownList: {
+    width: "100%",
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: "#2563EB",
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: "#fff",
+    overflow: "hidden",
+},
+
+dropdownOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+},
+
+dropdownOptionActive: {
+    backgroundColor: "#EFF6FF",
+},
+
+dropdownOptionText: {
+    fontSize: 14,
+    color: "#333",
+},
+
+dropdownOptionTextActive: {
+    color: "#2563EB",
+    fontWeight: "600",
+},
 
 });
