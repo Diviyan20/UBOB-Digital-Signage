@@ -10,7 +10,7 @@ export const api = {
   heartbeat: `${DEVELOPMENT_URL}/heartbeat`,
   promotions: `${DEVELOPMENT_URL}/promotions`,
   outletImages: `${DEVELOPMENT_URL}/outlet_image_combined`,
-  videos: `${DEVELOPMENT_URL}/videos`,
+  signageVideos: `${DEVELOPMENT_URL}/signage_videos`,
   mixedMedia: `${DEVELOPMENT_URL}/get_mixed_media`
 };
 

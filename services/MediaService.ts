@@ -20,7 +20,7 @@ export const sanitizeVideoUrl = (url?: string): string =>{
 /**
  * Fetch videos from backend
  */
-export const fetchVideos = async (): Promise<VideoItem[]> => {
+export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
     try{
         const outlet_id = await AsyncStorage.getItem("outlet_id");
 
@@ -29,12 +29,9 @@ export const fetchVideos = async (): Promise<VideoItem[]> => {
             return [];
         }
 
-        const response = await fetch(api.videos, {
-            method: "POST",
-            headers:{
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ outlet_id })
+        const response = await fetch(api.signageVideos, {
+            method: "GET",
+            headers:{ "Content-Type": "application/json" }
         });
 
         const data = await response.json();
