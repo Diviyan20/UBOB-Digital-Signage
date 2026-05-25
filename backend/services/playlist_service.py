@@ -35,17 +35,17 @@ class PlaylistService:
     # ======================
     # MIXED MEDIA PLAYLIST
     # ======================
-    def get_playlist(self, outlet_id:str, batch_number:int):
+    def get_playlist(self, outlet_id:str, batch_number:int, orientation: str="Landscape"):
         """
-            Used for mixed media Screen
+            Builds S3 path based on region, batch, and orientation.
             
-            Example: Selangor/Batch 2/
+            Example: Selangor/Batch 2/Landscape/
         """
         # Step 1: Get outlet region
         region = self.get_outlet_region(outlet_id)
         
         # Step 2: Build S3 folder path
-        prefix = f"{region}/Batch {batch_number}"
+        prefix = f"{region}/Batch {batch_number}/{orientation}/"
         
         # Step 3: Fetch mixed media
         media = get_s3_playlist_media(prefix)

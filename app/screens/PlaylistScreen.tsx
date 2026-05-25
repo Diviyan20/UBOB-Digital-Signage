@@ -1,11 +1,11 @@
-import { MixedMediaPlayer } from "@/components/media_components/MixedMediaPlayer";
+import { PlaylistComponent } from "@/components/media_components/PlaylistComponent";
 import { VideoScreenStyle as styles } from "@/styling/MediaStyles";
 import { View } from "react-native";
 
-export default function VideoScreen() {
+export default function PlaylistScreen() {
   return (
     <View style={styles.container}>
-      <MixedMediaPlayer />
+      <PlaylistComponent />
     </View>
   );
 }

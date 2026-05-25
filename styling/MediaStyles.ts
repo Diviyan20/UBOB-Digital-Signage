@@ -29,16 +29,16 @@ export const ImageStyles = (width: number, height: number) =>
       paddingHorizontal: width > 600 ? 16 : 8,
       paddingTop: 30,
       paddingBottom: 10,
-  },
-  
-  title: {
+    },
+
+    title: {
       fontSize: width > 1200 ? 26 : width > 600 ? 15 : 16,
       fontWeight: "700",
       color: "#111",
       textAlign: "center",
       marginBottom: 6,
-  },
-  
+    },
+
     placeholderText: {
       textAlign: "center",
       color: "#888",
@@ -76,7 +76,7 @@ export const VideoStyles = (width: number, height: number) =>
     Prevents clipping issues
     =====================================
     */
-   
+
     videoContainer: {
       width: "100%",
       height: "100%",
@@ -175,23 +175,37 @@ export const MediaScreenStyle = StyleSheet.create({
 export const VideoScreenStyle = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#f0f0f0",
   },
 })
 
-export const MixedMediaStyle = StyleSheet.create({
-  container: {
+export const PlaylistStyles = StyleSheet.create({
+  screen: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
   },
-  fullscreen: {
+  card: {
+    width: "88%",
+    aspectRatio: 16 / 9,
+    backgroundColor: "#FFFFCC",
+    borderRadius: 20,
+    overflow: "hidden",
+    elevation: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  media: {
     width: "100%",
     height: "100%",
   },
-  loadingText: {
+  statusText: {
     color: "#fff",
-    fontSize: 18,
-  }
+    fontSize: 16,
+  },
 });
