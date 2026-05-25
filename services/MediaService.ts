@@ -6,9 +6,14 @@ export interface VideoItem{
     rotate?: boolean;
 }
 
+export interface PlaylistItems{
+    type: "video" | "image";
+    url: string;
+    rotate?: boolean;
+}
+
 /**
- * Removes invalid trailing characters
- * from presigned URLs
+ * Removes invalid trailing characters from presigned URLs
  */
 export const sanitizeVideoUrl = (url?: string): string =>{
     return (url || "")
@@ -17,18 +22,51 @@ export const sanitizeVideoUrl = (url?: string): string =>{
     .replace(/\s+$/g, "");
 };
 
-/**
- * Fetch videos from backend
- */
-export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
+/*
+ * Fetches the playlist (images + videos) from the backend.
+ * Reads outlet_id, batch_number, and orientation from AsyncStorage.
+*/
+export const fetchPlaylist = async(): Promise<PlaylistItems[]> =>{
     try{
-        const outlet_id = await AsyncStorage.getItem("outlet_id");
+        const outletId = await AsyncStorage.getItem("outlet_id");
+        const batchNumber = await AsyncStorage.getItem("batch_number");
+        const orientation = await AsyncStorage.getItem("orientation") || "Landscape";
 
-        if (!outlet_id) {
-            console.warn("No outlet_id found in AsyncStorage");
+        if (!outletId) {
+            console.warn("fetchPlaylist: No outlet_id in AsyncStorage");
             return [];
         }
 
+        const response = await fetch(api.playlist, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                outlet_id: outletId,
+                batch_number: parseInt(batchNumber || "1"),
+                orientation: orientation,
+            }),
+        });
+        const data = await response.json();
+
+        if(!response.ok){
+            throw new Error(data?.message || "Failed to fetch playlist");
+        }
+
+        const playlist: PlaylistItems[] = data.playlist || [];
+        console.log(`Playlist fetched: ${playlist.length} items`);
+        return playlist;
+    }
+    catch(err){
+        console.error("fetchPlaylist error:", err);
+        return [];
+    }
+};
+
+/**
+ * Fetches videos only — used by the Signage Screen
+ */
+export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
+    try{
         const response = await fetch(api.signageVideos, {
             method: "GET",
             headers:{ "Content-Type": "application/json" }
@@ -40,13 +78,7 @@ export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
             throw new Error(data?.message || "Failed to fetch videos");
         }
 
-        /*
-         * Backend returns:
-         * {
-         *   videos: [...]
-         * }
-        */
-        const videos = data?.videos || [];
+        const videos = data?.videos || []; // Backend returns: videos: [....]
 
         /*
         * Clean invalid URLs
@@ -60,7 +92,6 @@ export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
 
     console.log("VIDEOS:", cleanedVideos);
     return cleanedVideos;
-    
     }
     catch(error){
         console.error("FETCH VIDEO ERROR: ", error);

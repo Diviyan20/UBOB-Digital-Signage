@@ -11,6 +11,7 @@ import { LoggingInOverlayComponent } from "../overlays/LogginInOverlayComponent"
 import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
 
 type ScreenType = "signage" | "media";
+type OrientationType = "Landscape" | "Portrait";
 
 interface ToggleButtonProps {
   label: string;
@@ -21,8 +22,6 @@ interface ToggleButtonProps {
   onFocus?: () => void;
   onBlur?: () => void;
 }
-
-const MEDIA_SCREEN_ENABLED = false; // Enables / Disables Media Screen
 
 const ToggleButton: React.FC<ToggleButtonProps> = ({
   label,
@@ -67,7 +66,8 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
 
 export const OutletLoginForm: React.FC = () => {
   const [outlet_id, setOutletId] = useState<string>("");
-  const [screenType, setScreenType] = useState<ScreenType>("signage");
+  const [screenType, setScreenType] = useState<ScreenType>("media");
+  const [orientation, setOrientation] = useState<OrientationType>("Landscape");
   const [batchNumber, setBatchNumber] = useState<number>(1);
   const [focusedButton, setFocusedButton] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
@@ -114,6 +114,7 @@ export const OutletLoginForm: React.FC = () => {
           ["region", data.outlet_location ?? ""],
           ["screen_type", screenType],
           ["batch_number", batchNumber.toString()],
+          ["orientation", orientation],
         ]);
 
         // Branch based on Screen Type
@@ -121,7 +122,7 @@ export const OutletLoginForm: React.FC = () => {
           setStatus("success");
           setTimeout(() => {
             router.replace({
-              pathname: "/screens/VideoScreen",
+              pathname: "/screens/PlaylistScreen",
               params: { outlet_id: loginIdRef.current },
             });
           }, 1000);
@@ -260,10 +261,10 @@ export const OutletLoginForm: React.FC = () => {
           <ToggleButton
             label="Media Player"
             active={screenType === "media"}
-            disabled={true}
             focused={focusedButton === "media"}
             onFocus={() => setFocusedButton("media")}
             onBlur={() => setFocusedButton(null)}
+            onPress={() => setScreenType("media")}
           />
 
         </View>
@@ -283,6 +284,26 @@ export const OutletLoginForm: React.FC = () => {
               />
             ))}
           </View>
+        )}
+
+        {/* Orientation — only visible when Media Player is selected */}
+        {screenType === "media" && (
+          <>
+            <Text style={styles.label}>Orientation</Text>
+            <View style={styles.toggleRow}>
+              {(["Landscape", "Portrait"] as OrientationType[]).map((o) => (
+                <ToggleButton
+                  key={o}
+                  label={o}
+                  active={orientation === o}
+                  focused={focusedButton === o}
+                  onFocus={() => setFocusedButton(o)}
+                  onBlur={() => setFocusedButton(null)}
+                  onPress={() => setOrientation(o)}
+                />
+              ))}
+            </View>
+          </>
         )}
 
         <Pressable style={[

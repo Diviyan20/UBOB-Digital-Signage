@@ -27,14 +27,15 @@ def get_playlist():
         
         outlet_id = str(data.get("outlet_id", "")).strip()
         batch_number = data.get("batch_number")
+        orientation = data.get("orientation", "Landscape").strip()
         
-        if not outlet_id and batch_number is None:
+        if not outlet_id or batch_number is None:
             return jsonify({
                 "success": False,
                 "message": "No Outlet ID or Batch Number Found"
             }), 400
         
-        playlist = playlist_service.get_playlist(outlet_id, batch_number)
+        playlist = playlist_service.get_playlist(outlet_id, batch_number, orientation)
         
         return jsonify({
             "success": True,
