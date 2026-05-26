@@ -16,7 +16,7 @@ export const MediaController = () => {
   /*
     * How long images show before videos start
  */
-  const [stateInterval, setStateInterval] = useState(180000); // Used as a fallback if config fails
+  const [stateInterval, setStateInterval] = useState(60000); // Used as a fallback if config fails
 
   /*
     * Fetch interval config from backend

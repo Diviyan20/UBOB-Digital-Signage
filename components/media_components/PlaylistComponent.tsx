@@ -1,5 +1,6 @@
 import { fetchPlaylist, PlaylistItems } from "@/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +19,7 @@ interface VideoEntry { url: string; }
 interface ImageEntry { url: string; }
 
 type PlaybackMode = "loading" | "video" | "image" | "empty";
+type OrientationType = "Landscape" | "Portrait";
 
 export const PlaylistComponent: React.FC = () => {
     const [mode, setMode] = useState<PlaybackMode>("loading");
@@ -28,6 +30,7 @@ export const PlaylistComponent: React.FC = () => {
     
     const [displayDuration, setDisplayDuration] = useState(5000);
     const [fadeDuration, setFadeDuration] = useState(400);
+    const [orientation, setOrientation] = useState<OrientationType>("Landscape");
 
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const isMounted = useRef(true);
@@ -69,10 +72,15 @@ export const PlaylistComponent: React.FC = () => {
 
     const initialize = useCallback(async () => {
         if (!isMounted.current) return;
-        
         setMode("loading");
-        await fetchConfig();
 
+        // Read orientation from AsyncStorage — determines card style and S3 folder
+        const savedOrientation = await AsyncStorage.getItem("orientation");
+        if (savedOrientation === "Portrait" || savedOrientation === "Landscape") {
+            setOrientation(savedOrientation);
+        }
+        
+        await fetchConfig();
         const { fetchedVideos, fetchedImages } = await loadPlaylist();
 
         if (!isMounted.current) return;
@@ -230,9 +238,14 @@ export const PlaylistComponent: React.FC = () => {
         return null;
     };
 
+    // Card style switches based on orientation read from AsyncStorage
+    const cardStyle = orientation === "Portrait"
+        ? styles.portraitCard
+        : styles.landscapeCard;
+
     return (
         <View style={styles.screen}>
-            <View style={styles.card}>
+            <View style={cardStyle}>
                 {renderMedia()}
             </View>
         </View>
