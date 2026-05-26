@@ -188,10 +188,9 @@ export const PlaylistStyles = StyleSheet.create({
   },
 
   landscapeCard: {
-    width: "88%",
+    width: "100%",
     aspectRatio: 16 / 9,
     backgroundColor: "#FFFFCC",
-    borderRadius: 20,
     overflow: "hidden",
     elevation: 12,
     shadowColor: "#000",
