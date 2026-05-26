@@ -186,7 +186,8 @@ export const PlaylistStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  card: {
+
+  landscapeCard: {
     width: "88%",
     aspectRatio: 16 / 9,
     backgroundColor: "#FFFFCC",
@@ -200,6 +201,22 @@ export const PlaylistStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
+  portraitCard: {
+    height: "90%",
+    aspectRatio: 9 / 16,
+    backgroundColor: "#FFFFCC",
+    borderRadius: 20,
+    overflow: "hidden",
+    elevation: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   media: {
     width: "100%",
     height: "100%",

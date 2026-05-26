@@ -294,4 +294,13 @@ dropdownOptionTextActive: {
     fontWeight: "600",
 },
 
+dropdownOptionFocused: {
+  backgroundColor: "#1E3A8A", // dark blue background on focus
+},
+
+dropdownOptionTextFocused: {
+  color: "#ffffff",            // white text so it's readable on dark blue
+  fontWeight: "600",
+},
+
 });

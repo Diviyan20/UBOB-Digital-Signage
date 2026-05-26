@@ -67,7 +67,7 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
 
 export const OutletLoginForm: React.FC = () => {
   const [outlet_id, setOutletId] = useState<string>("");
-  const [screenType, setScreenType] = useState<ScreenType>("media");
+  const [screenType, setScreenType] = useState<ScreenType>("signage");
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
   const [batchNumber, setBatchNumber] = useState<number>(1);
   const [focusedButton, setFocusedButton] = useState<string | null>(null);
@@ -163,10 +163,12 @@ export const OutletLoginForm: React.FC = () => {
             });
           }, 1500);
         }
+        
       } else {
         // Invalid outlet
         setStatus("error");
         setErrorVisible(true);
+        console.error("Outlet Login Error")
       }
     } catch (err) {
       setLoading(false);

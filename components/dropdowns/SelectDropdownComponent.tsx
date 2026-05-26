@@ -25,13 +25,13 @@ export const SelectDropdown: React.FC<SelectDropdownProps> = ({
     onBlur,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [focusedOption, setFocusedOption] = useState<string | number | null>(null);
 
     const selectedLabel = options.find(o => o.value === selectedValue)?.label || "Select...";
 
     return (
         <View style={styles.dropdownContainer}>
 
-            {/* Trigger — shows selected value */}
             <Pressable
                 style={[
                     styles.dropdownTrigger,
@@ -46,7 +46,6 @@ export const SelectDropdown: React.FC<SelectDropdownProps> = ({
                 <Text style={styles.dropdownArrow}>{isOpen ? "▲" : "▼"}</Text>
             </Pressable>
 
-            {/* Options list — expands inline */}
             {isOpen && (
                 <View style={styles.dropdownList}>
                     {options.map((option) => (
@@ -55,16 +54,20 @@ export const SelectDropdown: React.FC<SelectDropdownProps> = ({
                             style={[
                                 styles.dropdownOption,
                                 option.value === selectedValue && styles.dropdownOptionActive,
+                                focusedOption === option.value && styles.dropdownOptionFocused,
                             ]}
                             onPress={() => {
                                 onSelect(option.value);
                                 setIsOpen(false);
                             }}
+                            onFocus={() => setFocusedOption(option.value)}
+                            onBlur={() => setFocusedOption(null)}
                         >
                             <Text
                                 style={[
                                     styles.dropdownOptionText,
                                     option.value === selectedValue && styles.dropdownOptionTextActive,
+                                    focusedOption === option.value && styles.dropdownOptionTextFocused,
                                 ]}
                             >
                                 {option.label}
