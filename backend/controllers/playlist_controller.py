@@ -27,14 +27,15 @@ def get_playlist():
         
         outlet_id = str(data.get("outlet_id", "")).strip()
         batch_number = data.get("batch_number")
+        orientation = data.get("orientation", "Landscape").strip()
         
-        if not outlet_id and batch_number is None:
+        if not outlet_id or batch_number is None:
             return jsonify({
                 "success": False,
                 "message": "No Outlet ID or Batch Number Found"
             }), 400
         
-        playlist = playlist_service.get_playlist(outlet_id, batch_number)
+        playlist = playlist_service.get_playlist(outlet_id, batch_number, orientation)
         
         return jsonify({
             "success": True,
@@ -48,32 +49,16 @@ def get_playlist():
         }), 500
 
 # ================================
-# VIDEO SIGNAGE ENDPOINT
+# SIGNAGE SCREEN VIDEOS ENDPOINT
 # ================================
 # Used for:
-# - Standard signage screen
-# - ALWAYS points to Batch 1
-#
-# Example:
-# POST /videos
-# {
-#   "outlet_id": "42"
-# }
+# - Standard videos for Digital Signage Screen
+# - ALWAYS points to "Digital Signage/"" directory
 # ================================
-@playlist_bp.route("/videos", methods=["POST"])
+@playlist_bp.route("/signage_videos", methods=["GET"])
 def get_videos():
     try:
-        data = request.get_json()
-        
-        outlet_id = str(data.get("outlet_id", "")).strip()
-        
-        if not outlet_id:
-            return jsonify({
-                "success": False,
-                "message": "Outlet ID Not Found"
-            }), 400
-        
-        videos = playlist_service.get_signage_videos(outlet_id)
+        videos = playlist_service.get_signage_videos()
         
         return jsonify({
             "success": True,

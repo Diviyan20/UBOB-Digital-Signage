@@ -1,15 +1,17 @@
-const SERVER_URL =
+const PRODUCTION_URL =
   "https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com";
 
+const DEVELOPMENT_URL = "https://kcs4utnpog.execute-api.ap-southeast-5.amazonaws.com"
+
 export const api = {
-  validateOutlet: `${SERVER_URL}/validate_outlet`,
-  outletInfo: (outletId: string) => `${SERVER_URL}/outlet_info/${outletId}`,
-  outletData: `${SERVER_URL}/api/outlets`,
-  heartbeat: `${SERVER_URL}/heartbeat`,
-  promotions: `${SERVER_URL}/get_media`,
-  outletImages: `${SERVER_URL}/outlet_image_combined`,
-  videos: `${SERVER_URL}/videos`,
-  mixedMedia: `${SERVER_URL}/get_mixed_media`
+  validateOutlet: `${PRODUCTION_URL}/validate_outlet`,
+  outletInfo: (outletId: string) => `${PRODUCTION_URL}/outlet_info/${outletId}`,
+  outletData: `${PRODUCTION_URL}/api/outlets`,
+  heartbeat: `${PRODUCTION_URL}/heartbeat`,
+  promotions: `${PRODUCTION_URL}/get_media`,
+  outletImages: `${PRODUCTION_URL}/outlet_image_combined`,
+  signageVideos: `${PRODUCTION_URL}/signage_videos`,
+  playlist: `${PRODUCTION_URL}/playlist`
 };
 
-export const config = `${SERVER_URL}/config`;
+export const config = `${PRODUCTION_URL}/config`;

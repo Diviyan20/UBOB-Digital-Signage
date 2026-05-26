@@ -4,13 +4,15 @@ import { router } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import { Alert, Image, Pressable, Text, View } from "react-native";
 import { api } from "../api/client";
+import { OutletDropdownComponent } from "../dropdowns/OutletDropdownComponent";
+import { SelectDropdown } from "../dropdowns/SelectDropdownComponent";
 import { ImagePreloader } from "../media_components/ImagePreloader";
-import { OutletDropdownComponent } from "../OutletDropdownComponent";
 import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
 import { LoggingInOverlayComponent } from "../overlays/LogginInOverlayComponent";
 import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
 
 type ScreenType = "signage" | "media";
+type OrientationType = "Landscape" | "Portrait";
 
 interface ToggleButtonProps {
   label: string;
@@ -21,8 +23,6 @@ interface ToggleButtonProps {
   onFocus?: () => void;
   onBlur?: () => void;
 }
-
-const MEDIA_SCREEN_ENABLED = false; // Enables / Disables Media Screen
 
 const ToggleButton: React.FC<ToggleButtonProps> = ({
   label,
@@ -68,6 +68,7 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
 export const OutletLoginForm: React.FC = () => {
   const [outlet_id, setOutletId] = useState<string>("");
   const [screenType, setScreenType] = useState<ScreenType>("signage");
+  const [orientation, setOrientation] = useState<OrientationType>("Landscape");
   const [batchNumber, setBatchNumber] = useState<number>(1);
   const [focusedButton, setFocusedButton] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
@@ -114,6 +115,7 @@ export const OutletLoginForm: React.FC = () => {
           ["region", data.outlet_location ?? ""],
           ["screen_type", screenType],
           ["batch_number", batchNumber.toString()],
+          ["orientation", orientation],
         ]);
 
         // Branch based on Screen Type
@@ -121,7 +123,7 @@ export const OutletLoginForm: React.FC = () => {
           setStatus("success");
           setTimeout(() => {
             router.replace({
-              pathname: "/screens/VideoScreen",
+              pathname: "/screens/PlaylistScreen",
               params: { outlet_id: loginIdRef.current },
             });
           }, 1000);
@@ -161,10 +163,12 @@ export const OutletLoginForm: React.FC = () => {
             });
           }, 1500);
         }
+        
       } else {
         // Invalid outlet
         setStatus("error");
         setErrorVisible(true);
+        console.error("Outlet Login Error")
       }
     } catch (err) {
       setLoading(false);
@@ -260,29 +264,52 @@ export const OutletLoginForm: React.FC = () => {
           <ToggleButton
             label="Media Player"
             active={screenType === "media"}
-            disabled={true}
             focused={focusedButton === "media"}
             onFocus={() => setFocusedButton("media")}
             onBlur={() => setFocusedButton(null)}
+            onPress={() => setScreenType("media")}
           />
 
         </View>
 
         {/* Batch Buttons — only visible when Media Player is selected */}
         {screenType === "media" && (
-          <View style={styles.toggleRow}>
-            {[1, 2, 3].map((num) => (
-              <ToggleButton
-                key={num}
-                label={`Batch ${num}`}
-                active={batchNumber === num}
-                focused={focusedButton === `batch-${num}`}
-                onFocus={() => setFocusedButton(`batch-${num}`)}
-                onBlur={() => setFocusedButton(null)}
-                onPress={() => setBatchNumber(num)}
-              />
-            ))}
-          </View>
+           <>
+           <Text style={styles.label}>Batch Number</Text>
+           <SelectDropdown
+               options={[
+                   { label: "Batch 1", value: 1 },
+                   { label: "Batch 2", value: 2 },
+                   { label: "Batch 3", value: 3 },
+               ]}
+               selectedValue={batchNumber}
+               onSelect={(value) => setBatchNumber(value)}
+               focused={focusedButton === "batch"}
+               onFocus={() => setFocusedButton("batch")}
+               onBlur={() => setFocusedButton(null)}
+           />
+       </>
+        )}
+
+        {/* Orientation — only visible when Media Player is selected */}
+        {screenType === "media" && (
+          <>
+            <Text style={styles.label}>Orientation</Text>
+            <View style={styles.toggleRow}>
+              {(["Landscape", "Portrait"] as OrientationType[]).map((o) => (
+                <ToggleButton
+                  key={o}
+                  label={o}
+                  active={orientation === o}
+                  focused={focusedButton === o}
+                  onFocus={() => setFocusedButton(o)}
+                  onBlur={() => setFocusedButton(null)}
+                  onPress={() => setOrientation(o)}
+                />
+              ))}
+            </View>
+            
+          </>
         )}
 
         <Pressable style={[

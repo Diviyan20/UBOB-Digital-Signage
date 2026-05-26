@@ -1,3 +1,5 @@
+import { fetchPlaylist, PlaylistItems } from "@/services/MediaService";
+import { PlaylistStyles as styles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -7,42 +9,36 @@ import {
     AppState,
     AppStateStatus,
     Easing,
-    StyleSheet,
     Text,
     View,
 } from "react-native";
-import { api, config } from "../api/client";
+import { config } from "../api/client";
 
-type PlaybackMode = "loading" | "video" | "image";
+// Separate types for the two lists
+interface VideoEntry { url: string; }
+interface ImageEntry { url: string; }
 
-interface VideoItem {
-    key: string;
-    filename: string;
-    url: string;
-}
+type PlaybackMode = "loading" | "video" | "image" | "empty";
+type OrientationType = "Landscape" | "Portrait";
 
-interface ImageItem {
-    url: string;
-    filename?: string;
-    key?: string;
-}
-
-export const MixedMediaPlayer: React.FC = () => {
+export const PlaylistComponent: React.FC = () => {
     const [mode, setMode] = useState<PlaybackMode>("loading");
-    const [videos, setVideos] = useState<VideoItem[]>([]);
-    const [images, setImages] = useState<ImageItem[]>([]);
+    const [videos, setVideos] = useState<VideoEntry[]>([]);
+    const [images, setImages] = useState<ImageEntry[]>([]);
     const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    
     const [displayDuration, setDisplayDuration] = useState(5000);
     const [fadeDuration, setFadeDuration] = useState(400);
+    const [orientation, setOrientation] = useState<OrientationType>("Landscape");
 
     const fadeAnim = useRef(new Animated.Value(1)).current;
     const isMounted = useRef(true);
     const appStateRef = useRef(AppState.currentState);
 
     // Ref so useEffect can read latest videos without being a dependency
-    const videosRef = useRef<VideoItem[]>([]);
-    const imagesRef = useRef<ImageItem[]>([]);
+    const videosRef = useRef<VideoEntry[]>([]);
+    const imagesRef = useRef<ImageEntry[]>([]);
 
     const player = useVideoPlayer(null, (p) => {
         p.loop = false;
@@ -59,42 +55,33 @@ export const MixedMediaPlayer: React.FC = () => {
         }
     }, []);
 
-    const fetchMixedMedia = useCallback(async (): Promise<{
-        videos: VideoItem[];
-        images: ImageItem[];
-    }> => {
-        try {
-            const outletId = await AsyncStorage.getItem("outlet_id");
-            const batchNumber = await AsyncStorage.getItem("batch_number");
+    const loadPlaylist = useCallback(async () =>{
+        const playlist: PlaylistItems[] = await fetchPlaylist();
 
-            const response = await fetch(api.mixedMedia, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    outlet_id: outletId,
-                    batch_number: parseInt(batchNumber || "1"),
-                }),
-            });
+        // Separate the combined playlist into 2 lists by type
+        const fetchedVideos = playlist
+        .filter(item => item.type === "video")
+        .map(item => ({ url: item.url }));
 
-            const data = await response.json();
-            console.log("Videos: ", data.videos);
-            console.log("Images: ", data.images);
-            return {
-                videos: data.videos || [],
-                images: data.images || [],
-            };
-        } catch (err) {
-            console.error("Failed to fetch mixed media:", err);
-            return { videos: [], images: [] };
-        }
+        const fetchedImages = playlist
+            .filter(item => item.type === "image")
+            .map(item => ({ url: item.url }));
+        
+        return { fetchedVideos, fetchedImages };
     }, []);
 
     const initialize = useCallback(async () => {
         if (!isMounted.current) return;
         setMode("loading");
 
+        // Read orientation from AsyncStorage — determines card style and S3 folder
+        const savedOrientation = await AsyncStorage.getItem("orientation");
+        if (savedOrientation === "Portrait" || savedOrientation === "Landscape") {
+            setOrientation(savedOrientation);
+        }
+        
         await fetchConfig();
-        const { videos: fetchedVideos, images: fetchedImages } = await fetchMixedMedia();
+        const { fetchedVideos, fetchedImages } = await loadPlaylist();
 
         if (!isMounted.current) return;
 
@@ -113,25 +100,23 @@ export const MixedMediaPlayer: React.FC = () => {
             setMode("video");
         } else if (fetchedImages.length > 0) {
             setMode("image");
+        } else {
+            setMode("empty");
         }
-    }, [fetchMixedMedia, fetchConfig, fadeAnim]);
+    }, [fetchConfig, loadPlaylist, fadeAnim]);
 
+    // Mount + Resume from background
     useEffect(() => {
         isMounted.current = true;
         initialize();
 
-        const subscription = AppState.addEventListener(
-            "change",
-            (nextState: AppStateStatus) => {
-                if (
-                    appStateRef.current.match(/inactive|background/) &&
-                    nextState === "active"
-                ) {
-                    initialize();
-                }
+        const subscription = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+                if (appStateRef.current.match(/inactive|background/) && nextState === "active") 
+                    {
+                        initialize(); // Re-fetch when app comes back to foreground
+                    }
                 appStateRef.current = nextState;
-            }
-        );
+            });
 
         return () => {
             isMounted.current = false;
@@ -143,9 +128,12 @@ export const MixedMediaPlayer: React.FC = () => {
     useEffect(() => {
         if (mode !== "video" || videosRef.current.length === 0) return;
 
+        const url = videosRef.current[currentVideoIndex]?.url;
+        if (!url) return;
+
         const load = async () => {
             try {
-                await player.replaceAsync(videosRef.current[currentVideoIndex].url);
+                await player.replaceAsync(url);
                 player.play();
             } catch (err) {
                 console.error("Failed to load video:", err);
@@ -164,8 +152,9 @@ export const MixedMediaPlayer: React.FC = () => {
 
             const nextIndex = currentVideoIndex + 1;
             if (nextIndex < videosRef.current.length) {
-                setCurrentVideoIndex(nextIndex);
+                setCurrentVideoIndex(nextIndex); // More videos — play next
             } else {
+                // All videos done — switch to images (or restart videos if no images)
                 setCurrentVideoIndex(0);
                 setMode(imagesRef.current.length > 0 ? "image" : "video");
             }
@@ -177,9 +166,10 @@ export const MixedMediaPlayer: React.FC = () => {
     // Image cycling
     useEffect(() => {
         if (mode !== "image" || imagesRef.current.length === 0) return;
-        fadeAnim.setValue(1);
+        fadeAnim.setValue(1); // Start fully visible
 
         const timer = setTimeout(() => {
+            // Fade Out
             Animated.timing(fadeAnim, {
                 toValue: 0,
                 duration: fadeDuration,
@@ -190,9 +180,11 @@ export const MixedMediaPlayer: React.FC = () => {
 
                 const nextIndex = currentImageIndex + 1;
                 if (nextIndex >= imagesRef.current.length) {
+                    // All images shown — switch to videos (or restart images if no videos)
                     setCurrentImageIndex(0);
                     setMode(videosRef.current.length > 0 ? "video" : "image");
                 } else {
+                    // Advance to next image and fade in
                     setCurrentImageIndex(nextIndex);
                     Animated.timing(fadeAnim, {
                         toValue: 1,
@@ -211,10 +203,14 @@ export const MixedMediaPlayer: React.FC = () => {
 
     const renderMedia = () => {
         if (mode === "loading") {
-            return <Text style={styles.loadingText}>Loading media...</Text>;
+            return <Text style={styles.statusText}>Loading media...</Text>;
         }
 
-        if (mode === "video" && videos.length > 0) {
+        if (mode === "empty") {
+            return <Text style={styles.statusText}>No media available.</Text>;
+        }
+
+        if (mode === "video") {
             return (
                 <VideoView
                     player={player}
@@ -225,12 +221,11 @@ export const MixedMediaPlayer: React.FC = () => {
             );
         }
 
-        if (mode === "image" && images.length > 0) {
-            const current = images[currentImageIndex];
+        if (mode === "image") {
             return (
                 <Animated.View style={[styles.media, { opacity: fadeAnim }]}>
                     <Image
-                        source={{ uri: current.url || "" }}
+                        source={{ uri: images[currentImageIndex]?.url }}
                         style={styles.media}
                         contentFit="contain"
                         cachePolicy="memory-disk"
@@ -240,45 +235,19 @@ export const MixedMediaPlayer: React.FC = () => {
             );
         }
 
-        return <Text style={styles.loadingText}>No media available.</Text>;
+        return null;
     };
+
+    // Card style switches based on orientation read from AsyncStorage
+    const cardStyle = orientation === "Portrait"
+        ? styles.portraitCard
+        : styles.landscapeCard;
 
     return (
         <View style={styles.screen}>
-            <View style={styles.card}>
+            <View style={cardStyle}>
                 {renderMedia()}
             </View>
         </View>
     );
 };
-
-const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-        backgroundColor: "#ffffff",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    card: {
-        width: "85%",
-        aspectRatio: 16 / 9,
-        backgroundColor: "#000",
-        borderRadius: 20,
-        elevation: 12,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.25,
-        shadowRadius: 10,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    media: {
-        width: "100%",
-        height: "100%",
-        borderRadius: 20,
-    },
-    loadingText: {
-        color: "#ffffff",
-        fontSize: 18,
-    },
-});
