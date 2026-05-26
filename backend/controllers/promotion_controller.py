@@ -6,7 +6,7 @@ promotion_bp = Blueprint("promotion", __name__)
 promotion_service = PromotionService()
 
 
-@promotion_bp.route("/promotions", methods=["GET"])
+@promotion_bp.route("/get_media", methods=["GET"])
 def get_promotions():
     """
     Fetch promotion images from Odoo
