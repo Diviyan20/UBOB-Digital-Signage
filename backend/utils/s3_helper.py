@@ -29,6 +29,8 @@ def get_s3_playlist_media(prefix: str):
     """
     playlist = []
     
+    print(f"[S3 SEARCH PREFIX]: {prefix}")
+    
     paginator = s3.get_paginator("list_objects_v2")
     pages = paginator.paginate(
         Bucket = BUCKET_NAME,
@@ -41,6 +43,8 @@ def get_s3_playlist_media(prefix: str):
             
             key = obj.get("Key","")
             lower_key = key.lower()
+            
+            print(f"[S3 OBJECT]: {key}")
             
             # Generate secure temporary URL
             url = s3.generate_presigned_url(
