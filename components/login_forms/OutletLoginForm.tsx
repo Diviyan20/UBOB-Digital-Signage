@@ -1,15 +1,20 @@
 import { OutletLoginStyles as styles } from "@/styling/OutletLoginStyles";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Alert, Image, Pressable, Text, View } from "react-native";
-import { api } from "../api/client";
 import { OutletDropdownComponent } from "../dropdowns/OutletDropdownComponent";
 import { SelectDropdown } from "../dropdowns/SelectDropdownComponent";
 import { ImagePreloader } from "../media_components/ImagePreloader";
 import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
 import { LoggingInOverlayComponent } from "../overlays/LogginInOverlayComponent";
 import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
+
+import { loadOutletSession, loginOutlet } from "@/services/LoginService";
 
 type ScreenType = "signage" | "media";
 type OrientationType = "Landscape" | "Portrait";
@@ -83,6 +88,12 @@ export const OutletLoginForm: React.FC = () => {
     | undefined
   >();
   const [imagesToPreload, setImagesToPreload] = useState<any[]>([]);
+  const [savedOutlet, setSavedOutlet] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  const [showSavedPrompt, setShowSavedPrompt] = useState(false);
   const [preloadingProgress, setPreloadingProgress] = useState<{
     loaded: number;
     total: number;
@@ -90,88 +101,108 @@ export const OutletLoginForm: React.FC = () => {
 
   const loginIdRef = useRef<string>("");
 
+  /*
+    * Hydrate saved session on Mount
+  */
+  useEffect(() => {
+    const hydrateSavedSession = async () => {
+      const session = await loadOutletSession();
+
+      if (!session?.savedOutlet) return;
+
+      setSavedOutlet(session.savedOutlet);
+      setOutletId(session.outletId);
+      setScreenType(session.screenType);
+      setBatchNumber(session.batchNumber);
+      setOrientation(session.orientation);
+      setShowSavedPrompt(true);
+    };
+    hydrateSavedSession();
+  }, []);
+
   // Regular login - Only validate outlet and show media screen
   const handleLogin = async (id?: string) => {
-    const loginId = id ?? outlet_id; // use passed id, fall back to state
+    const loginId = id ?? outlet_id;
+  
     if (loading) return;
     if (!loginId.trim()) return;
+  
     loginIdRef.current = loginId;
-    // Check if outlet exists
+  
     try {
       setLoading(true);
       setStatus("loading");
-      const response = await fetch(api.validateOutlet, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ outlet_id: loginId }),
+  
+      const response = await loginOutlet({
+        outletId: loginId,
+        screenType,
+        batchNumber,
+        orientation,
       });
-
-      const data = await response.json();
-      if (response.ok && data.is_valid) {
-        // Store all data in one call
-        await AsyncStorage.multiSet([
-          ["saved_outlet", JSON.stringify({ id: loginId, name: data.outlet_name })],
-          ["outlet_id", loginId],
-          ["region", data.outlet_location ?? ""],
-          ["screen_type", screenType],
-          ["batch_number", batchNumber.toString()],
-          ["orientation", orientation],
-        ]);
-
-        // Branch based on Screen Type
-        if (screenType === "media") {
-          setStatus("success");
-          setTimeout(() => {
-            router.replace({
-              pathname: "/screens/PlaylistScreen",
-              params: { outlet_id: loginIdRef.current },
-            });
-          }, 1000);
-          return;
-        }
-
-        // Signage screen - existing preload flow
-        setStatus("fetching_promotions");
-        try {
-          const imagesResponse = await fetch(api.outletImages, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ outlet_id: loginId }),
-          });
-          const imagesData = await imagesResponse.json();
-          const outletImages = imagesData.media || [];
-
-          if (outletImages.length === 0) {
-            setStatus("error");
-            setTimeout(() => {
-              router.replace({
-                pathname: "/screens/MediaScreen",
-                params: { outlet_id: loginIdRef.current },
-              });
-            }, 1500);
-            return;
-          }
-          setImagesToPreload(outletImages);
-          setStatus("preloading_images");
-          setPreloadingProgress({ loaded: 0, total: outletImages.length });
-        } catch (error) {
-          setStatus("success");
-          setTimeout(() => {
-            router.replace({
-              pathname: "/screens/MediaScreen",
-              params: { outlet_id: loginIdRef.current },
-            });
-          }, 1500);
-        }
-        
-      } else {
-        // Invalid outlet
+  
+      if (!response.success) {
         setStatus("error");
         setErrorVisible(true);
-        console.error("Outlet Login Error")
+        setLoading(false);
+        return;
       }
+  
+      /*
+        MEDIA PLAYER FLOW
+      */
+      if (response.route === "/screens/PlaylistScreen") {
+        setStatus("success");
+  
+        setTimeout(() => {
+          setLoading(false);
+
+          router.replace({
+            pathname: response.route as any,
+            params: {
+              outlet_id: loginIdRef.current,
+            },
+          });
+        }, 1000);
+  
+        return;
+      }
+  
+      /*
+        SIGNAGE FLOW
+        Start image preload lifecycle
+      */
+      if (response.preloadImages?.length) {
+        setStatus("preloading_images");
+  
+        setImagesToPreload(response.preloadImages);
+  
+        setPreloadingProgress({
+          loaded: 0,
+          total: response.preloadImages.length,
+        });
+  
+        return;
+      }
+  
+      // No promotions fallback
+      if (response.route) {
+        setStatus(response.status);
+  
+        setTimeout(() => {
+          setLoading(false);
+          
+          router.replace({
+            pathname: response.route as any,
+            params: {
+              outlet_id: loginIdRef.current,
+            },
+          });
+        }, 1500);
+      }
+  
     } catch (err) {
       setLoading(false);
+  
       Alert.alert(
         "Connection Error",
         "Could not connect to server. Please check:\n" +
@@ -181,10 +212,26 @@ export const OutletLoginForm: React.FC = () => {
       );
     }
   };
+
+  const handleSavedLogin = async () => {
+    if (!savedOutlet) return;
+
+    setShowSavedPrompt(false);
+
+    await handleLogin(savedOutlet.id);
+  };
+
+  const handleIgnoreSaved = () => {
+    setShowSavedPrompt(false);
+  };
+
   // Handle all preloaded Images
   const handleImagesPreloaded = useCallback(() => {
     setStatus("success");
+
     setTimeout(() => {
+      setLoading(false);
+
       router.replace({
         pathname: "/screens/MediaScreen",
         params: { outlet_id: loginIdRef.current },
@@ -274,21 +321,21 @@ export const OutletLoginForm: React.FC = () => {
 
         {/* Batch Buttons — only visible when Media Player is selected */}
         {screenType === "media" && (
-           <>
-           <Text style={styles.label}>Batch Number</Text>
-           <SelectDropdown
-               options={[
-                   { label: "Batch 1", value: 1 },
-                   { label: "Batch 2", value: 2 },
-                   { label: "Batch 3", value: 3 },
-               ]}
-               selectedValue={batchNumber}
-               onSelect={(value) => setBatchNumber(value)}
-               focused={focusedButton === "batch"}
-               onFocus={() => setFocusedButton("batch")}
-               onBlur={() => setFocusedButton(null)}
-           />
-       </>
+          <>
+            <Text style={styles.label}>Batch Number</Text>
+            <SelectDropdown
+              options={[
+                { label: "Batch 1", value: 1 },
+                { label: "Batch 2", value: 2 },
+                { label: "Batch 3", value: 3 },
+              ]}
+              selectedValue={batchNumber}
+              onSelect={(value) => setBatchNumber(value)}
+              focused={focusedButton === "batch"}
+              onFocus={() => setFocusedButton("batch")}
+              onBlur={() => setFocusedButton(null)}
+            />
+          </>
         )}
 
         {/* Orientation — only visible when Media Player is selected */}
@@ -308,7 +355,7 @@ export const OutletLoginForm: React.FC = () => {
                 />
               ))}
             </View>
-            
+
           </>
         )}
 
@@ -347,10 +394,12 @@ export const OutletLoginForm: React.FC = () => {
         />
       )}
 
-      <SavedOutletOverlay onUseSaved={(id) => {
-        setOutletId(id);
-        handleLogin(id);
-      }} />
+      <SavedOutletOverlay
+        visible={showSavedPrompt}
+        savedOutlet={savedOutlet}
+        onUseSaved={handleSavedLogin}
+        onIgnoreSaved={handleIgnoreSaved}
+      />
     </View>
   );
 };

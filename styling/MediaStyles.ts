@@ -221,7 +221,7 @@ export const PlaylistStyles = StyleSheet.create({
     height: "100%",
   },
   statusText: {
-    color: "#fff",
+    color: "#000",
     fontSize: 16,
   },
 });
