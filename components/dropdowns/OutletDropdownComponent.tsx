@@ -101,7 +101,7 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="Enter Outlet ID or Name..."
+          placeholder="Enter Outlet ID"
           placeholderTextColor="#BDBDBD"
           value={search}
           onFocus={onFocus}

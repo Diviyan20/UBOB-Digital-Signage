@@ -27,7 +27,7 @@ export const PlaylistComponent: React.FC = () => {
     const [images, setImages] = useState<ImageEntry[]>([]);
     const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
-    
+
     const [displayDuration, setDisplayDuration] = useState(5000);
     const [fadeDuration, setFadeDuration] = useState(400);
     const [orientation, setOrientation] = useState<OrientationType>("Landscape");
@@ -55,18 +55,18 @@ export const PlaylistComponent: React.FC = () => {
         }
     }, []);
 
-    const loadPlaylist = useCallback(async () =>{
+    const loadPlaylist = useCallback(async () => {
         const playlist: PlaylistItems[] = await fetchPlaylist();
 
         // Separate the combined playlist into 2 lists by type
         const fetchedVideos = playlist
-        .filter(item => item.type === "video")
-        .map(item => ({ url: item.url }));
+            .filter(item => item.type === "video")
+            .map(item => ({ url: item.url }));
 
         const fetchedImages = playlist
             .filter(item => item.type === "image")
             .map(item => ({ url: item.url }));
-        
+
         return { fetchedVideos, fetchedImages };
     }, []);
 
@@ -79,7 +79,7 @@ export const PlaylistComponent: React.FC = () => {
         if (savedOrientation === "Portrait" || savedOrientation === "Landscape") {
             setOrientation(savedOrientation);
         }
-        
+
         await fetchConfig();
         const { fetchedVideos, fetchedImages } = await loadPlaylist();
 
@@ -111,12 +111,11 @@ export const PlaylistComponent: React.FC = () => {
         initialize();
 
         const subscription = AppState.addEventListener("change", (nextState: AppStateStatus) => {
-                if (appStateRef.current.match(/inactive|background/) && nextState === "active") 
-                    {
-                        initialize(); // Re-fetch when app comes back to foreground
-                    }
-                appStateRef.current = nextState;
-            });
+            if (appStateRef.current.match(/inactive|background/) && nextState === "active") {
+                initialize(); // Re-fetch when app comes back to foreground
+            }
+            appStateRef.current = nextState;
+        });
 
         return () => {
             isMounted.current = false;
@@ -133,6 +132,10 @@ export const PlaylistComponent: React.FC = () => {
 
         const load = async () => {
             try {
+                player.loop = (
+                    videosRef.current.length === 1 &&
+                    imagesRef.current.length === 0
+                );
                 await player.replaceAsync(url);
                 player.play();
             } catch (err) {
@@ -146,6 +149,14 @@ export const PlaylistComponent: React.FC = () => {
     // Advance to next video on end
     useEffect(() => {
         if (mode !== "video") return;
+
+        // Single looping video — no playlist transitions needed
+        if (
+            videosRef.current.length === 1 &&
+            imagesRef.current.length === 0
+        ) {
+            return;
+        }
 
         const subscription = player.addListener("playToEnd", () => {
             if (!isMounted.current) return;
@@ -166,6 +177,16 @@ export const PlaylistComponent: React.FC = () => {
     // Image cycling
     useEffect(() => {
         if (mode !== "image" || imagesRef.current.length === 0) return;
+
+        // Single static image — no transitions needed
+        if (
+            imagesRef.current.length === 1 &&
+            videosRef.current.length === 0
+        ) {
+            fadeAnim.setValue(1);
+            return;
+        }
+
         fadeAnim.setValue(1); // Start fully visible
 
         const timer = setTimeout(() => {
