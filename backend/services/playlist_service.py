@@ -35,26 +35,38 @@ class PlaylistService:
     # ======================
     # MIXED MEDIA PLAYLIST
     # ======================
+    def normalize_region(self, region: str) -> str:
+        """
+        Remove any special characters from string 
+        
+        Example: Kuala_Lumpur, Kuala Lumpur
+        """
+        return(region.strip().replace("_", " "))
+    
     def get_playlist(self, outlet_id:str, batch_number:int, orientation: str="Landscape"):
         """
             Builds S3 path based on region, batch, and orientation.
-            
+
             Example: Selangor/Batch 2/Landscape/
         """
         # Step 1: Get outlet region
         region = self.get_outlet_region(outlet_id)
         
+        normalized_region = self.normalize_region(region)
+        
         # Step 2: Build S3 folder path
-        prefix = f"{region}/Batch {batch_number}/{orientation}/"
+        prefix = f"{normalized_region}/Batch {batch_number}/{orientation}/"
+        
+        print(f"[PLAYLIST PREFIX] {prefix}")
         
         # Step 3: Fetch mixed media
         media = get_s3_playlist_media(prefix)
         
         return media
 
-    # ==============================
-    # SIGNAGE SCREEN VIDEO PLAYLIST
-    # ==============================
+    # ========================
+    # VIDEO SIGNAGE PLAYLIST
+    # ========================
     def get_signage_videos(self):
         """
             - Used for signage screen
