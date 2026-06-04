@@ -58,6 +58,9 @@ def get_s3_playlist_media(prefix: str):
     Selangor/Batch 1/
     """
     playlist = []
+    playlist_size = 0
+    image_count = 0
+    video_count = 0
     
     print(f"[S3 SEARCH PREFIX]: {prefix}")
     
@@ -76,11 +79,14 @@ def get_s3_playlist_media(prefix: str):
             
             # Generate secure URL
             url = get_video_url(key)
+            print(f"[VIDEO URL]: {url}")
             
             # VIDEO
             if lower_key.endswith(tuple(VIDEO_EXTENSIONS)):
                 file_size_bytes = obj.get("Size", 0)
                 file_size_mb = bytes_to_mb(file_size_bytes)
+                video_count += 1
+                playlist_size += file_size_mb
                 
                 print("VIDEO FOUND")
                 print(f"KEY: {key}")
@@ -88,6 +94,7 @@ def get_s3_playlist_media(prefix: str):
                 
                 if file_size_mb > MAX_VIDEO_SIZE_MB:
                     warn(f"⚠ Large video: {key} ({file_size_mb} MB) — may buffer on weak TVs")
+                
                 playlist.append({
                     "type": "video",
                     "url": url,
@@ -96,6 +103,8 @@ def get_s3_playlist_media(prefix: str):
             
             # IMAGE
             if lower_key.endswith(tuple(IMAGE_EXTENSIONS)):
+                image_count += 1
+                playlist_size += bytes_to_mb(obj.get("Size",0))
                 playlist.append({
                     "type": "image",
                     "url": url
@@ -111,6 +120,7 @@ def get_video_media(prefix: str):
     Selangor/Batch 1/
     """
     videos = []
+    total_size = 0
     print(f"\n[S3 SEARCH] Prefix: {prefix}")
     
     paginator = s3.get_paginator("list_objects_v2")
@@ -129,6 +139,8 @@ def get_video_media(prefix: str):
                 continue
             file_size_bytes = obj.get("Size", 0)
             file_size_mb = bytes_to_mb(file_size_bytes)
+
+            total_size += file_size_mb
             
             print("\n[VIDEO FOUND]")
             print(f"KEY: {key}")
@@ -139,6 +151,7 @@ def get_video_media(prefix: str):
             
             # Generate secure URL
             url = get_video_url(key)
+            print(f"[MEDIA URL]: {url}")
             
             videos.append({
                 "type": "video",
@@ -149,7 +162,8 @@ def get_video_media(prefix: str):
             })
             
     print("\n========== VIDEO FETCH COMPLETE ==========")
-    print(f"TOTAL VIDEOS: {len(videos)}")
-    print(f"[URL TYPE] {'CloudFront' if CLOUDFRONT_DOMAIN else 'S3 Pre-signed'}")
+    print(f"VIDEOS: {len(videos)}")
+    print(f"TOTAL SIZE: {round(total_size,2)} MB")
+    print(f"AVG SIZE: {round(total_size/max(len(videos),1),2)} MB")
     
     return videos
