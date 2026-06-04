@@ -77,7 +77,16 @@ export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
                 return cache.videos;
             }
 
-            console.log(`[CACHE STALE] Age: ${ageHours}h or outlet changed — refetching`);
+            const totalSize = cache.videos.reduce(
+                (sum, video) => sum + (video.sizeMb || 0),
+                0
+            );
+            
+            console.log("========== CACHE HIT ==========");
+            console.log(`Videos: ${cache.videos.length}`);
+            console.log(`Total Size: ${totalSize.toFixed(2)} MB`);
+            console.log(`Age: ${ageHours}h`);
+            console.log("Source: AsyncStorage");
         } else {
             console.log("[CACHE MISS] No cache found");
         }
@@ -108,9 +117,6 @@ export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
                 videoURI: sanitizeVideoUrl(video.videoURI),
             }))
             .filter((video) => video.videoURI.startsWith("https://"));
-
-        console.log(`[FETCH] ${cleanedVideos.length} videos received from backend`);
-
         // ── Step 3: Store in cache ───────────────────────────────────────────
         const cachePayload: VideoCache = {
             videos: cleanedVideos,
@@ -121,6 +127,16 @@ export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
         await AsyncStorage.setItem(VIDEO_CACHE_KEY, JSON.stringify(cachePayload));
         console.log("[CACHE] Video list cached — future loads will skip backend");
         console.log("[CACHE] Videos will play directly from CloudFront");
+
+        const totalSize = cleanedVideos.reduce(
+            (sum, video) => sum + (video.sizeMb || 0),
+            0
+        );
+        
+        console.log("========== BACKEND FETCH ==========");
+        console.log(`Videos: ${cleanedVideos.length}`);
+        console.log(`Total Size: ${totalSize.toFixed(2)} MB`);
+        console.log("Source: Backend");
 
         return cleanedVideos;
 

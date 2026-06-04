@@ -79,6 +79,15 @@ def get_s3_playlist_media(prefix: str):
             
             # VIDEO
             if lower_key.endswith(tuple(VIDEO_EXTENSIONS)):
+                file_size_bytes = obj.get("Size", 0)
+                file_size_mb = bytes_to_mb(file_size_bytes)
+                
+                print("VIDEO FOUND")
+                print(f"KEY: {key}")
+                print(f"SIZE: {file_size_mb} MB")
+                
+                if file_size_mb > MAX_VIDEO_SIZE_MB:
+                    warn(f"⚠ Large video: {key} ({file_size_mb} MB) — may buffer on weak TVs")
                 playlist.append({
                     "type": "video",
                     "url": url,
