@@ -64,9 +64,9 @@ class PlaylistService:
         
         return media
 
-    # ==============================
-    # SIGNAGE SCREEN VIDEO PLAYLIST
-    # ==============================
+    # ========================
+    # VIDEO SIGNAGE PLAYLIST
+    # ========================
     def get_signage_videos(self):
         """
             - Used for signage screen
