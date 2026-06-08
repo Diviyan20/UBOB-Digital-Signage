@@ -16,6 +16,9 @@ import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
 
 import { loadOutletSession, loginOutlet } from "@/services/LoginService";
 
+import * as ScreenOrientation from "expo-screen-orientation";
+import { useWindowDimensions } from "react-native";
+
 type ScreenType = "signage" | "media";
 type OrientationType = "Landscape" | "Portrait";
 
@@ -71,6 +74,9 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
 };
 
 export const OutletLoginForm: React.FC = () => {
+  const { width, height } = useWindowDimensions();
+  const isPortrait = height > width; // real device dimensions, no flag needed
+
   const [outlet_id, setOutletId] = useState<string>("");
   const [screenType, setScreenType] = useState<ScreenType>("signage");
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
@@ -100,6 +106,11 @@ export const OutletLoginForm: React.FC = () => {
   }>({ loaded: 0, total: 0 });
 
   const loginIdRef = useRef<string>("");
+
+  useEffect(() => {
+    // Unlock so staff can rotate the phone to test portrait layout
+    ScreenOrientation.unlockAsync();
+}, []);
 
   /*
     * Hydrate saved session on Mount
@@ -270,12 +281,12 @@ export const OutletLoginForm: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isPortrait && styles.containerPortrait]}>
       <Image
-        style={styles.imageContainer}
+        style={[styles.imageContainer, isPortrait && styles.imageContainerPortrait]}
         source={require("../images/Logo.png")}
       />
-      <View style={styles.card}>
+      <View style={[styles.card, isPortrait && styles.cardPortrait]}>
         <Text style={styles.label}>Outlet ID</Text>
 
         <View
@@ -294,7 +305,6 @@ export const OutletLoginForm: React.FC = () => {
 
         {/* Screen Type Selection */}
         <Text style={styles.label}>Screen Type</Text>
-
         <View style={styles.toggleRow}>
 
           {/* Signage Screen */}
@@ -307,7 +317,7 @@ export const OutletLoginForm: React.FC = () => {
             onPress={() => setScreenType("signage")}
           />
 
-          {/* Disabled Media Player */}
+          {/* Media Player */}
           <ToggleButton
             label="Media Player"
             active={screenType === "media"}
@@ -316,7 +326,6 @@ export const OutletLoginForm: React.FC = () => {
             onBlur={() => setFocusedButton(null)}
             onPress={() => setScreenType("media")}
           />
-
         </View>
 
         {/* Batch Buttons — only visible when Media Player is selected */}
@@ -361,7 +370,8 @@ export const OutletLoginForm: React.FC = () => {
 
         <Pressable style={[
           styles.loginButton,
-          focusedButton === "login" && styles.focusedButton,
+          isPortrait && styles.loginButtonPortrait,
+          focusedButton === "login" && styles.focusedButton
         ]}
           onFocus={() => setFocusedButton("login")}
           onBlur={() => setFocusedButton(null)}
