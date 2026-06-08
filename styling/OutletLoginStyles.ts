@@ -303,4 +303,33 @@ dropdownOptionTextFocused: {
   fontWeight: "600",
 },
 
+// ── Portrait overrides ────────────────────────────────────────────────────────
+// Applied on top of base styles when isPortrait === true.
+// Portrait = tall narrow screen (phone in portrait, portrait TV)
+// ─────────────────────────────────────────────────────────────────────────────
+
+containerPortrait: {
+  paddingHorizontal: 16,      // less side padding — screen is narrower
+  justifyContent: "flex-start",
+  paddingTop: 32,
+},
+
+imageContainerPortrait: {
+  width: 120,                 // smaller logo — save vertical space
+  height: 80,
+  marginBottom: 12,
+},
+
+cardPortrait: {
+  width: "96%",               // almost full width — narrow screen needs it
+  maxWidth: 420,
+  paddingVertical: 20,
+  paddingHorizontal: 20,
+},
+
+loginButtonPortrait: {
+  paddingVertical: 14,        // larger tap target — finger-friendly on phone
+  marginTop: 12,
+},
+
 });

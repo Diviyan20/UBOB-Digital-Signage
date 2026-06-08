@@ -4,7 +4,7 @@ export default {
   expo: {
     name: 'Digital-Signage-System',
     slug: 'Digital-Signage-System',
-    version: '1.0.0',
+    version: '2.0.0',
     icon:"./assets/icon.png",
     splash:{
       "image":"./assets/Splashscreen.png",
@@ -19,7 +19,7 @@ export default {
     runtimeVersion: {
     "policy": "appVersion"
   },
-    orientation: 'landscape',
+    orientation: 'default',
     scheme: 'digitalsignagesystem',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
