@@ -182,9 +182,7 @@ export const VideoScreenStyle = StyleSheet.create({
 export const PlaylistStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "#f0f0f0"
   },
 
   landscapeCard: {
@@ -202,16 +200,7 @@ export const PlaylistStyles = StyleSheet.create({
   },
 
   portraitCard: {
-    height: "90%",
-    aspectRatio: 9 / 16,
-    backgroundColor: "#FFFFCC",
-    borderRadius: 20,
-    overflow: "hidden",
-    elevation: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    height: "100%",
     justifyContent: "center",
     alignItems: "center",
   },
