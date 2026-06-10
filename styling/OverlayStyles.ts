@@ -107,3 +107,41 @@ export const LoginOverlayStyle = StyleSheet.create({
         textAlign: "center",
     }
 })
+
+
+export const watchDogOverlayStyle = StyleSheet.create({
+    errorOverlay: {
+        ...StyleSheet.absoluteFillObject, // sits on top of everything
+        backgroundColor: "rgba(0,0,0,0.65)",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 999,
+    },
+    errorCard: {
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        padding: 32,
+        maxWidth: 420,
+        alignItems: "center",
+        elevation: 10,
+    },
+    errorTitle: {
+        fontSize: 20,
+        fontWeight: "700",
+        color: "#B91C1C",
+        marginBottom: 12,
+        textAlign: "center",
+    },
+    errorMessage: {
+        fontSize: 15,
+        color: "#333",
+        textAlign: "center",
+        lineHeight: 24,
+        marginBottom: 12,
+    },
+    errorSub: {
+        fontSize: 13,
+        color: "#888",
+        textAlign: "center",
+    },
+})
