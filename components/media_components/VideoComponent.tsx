@@ -6,10 +6,14 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 interface Props {
   onAllVideosFinished: () => void;
+  onPlaybackStarted: () => void; // signals watchdog to cancel
 }
+
+const DEV_BLOCK_PLAYBACK = false; // Set to true to simulate video failure
 
 export const VideoComponent = ({
   onAllVideosFinished,
+  onPlaybackStarted,
 }: Props) => {
 
   const { width, height } = useWindowDimensions();
@@ -21,6 +25,7 @@ export const VideoComponent = ({
   // Ref so effects always read the latest list without stale closures
   const videosRef = useRef<VideoItem[]>([]);
   const isMounted = useRef(true);
+  const hasSignaled = useRef(false); // Only signal once per mount
 
   const currentVideo = videos[currentIndex]; //Current video object
 
@@ -68,8 +73,22 @@ export const VideoComponent = ({
 
     const load = async () => {
       try {
+        if (DEV_BLOCK_PLAYBACK) {
+          // Simulates a hung video load — player stays idle
+          // Watchdog should fire after WATCHDOG_TIMEOUT_MS
+          console.warn("[DEV] Playback blocked — watchdog test active");
+          return; // never calls replaceAsync, never signals onPlaybackStarted
+      }
+
         await player.replaceAsync(url);
         player.play();
+
+      // Tell MediaController playback has started - cancel watchdog
+      if (!hasSignaled.current) {
+        hasSignaled.current = true;
+        onPlaybackStarted?.();
+    } 
+
       } catch (err) {
         console.error("Failed to load video:", err);
       }
