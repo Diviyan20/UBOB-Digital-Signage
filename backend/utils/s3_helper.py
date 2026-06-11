@@ -111,6 +111,52 @@ def get_s3_playlist_media(prefix: str):
                 })
     return playlist
 
+def list_s3_objects(prefix: str):
+    """
+    Returns media objects used for versioning.
+
+    We include:
+    - key
+    - size
+    - last modified
+
+    so version changes when files are:
+    - added
+    - removed
+    - renamed
+    - replaced
+    """
+
+    objects = []
+
+    paginator = s3.get_paginator("list_objects_v2")
+
+    for page in paginator.paginate(
+        Bucket=BUCKET_NAME,
+        Prefix=prefix
+    ):
+        for obj in page.get("Contents", []):
+
+            key = obj.get("Key", "")
+            lower_key = key.lower()
+
+            is_media = (
+                lower_key.endswith(tuple(VIDEO_EXTENSIONS))
+                or
+                lower_key.endswith(tuple(IMAGE_EXTENSIONS))
+            )
+
+            if not is_media:
+                continue
+
+            objects.append({
+                "key": key,
+                "size": obj.get("Size", 0),
+                "modified": obj.get("LastModified").isoformat()
+            })
+
+    return objects
+
 def get_video_media(prefix: str):
     """
     - Fetch only videos from S3 Bucket

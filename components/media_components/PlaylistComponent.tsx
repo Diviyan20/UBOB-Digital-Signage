@@ -1,4 +1,4 @@
-import { fetchPlaylist, PlaylistItems } from "@/services/MediaService";
+import { clearPlaylistCache, fetchPlaylist, getPlaylistVersion, PlaylistItems } from "@/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
@@ -13,6 +13,8 @@ import {
     View,
 } from "react-native";
 import { config } from "../api/client";
+
+const VERSION_CHECK_INTERVAL_MS = 30 * 1000; // check every 15 minutes
 
 // Separate types for the two lists
 interface VideoEntry { url: string; }
@@ -219,6 +221,50 @@ export const PlaylistComponent: React.FC = () => {
 
         return () => clearTimeout(timer);
     }, [mode, currentImageIndex, displayDuration, fadeDuration]);
+
+    useEffect(() => {
+        const checkForUpdates = async () => {
+            console.log("[VERSION CHECK] Checking playlist for new content...");
+    
+            const outletId    = await AsyncStorage.getItem("outlet_id");
+            const batchNumber = await AsyncStorage.getItem("batch_number") || "1";
+            const orientation = await AsyncStorage.getItem("orientation") || "Landscape";
+    
+            if (!outletId) return;
+    
+            const serverEtag = await getPlaylistVersion(outletId, batchNumber, orientation);
+            if (!serverEtag) {
+                console.warn("[VERSION CHECK] Could not reach server — skipping");
+                return;
+            }
+    
+            // Compare with what's currently cached
+            try {
+                const cachedRaw = await AsyncStorage.getItem("playlist_cache");
+                if (!cachedRaw) {
+                    console.log("[VERSION CHECK] No cache — refreshing");
+                    initialize();
+                    return;
+                }
+    
+                const cache = JSON.parse(cachedRaw);
+    
+                if (cache.etag !== serverEtag) {
+                    console.log(`[VERSION CHECK] Content changed: ${cache.etag} → ${serverEtag}`);
+                    console.log("[VERSION CHECK] Clearing cache and reinitializing...");
+                    await clearPlaylistCache();
+                    initialize(); // fetchPlaylist will now fetch fresh since cache is gone
+                } else {
+                    console.log(`[VERSION CHECK] Content unchanged — etag: ${serverEtag}`);
+                }
+            } catch (err) {
+                console.warn("[VERSION CHECK] Error reading cache:", err);
+            }
+        };
+    
+        const interval = setInterval(checkForUpdates, VERSION_CHECK_INTERVAL_MS);
+        return () => clearInterval(interval);
+    }, [initialize]);
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
