@@ -1,5 +1,6 @@
-import { fetchSignageVideos, VideoItem } from "@/services/MediaService";
+import { clearVideoCache, fetchSignageVideos, getSignageVersion, VideoItem } from "@/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
@@ -8,8 +9,14 @@ interface Props {
   onAllVideosFinished: () => void;
   onPlaybackStarted: () => void; // signals watchdog to cancel
 }
+/*
+  * Set to true to simulate video failure 
 
-const DEV_BLOCK_PLAYBACK = false; // Set to true to simulate video failure
+  * NOTE: ALWAYS SET TO 'FALSE' FOR PRODUCTION
+*/
+const DEV_BLOCK_PLAYBACK = false;
+
+const VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000; // Check every 30 minutes
 
 export const VideoComponent = ({
   onAllVideosFinished,
@@ -138,6 +145,41 @@ export const VideoComponent = ({
     });
     return () => subscription.remove();
   }, [player])
+
+  useEffect(() => {
+    const checkForUpdates = async () => {
+        console.log("[VERSION CHECK] Checking signage videos for new content...");
+
+        const serverEtag = await getSignageVersion();
+        if (!serverEtag) {
+            console.warn("[VERSION CHECK] Could not reach server — skipping");
+            return;
+        }
+
+        try {
+            const cachedRaw = await AsyncStorage.getItem("signage_videos_cache");
+            if (!cachedRaw) return;
+
+            const cache = JSON.parse(cachedRaw);
+
+            if (cache.etag !== serverEtag) {
+                console.log(`[VERSION CHECK] Signage videos changed: ${cache.etag} → ${serverEtag}`);
+                console.log("[VERSION CHECK] Cache cleared — new videos load on next cycle");
+                await clearVideoCache();
+                // Don't interrupt current playback.
+                // Cache is cleared — when VideoComponent remounts after
+                // onAllVideosFinished, it will automatically fetch fresh.
+            } else {
+                console.log(`[VERSION CHECK] Signage videos unchanged — etag: ${serverEtag}`);
+            }
+        } catch (err) {
+            console.warn("[VERSION CHECK] Error:", err);
+        }
+    };
+
+    const interval = setInterval(checkForUpdates, VERSION_CHECK_INTERVAL_MS);
+    return () => clearInterval(interval);
+}, []);
 
   /**
    * Loading state

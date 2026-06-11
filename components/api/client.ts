@@ -11,7 +11,9 @@ export const api = {
   promotions: `${DEVELOPMENT_URL}/promotions`,
   outletImages: `${DEVELOPMENT_URL}/outlet_image_combined`,
   signageVideos: `${DEVELOPMENT_URL}/signage_videos`,
-  playlist: `${DEVELOPMENT_URL}/playlist`
+  playlist: `${DEVELOPMENT_URL}/playlist`,
+  playlistVersion: `${DEVELOPMENT_URL}/playlist_version`,
+  signageVersion:  `${DEVELOPMENT_URL}/signage_version`,
 };
 
 export const config = `${DEVELOPMENT_URL}/config`;
