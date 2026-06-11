@@ -8,7 +8,7 @@ export const api = {
   outletInfo: (outletId: string) => `${PRODUCTION_URL}/outlet_info/${outletId}`,
   outletData: `${PRODUCTION_URL}/api/outlets`,
   heartbeat: `${PRODUCTION_URL}/heartbeat`,
-  promotions: `${PRODUCTION_URL}/promotions`,
+  promotions: `${PRODUCTION_URL}/get_media`,
   outletImages: `${PRODUCTION_URL}/outlet_image_combined`,
   signageVideos: `${PRODUCTION_URL}/signage_videos`,
   playlist: `${PRODUCTION_URL}/playlist`,
