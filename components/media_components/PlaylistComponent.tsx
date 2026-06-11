@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { config } from "../api/client";
 
-const VERSION_CHECK_INTERVAL_MS = 30 * 1000; // check every 15 minutes
+const VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000; // check every 30 minutes
 
 // Separate types for the two lists
 interface VideoEntry { url: string; }
