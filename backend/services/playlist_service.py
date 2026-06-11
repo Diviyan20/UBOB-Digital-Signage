@@ -1,5 +1,7 @@
+import hashlib
+
 from models.active_outlets import get_outlet_information
-from utils.s3_helper import get_s3_playlist_media, get_video_media
+from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects
 
 
 class PlaylistService:
@@ -78,3 +80,55 @@ class PlaylistService:
         videos = get_video_media(prefix)
         
         return videos
+    
+    def _compute_version(self, prefix: str) -> dict:
+        """
+        Computes a stable content fingerprint.
+
+        Changes whenever:
+        - file added
+        - file removed
+        - file renamed
+        - file replaced
+        """
+
+        objects = list_s3_objects(prefix)
+
+        fingerprint = "".join(
+            f"{obj['key']}:{obj['size']}:{obj['modified']}"
+            for obj in sorted(
+                objects,
+                key=lambda x: x["key"]
+            )
+        )
+
+        etag = hashlib.md5(
+            fingerprint.encode()
+        ).hexdigest()[:12]
+
+        print("\n========== VERSION CHECK ==========")
+        print(f"PREFIX      : {prefix}")
+        print(f"ITEM COUNT  : {len(objects)}")
+        print(f"ETAG        : {etag}")
+        print("===================================")
+
+        return {
+            "etag": etag,
+            "itemCount": len(objects)
+        }
+    
+    def get_playlist_version(self, outlet_id: str, batch_number: int, orientation: str= "Landscape") -> dict:
+        """
+        Returns version info for a playlist screen's S3 folder.
+        """
+        region = self.get_outlet_region(outlet_id)
+        normalized_region = self.normalize_region(region)
+        prefix = f"{normalized_region}/Batch {batch_number}/{orientation}/"
+        return self._compute_version(prefix)
+
+    def get_signage_version(self) -> dict:
+        """
+        Returns version info for the Digital Signage folder.
+        """
+        prefix = "Digital Signage/"
+        return self._compute_version(prefix)
