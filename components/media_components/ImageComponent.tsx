@@ -110,7 +110,7 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
         console.log("[BACKGROUND REFRESH] Checking for promotion updates...");
     
         fetchMediaList();
-      }, 30 * 1000); // 30 seconds (Set it back to 15 * 60 * 1000 for 15 minutes)
+      }, 30 * 60 * 1000); // 30 seconds (Set it back to 30 * 60 * 1000 for 30 minutes)
     
       return () => {
         isMounted.current = false;
