@@ -66,42 +66,10 @@ export const ErrorOverlayComponent: React.FC<ErrorOverlayProps> = ({
     );
   };
 
-  // --- Media Error Overlay ---
-  const MediaErrorOverlay: React.FC<{ onRetry: () => void }> = ({ onRetry }) => {
-    const refreshButtonRef = useRef<any>(null);
-    useFocusOnMount(refreshButtonRef);
-
-    return (
-      <Overlay
-        isVisible
-        overlayStyle={[styles.mediaContainer, { zIndex: 9999 }]}
-        backdropStyle={{ pointerEvents: "auto" }}
-      >
-        <View>
-          <Text style={styles.mediaTextPrimary}>Oops! Nothing’s showing.</Text>
-          <Text style={styles.mediaTextSecondary}>
-            Give us a minute or refresh the media screen.
-          </Text>
-          <Pressable
-            ref={refreshButtonRef}
-            style={styles.mediaButton}
-            onPress={onRetry}
-            focusable={true}
-            {...(Platform.isTV && { hasTVPreferredFocus: true })}
-          >
-            <Text style={styles.mediaButtonText}>Refresh</Text>
-          </Pressable>
-        </View>
-      </Overlay>
-    );
-  };
-
   // --- Render ---
   switch (errorType) {
     case "invalid_outlet":
       return <InvalidOutletOverlay onRetry={onRetry} />;
-    case "media_error":
-      return <MediaErrorOverlay onRetry={onRetry} />;
     default:
       return null;
   }
