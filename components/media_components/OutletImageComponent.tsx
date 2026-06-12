@@ -1,4 +1,10 @@
+import {
+  OutletImageItem,
+  fetchAndCacheOutletImages,
+  getCachedOutletImages,
+} from "@/services/OutletImageService";
 import { OutletImageStyle } from "@/styling/OutletImageStyle";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import React, {
   useCallback,
@@ -8,23 +14,17 @@ import React, {
   useState,
 } from "react";
 import { Animated, Text, View, useWindowDimensions } from "react-native";
-import { api, config } from "../api/client";
+import { config } from "../api/client";
 
-interface ImageItem {
-  id?: string;
-  image?: string | null;
-  outlet_name?: string;
-  outlet_id?: string;
-}
-
-const ITEMS_PER_PAGE = 7; // How many outlets shown at once
+const ITEMS_PER_PAGE = 7;
+const SESSION_FETCHED_KEY = "outlet_images_session_fetched"; // Flag: did we already fetch this session?
 
 export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
-  ({ endpoint = api.outletImages }) => {
+  ({ endpoint }) => {
     const { width, height } = useWindowDimensions();
     const styles = OutletImageStyle(width, height);
 
-    const [images, setImages] = useState<ImageItem[]>([]);
+    const [images, setImages] = useState<OutletImageItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [currentPage, setCurrentPage] = useState(0);
     const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
@@ -33,103 +33,92 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
 
     const flipAnim = useRef(new Animated.Value(0)).current;
     const isMounted = useRef(true);
-    const abortControllerRef = useRef<AbortController | null>(null);
 
-    // Split images into pages of ITEMS_PER_PAGE
-    const pages = useMemo(() =>{
-      const result: ImageItem[][] = [];
-      for (let i=0; i < images.length; i+= ITEMS_PER_PAGE){
-          result.push(images.slice(i, i + ITEMS_PER_PAGE));
+    const pages = useMemo(() => {
+      const result: OutletImageItem[][] = [];
+      for (let i = 0; i < images.length; i += ITEMS_PER_PAGE) {
+        result.push(images.slice(i, i + ITEMS_PER_PAGE));
       }
-
       return result;
     }, [images]);
 
-    const fetchOutletImages = useCallback(async () => {
-      if (abortControllerRef.current) abortControllerRef.current.abort();
-      abortControllerRef.current = new AbortController();
+    // Core logic: load cache immediately, fetch fresh only if this session hasn't fetched yet
+    const loadImages = useCallback(async () => {
+      setLoading(true);
 
-      try {
-        setLoading(true);
-
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        const items: ImageItem[] = Array.isArray(data?.media) ? data.media : [];
-
-        if (isMounted.current) {
-          setImages(items);
-          setImageErrors(new Set());
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") return;
-        console.error("Outlet image fetch error:", error);
-        if (isMounted.current) setImages([]);
-      } finally {
-        if (isMounted.current) setLoading(false);
+      // Step 1: Load from cache right away so the screen isn't blank
+      const cached = await getCachedOutletImages();
+      if (isMounted.current && cached.length > 0) {
+        setImages(cached);
+        setLoading(false); // Show cached images immediately, don't make user wait
       }
+
+      // Step 2: Check if we already fetched during this login session
+      const alreadyFetched = await AsyncStorage.getItem(SESSION_FETCHED_KEY);
+
+      if (!alreadyFetched) {
+        // First time after login — fetch fresh data
+        try {
+          const fresh = await fetchAndCacheOutletImages(endpoint);
+          if (isMounted.current) {
+            setImages(fresh);
+            setImageErrors(new Set()); // Clear any stale errors
+          }
+          // Mark that we've fetched for this session
+          await AsyncStorage.setItem(SESSION_FETCHED_KEY, "true");
+        } catch (err) {
+          console.error("[OUTLET IMAGE FETCH ERROR] Fresh fetch failed, using cache:", err);
+          // Cache is already loaded above — nothing extra needed here
+        }
+      }
+
+      if (isMounted.current) setLoading(false);
     }, [endpoint]);
 
     useEffect(() => {
       isMounted.current = true;
-      fetchOutletImages();
-
+      loadImages();
       return () => {
         isMounted.current = false;
-        if (abortControllerRef.current) abortControllerRef.current.abort();
       };
-    }, [fetchOutletImages]);
+    }, [loadImages]);
 
-    // Fetch Image Flip interval and Fade duration from Config
-    useEffect(() =>{
-      const fetchConfig = async () =>{
-        try{
+    // Config fetch (flip interval + fade duration)
+    useEffect(() => {
+      const fetchConfig = async () => {
+        try {
           const response = await fetch(config);
           const data = await response.json();
-
           setFlipInterval(data.config.outlet_image_flip_interval);
           setFadeDuration(data.config.fade_duration);
-        }
-        catch(e){
+        } catch (e) {
           console.error("CONFIG ERROR: ", e);
         }
       };
-      
       fetchConfig();
-    } ,[]);
+    }, []);
 
-    // Flip timer — fade out, swap page, fade in
+    // Flip animation
     useEffect(() => {
       if (pages.length <= 1) return;
 
       const interval = setInterval(() => {
-        // Fade Out
         Animated.timing(flipAnim, {
           toValue: 0.5,
           duration: fadeDuration,
           useNativeDriver: true,
-        }).start(() =>{
-          // Swap page at the invisible midpoint
-          setCurrentPage(prev => (prev + 1) % pages.length);
-      
-        // Fade In
-        Animated.timing(flipAnim, {
-          toValue: 0,
-          duration: fadeDuration,
-          useNativeDriver: true,
-        }).start();
-      });
+        }).start(() => {
+          setCurrentPage((prev) => (prev + 1) % pages.length);
+          Animated.timing(flipAnim, {
+            toValue: 0,
+            duration: fadeDuration,
+            useNativeDriver: true,
+          }).start();
+        });
       }, flipInterval);
 
       return () => clearInterval(interval);
-    }, [pages.length, flipAnim]);
+    }, [pages.length, flipAnim, fadeDuration, flipInterval]); // Added missing deps
 
     const handleImageError = useCallback((imageId: string) => {
       setImageErrors((prev) => {
@@ -140,7 +129,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
     }, []);
 
     const opacity = flipAnim.interpolate({
-      inputRange: [0, 0.5,],
+      inputRange: [0, 0.5],
       outputRange: [1, 0],
     });
 
@@ -149,7 +138,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
       outputRange: [1, 0.92],
     });
 
-    if (loading) return <Text>Loading Images...</Text>;
+    if (loading && images.length === 0) return <Text>Loading Images...</Text>;
     if (images.length === 0) return <Text>No images available.</Text>;
 
     const currentItems = pages[currentPage] || [];
@@ -158,10 +147,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
       <View style={styles.container}>
         <View style={styles.cardFrame}>
           <Animated.View
-            style={[
-              styles.pageContainer,
-              { opacity, transform: [{ scale }] }
-            ]}
+            style={[styles.pageContainer, { opacity, transform: [{ scale }] }]}
           >
             {currentItems.map((item, i) => {
               const imageId = item.id || item.outlet_id || `image-${i}`;
@@ -169,20 +155,22 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
               const hasError = imageErrors.has(imageId);
 
               return (
-                <View
-                  key={imageId}
-                  style={{ alignItems: "center", marginHorizontal: 8 }}
-                >
-                  <Animated.View style={[styles.imageWrapper, {
-                    shadowOpacity: flipAnim.interpolate({
-                      inputRange: [0, 0.5],
-                      outputRange: [0.2, 0],
-                    }),
-                    backgroundColor: flipAnim.interpolate({
-                      inputRange: [0, 0.5],
-                      outputRange: ["#ffffff", "transparent"],
-                    }),
-                  }]}>
+                <View key={imageId} style={{ alignItems: "center", marginHorizontal: 8 }}>
+                  <Animated.View
+                    style={[
+                      styles.imageWrapper,
+                      {
+                        shadowOpacity: flipAnim.interpolate({
+                          inputRange: [0, 0.5],
+                          outputRange: [0.2, 0],
+                        }),
+                        backgroundColor: flipAnim.interpolate({
+                          inputRange: [0, 0.5],
+                          outputRange: ["#ffffff", "transparent"],
+                        }),
+                      },
+                    ]}
+                  >
                     {uri && !hasError ? (
                       <Image
                         source={{ uri }}
@@ -194,7 +182,12 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
                         onError={() => handleImageError(imageId)}
                       />
                     ) : (
-                      <View style={[styles.image, { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" }]}>
+                      <View
+                        style={[
+                          styles.image,
+                          { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" },
+                        ]}
+                      >
                         <Text style={styles.placeholder}>No Image</Text>
                       </View>
                     )}

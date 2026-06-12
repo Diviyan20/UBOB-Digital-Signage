@@ -15,7 +15,7 @@ playlist_service = PlaylistService()
 # Example:
 # POST /playlist
 # {
-#   "outlet_id": "OUTLET_001",
+#   "outlet_id": "42",
 #   "batch_number": 2
 # }
 # ===================================
