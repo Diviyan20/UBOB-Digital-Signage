@@ -44,47 +44,6 @@ export const ErrorOverlayStyle = StyleSheet.create({
         textAlign: "center",
         marginBottom: 16,
     },
-
-    mediaContainer :{
-        backgroundColor: "#0F52BA", // Sapphire Blue
-        borderRadius: 12,
-        padding: 20,
-        margin: 16,
-        alignItems: "center",
-        justifyContent: "center",
-        borderWidth: 1,
-        borderColor: "#FFEEBA", // slightly darker yellow border
-        shadowColor: "#000",
-        shadowOpacity: 0.1,
-        shadowOffset: { width: 0, height: 3 },
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    mediaButton:{
-        backgroundColor: "#000", // Black
-        borderRadius: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 24,
-    },
-    mediaButtonText:{
-        color: "#FFF",
-        fontSize: 16,
-        fontWeight: "700",
-        textAlign: "center",
-    },
-    mediaTextPrimary:{
-        color: "#fff",
-        fontSize: 20,
-        fontWeight: "700",
-        textAlign: "center",
-        marginBottom: 8,
-    },
-    mediaTextSecondary:{
-        color: "#fff",
-        fontSize: 16,
-        textAlign: "center",
-        marginBottom: 16,
-    },
     });
 
 export const LoginOverlayStyle = StyleSheet.create({

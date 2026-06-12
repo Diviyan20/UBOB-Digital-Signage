@@ -90,7 +90,6 @@ export const OutletLoginForm: React.FC = () => {
     | "fetching_promotions"
     | "preloading_images"
     | "success"
-    | "error"
     | undefined
   >();
   const [imagesToPreload, setImagesToPreload] = useState<any[]>([]);
@@ -152,7 +151,6 @@ export const OutletLoginForm: React.FC = () => {
       });
   
       if (!response.success) {
-        setStatus("error");
         setErrorVisible(true);
         setLoading(false);
         return;
@@ -197,8 +195,6 @@ export const OutletLoginForm: React.FC = () => {
   
       // No promotions fallback
       if (response.route) {
-        setStatus(response.status);
-  
         setTimeout(() => {
           setLoading(false);
           
@@ -273,8 +269,6 @@ export const OutletLoginForm: React.FC = () => {
         return `Loading Images... (${loaded}/${total})`;
       case "success":
         return "Success! Loading Media...";
-      case "error":
-        return "Some / All Images may not have loaded in. Consider restarting the app.";
       default:
         return "Loading...";
     }

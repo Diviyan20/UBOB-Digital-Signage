@@ -1,3 +1,4 @@
+import { fetchPromotions, MediaItem } from "@/services/PromotionService";
 import { ImageStyles } from "@/styling/MediaStyles";
 import { Image } from "expo-image";
 import React, {
@@ -11,21 +12,10 @@ import {
   Animated,
   Easing,
   Text,
-  View,
   useWindowDimensions,
+  View,
 } from "react-native";
 import { api, config } from "../api/client";
-import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
-
-interface MediaItem {
-  name?: string;
-  description?: string;
-  image?: string | null;
-  date_start?: string;
-  date_end?: string;
-}
-
-const PREFETCH_BUFFER = 2; //Only Pre-fetches next 2 images instead of all
 
 export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.promotions }) => {
@@ -80,75 +70,54 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
 
     /**
      * Optimized fetch function with request cancellation
-     * Uses AbortController to cancle previous requests if component unmounts
      * Prevents race conditions and memory leaks
      */
     const fetchMediaList = useCallback(async () => {
-      // Cancel any ongoing request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-
-      //Create new abort controller for this request
-      abortControllerRef.current = new AbortController();
-
       try {
-        const response = await fetch(endpoint, {
-          signal: abortControllerRef.current.signal,
-        });
-
-        if (!response.ok) console.log(`HTTP ${response.status}`);
-        const data = await response.json();
-        const items = data.media || [];
-
-        if (items.length === 0) console.error("Error: No media found");
-
+        console.log("[IMAGE COMPONENT] Loading media...");
+    
+        const media = await fetchPromotions();
+    
         if (isMounted.current) {
-          setMediaList(items);
-          setErrorVisible(false);
-
-          if (mediaList.length === 0) {
-            setCurrentIndex(0); // Reset to first image
-          }
+          setMediaList(media);
+          setCurrentIndex(0);
+          setErrorVisible(media.length === 0);
         }
       } catch (err) {
-        // Do not log abort errors (They're expected)
-        if (err instanceof Error && err.name === "AbortError") return;
-
-        console.error("Media Fetch Error: ", err);
-        if (isMounted.current && mediaList.length === 0) setErrorVisible(true);
-      } finally {
-        if (isMounted.current) setLoading(false);
-      }
-    }, [endpoint, mediaList.length]);
-
-    /**
-     * Smart prefetching - only prefetches next few image
-     * More efficient than prefetching all at once
-     * Reduces memory usage and network load
-     *
-     */
-    const prefetchImages = useCallback(
-      (startIndex: number, count: number) => {
-        if (mediaList.length === 0) return;
-
-        // Calculate which images to prefetch (circular buffer)
-        const prefetchPromises = [];
-        for (let i = 0; i < count; i++) {
-          const index = (startIndex + 1) % mediaList.length;
-          const url = getImageUrl(mediaList[index]?.image);
-          if (url) {
-            prefetchPromises.push(
-              Image.prefetch(url).catch(() => null), // Ignore prefetch failures
-            );
-          }
+        console.error("[IMAGE COMPONENT]", err);
+    
+        if (isMounted.current) {
+          setErrorVisible(true);
         }
-        Promise.all(prefetchPromises).then(() => {
-          console.log(`✅ Prefetched next ${count} images`);
-        });
-      },
-      [mediaList, getImageUrl],
-    );
+      } finally {
+        if (isMounted.current) {
+          setLoading(false);
+        }
+      }
+      
+    }, []);
+
+    /*
+      * Occasional background fetch to check for new media in Odoo.
+      * Runs every 30 minutes to prevent unnecessary network spikes
+    */
+    useEffect(() => {
+      isMounted.current = true;
+    
+      fetchMediaList();
+    
+      const refreshInterval = setInterval(() => {
+        console.log("[BACKGROUND REFRESH] Checking for promotion updates...");
+    
+        fetchMediaList();
+      }, 30 * 1000); // 30 seconds (Set it back to 15 * 60 * 1000 for 15 minutes)
+    
+      return () => {
+        isMounted.current = false;
+    
+        clearInterval(refreshInterval);
+      };
+    }, [fetchMediaList]);
 
     /**
      * Memoized advance function
@@ -157,11 +126,7 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
      */
     const advanceOnce = useCallback(() => {
       if (mediaList.length <= 1) return;
-
       const nextIndex = (currentIndex + 1) % mediaList.length;
-
-      //Prefetch next images before advancing
-      prefetchImages(nextIndex, PREFETCH_BUFFER);
 
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -179,13 +144,7 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
           useNativeDriver: true,
         }).start();
       });
-    }, [mediaList.length, currentIndex, prefetchImages, fadeAnim]);
-
-    // Initial prefetch when media list loads
-    useEffect(() => {
-      if (mediaList.length === 0) return;
-      prefetchImages(0, Math.min(PREFETCH_BUFFER + 1, mediaList.length));
-    }, [mediaList, prefetchImages]);
+    }, [mediaList.length, currentIndex, fadeAnim]);
 
     // Component mount/unmount cleanup
     useEffect(() => {
@@ -238,27 +197,40 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
 
     // Error States
     if (!currentMedia) {
-      if (errorVisible) {
-        return (
-          <ErrorOverlayComponent
-            visible={errorVisible}
-            errorType="media_error"
-            onRetry={() => {
-              setErrorVisible(false);
-              setLoading(true);
-              fetchMediaList();
-            }}
-          />
-        );
-      }
       return (
         <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
         >
           <Text>Loading media...</Text>
+
+          {errorVisible && (
+        <View
+          style={{
+            position: "absolute",
+            bottom: 20,
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 8,
+          }}
+        >
+          <Text style={{ fontSize: 11, marginRight: 8 }}>
+            ⚠️
+          </Text>
+
+          <Text style={{ color: "#000", fontSize: 11, fontWeight: "bold"}}>
+            Network issues, undergoing repairs
+          </Text>
         </View>
-      );
-    }
+      )}
+    </View>
+  );
+}
 
     // Main rendering UI
     return (
