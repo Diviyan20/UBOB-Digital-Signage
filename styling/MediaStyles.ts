@@ -170,6 +170,29 @@ export const MediaScreenStyle = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
   },
+  badgeContainer: {
+    position: "absolute",
+    top: 50,
+    right: 16,
+    zIndex: 99,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  badgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
 });
 
 export const VideoScreenStyle = StyleSheet.create({
