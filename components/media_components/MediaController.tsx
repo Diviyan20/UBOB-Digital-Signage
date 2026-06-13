@@ -1,3 +1,4 @@
+import { useNetworkStatus } from "@/context/NetworkStatusContext";
 import React, { useEffect, useRef, useState } from "react";
 
 import { config } from "../api/client";
@@ -19,6 +20,7 @@ const ERROR_DISPLAY_DURATION = 8000 // show error for 8 seconds
 export const MediaController = () => {
 
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES"); // Controls current screen mode
+  const {isOnline, setIsOnline}= useNetworkStatus();
 
   /*
     * How long images show before videos start
@@ -41,20 +43,52 @@ export const MediaController = () => {
 
   /*
     * Fetch interval config from backend
+    * Also check whether system is online to send requests to backend
  */
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const response = await fetch(config);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
         const data = await response.json();
         setStateInterval(data.config.state_interval);
+
+        setIsOnline(true); // Backend reachable
+        console.log("[NETWORK] Backend reachable");
       }
       catch (error) {
         console.error("CONFIG ERROR: ", error);
+
+        // Backend unreachable
+      setIsOnline(false);
+      console.warn("[NETWORK] Backend unreachable");
       }
     };
     fetchConfig();
+
+    // Recheck every 30 seconds
+    const interval = setInterval(fetchConfig, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Backend unreachable - Lock state to IMAGES
+  useEffect(() => {
+    if (!isOnline) {
+      console.warn("[NETWORK] Offline - locking controller to IMAGES");
+  
+      clearWatchdog();
+      setRetryCount(0);
+      setShowError(false);
+  
+      if (mediaState !== "IMAGES") {
+        setMediaState("IMAGES");
+      }
+    }
+  }, [isOnline]);
 
   /*
     * Switch from images -> videos
@@ -62,13 +96,16 @@ export const MediaController = () => {
   useEffect(() => {
     if (mediaState !== "IMAGES") return;
     if (showError) return; // Error state - stay on images, no more transitions
+    if (!isOnline) return;
+
+    console.log(`[MEDIA] State=${mediaState} Online=${isOnline}`);
 
     const timer = setTimeout(() => {
       setMediaState("VIDEOS");
     }, stateInterval);
 
     return () => clearTimeout(timer);
-  }, [mediaState, stateInterval, showError]);
+  }, [mediaState, stateInterval, showError, isOnline]);
 
   // Show error display for 8 seconds
   useEffect(() =>{
