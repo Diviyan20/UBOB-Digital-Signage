@@ -2,6 +2,7 @@ import { api } from "@/components/api/client";
 import { MediaController } from "@/components/media_components/MediaController";
 import { OutletDisplayComponent } from "@/components/media_components/OutletImageComponent";
 import { OrderPreparation } from "@/components/OrderPreparation";
+import { NetworkStatusContext } from "@/context/NetworkStatusContext";
 import { MediaScreenStyle as styles } from "@/styling/MediaStyles";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
@@ -19,6 +20,7 @@ const MediaScreen = () => {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const appState = useRef(AppState.currentState);
+  const [isOnline, setIsOnline] = useState(true);
 
   // Refresh when app comes to foreground from background
   useEffect(() => {
@@ -79,8 +81,8 @@ const MediaScreen = () => {
         }
 
         setOutletInfo(data.outlet);
-      } 
-      
+      }
+
       catch (err: any) {
         setError(err.message);
       }
@@ -93,7 +95,7 @@ const MediaScreen = () => {
   const getOrderTrackingUrl = (): string | undefined => {
     if (!outletInfo?.order_api_url || !outletInfo?.order_api_key) {
       return undefined;
-    } 
+    }
     return `${outletInfo.order_api_url}?access_token=${outletInfo.order_api_key}`;
   };
 
@@ -107,19 +109,28 @@ const MediaScreen = () => {
 
   // Device is validated and has credentials - show media screen
   return (
-    <View style={styles.container}>
-      <View style={styles.topRow}>
-        <View style={styles.leftColumn}>
-          <MediaController key={refreshKey} />
+    <NetworkStatusContext.Provider value={{ isOnline, setIsOnline }}>
+      <View style={styles.container}>
+
+        {/* Network Badge */}
+        <View style={styles.badgeContainer}>
+          <View style={[styles.dot, { backgroundColor: isOnline ? "#4CAF50" : "#FF9800" }]} />
+          <Text style={styles.badgeText}>{isOnline ? "Online" : "Offline"}</Text>
         </View>
-        <View style={styles.rightColumn}>
-          <OrderPreparation orderTrackingUrl={getOrderTrackingUrl()} />
+
+        <View style={styles.topRow}>
+          <View style={styles.leftColumn}>
+            <MediaController key={refreshKey} />
+          </View>
+          <View style={styles.rightColumn}>
+            <OrderPreparation orderTrackingUrl={getOrderTrackingUrl()} />
+          </View>
+        </View>
+        <View style={styles.bottomRow}>
+          <OutletDisplayComponent />
         </View>
       </View>
-      <View style={styles.bottomRow}>
-        <OutletDisplayComponent />
-      </View>
-    </View>
+    </NetworkStatusContext.Provider>
   );
 };
 export default MediaScreen;
