@@ -43,7 +43,6 @@ export const MediaController = () => {
 
   /*
     * Fetch interval config from backend
-    * Also check whether system is online to send requests to backend
  */
   useEffect(() => {
     const fetchConfig = async () => {
@@ -56,23 +55,12 @@ export const MediaController = () => {
 
         const data = await response.json();
         setStateInterval(data.config.state_interval);
-
-        setIsOnline(true); // Backend reachable
-        console.log("[NETWORK] Backend reachable");
       }
       catch (error) {
         console.error("CONFIG ERROR: ", error);
-
-        // Backend unreachable
-      setIsOnline(false);
-      console.warn("[NETWORK] Backend unreachable");
       }
     };
     fetchConfig();
-
-    // Recheck every 30 seconds
-    const interval = setInterval(fetchConfig, 30000);
-    return () => clearInterval(interval);
   }, []);
 
   // Backend unreachable - Lock state to IMAGES
