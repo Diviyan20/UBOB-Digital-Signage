@@ -25,7 +25,7 @@ export const OutletImageStyle = (width: number, height: number) => {
       flex: 1,
       flexDirection: "row",
       justifyContent: "center",
-      alignItems: "center", // centers the whole row of items vertically
+      alignItems: "flex-start", // centers the whole row of items vertically
       paddingHorizontal: 8,
     },
 
