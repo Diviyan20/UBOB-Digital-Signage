@@ -53,3 +53,6 @@ backend/controllers/cache/**
 
 # Encryption/Decryption Tools
 backend/password_hasher.py
+
+# Debugging files
+debugging/
