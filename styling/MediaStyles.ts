@@ -3,13 +3,14 @@ import { Platform, StyleSheet } from "react-native";
 export const ImageStyles = (width: number, height: number) =>
   StyleSheet.create({
     card: {
+      flex: 1,
       width:
         width > 1200 ? width * 0.45 : width > 800 ? width * 0.65 : width * 0.9,
-      height: height * 0.72,
+      height: height * 0.62,
       backgroundColor: "#FFFFCC",
       borderRadius: 20,
-      padding: width > 800 ? 12 : 6,
       elevation: 8,
+      padding: width > 800 ? 12 : 6,
       borderWidth: Platform.OS === "android" ? 1 : 0,
       borderColor: "#fff",
       alignSelf: "center",
@@ -20,14 +21,14 @@ export const ImageStyles = (width: number, height: number) =>
 
     image: {
       width: "100%",
-      height: height * 0.52,
+      height: height * 0.50,
     },
 
     textContainer: {
       width: "50%",
       alignItems: "center",
       paddingHorizontal: width > 600 ? 16 : 8,
-      paddingTop: 30,
+      paddingTop: 20,
       paddingBottom: 10,
     },
 
@@ -55,8 +56,8 @@ export const VideoStyles = (width: number, height: number) =>
     =====================================
     */
     landscapeCard: {
-      width:
-        width > 900 ? width * 0.35 : width > 700 ? width * 0.5 : width * 0.9,
+      flex: 1,
+      width:"100%",
       height: height * 0.72,
       backgroundColor: "#FFFFCC",
       borderRadius: 20,
@@ -103,15 +104,14 @@ export const VideoStyles = (width: number, height: number) =>
     */
 
     portraitCard: {
-      width:
-        width > 1200 ? width * 0.35 : width > 800 ? width * 0.5 : width * 0.75,
-      height: height * 0.7,
+      flex: 1,
+      width: "100%",
       backgroundColor: "#fff",
       borderRadius: 20,
       padding: 0,
       borderWidth: Platform.OS === "android" ? 1 : 0,
       borderColor: "#fff",
-      alignSelf: "center",
+      alignSelf: "stretch",
       justifyContent: "center",
       alignItems: "center",
       overflow: "hidden",
@@ -135,59 +135,69 @@ export const MediaScreenStyle = StyleSheet.create({
     backgroundColor: "#F2F0EF",
     padding: 10,
   },
+
   centered: {
     justifyContent: "center",
     alignItems: "center",
   },
+
   loadingText: {
     marginTop: 10,
     fontSize: 16,
     color: "#666",
   },
+
   errorText: {
     fontSize: 16,
     color: "#ff4444",
     textAlign: "center",
   },
+
   topRow: {
-    flex: 3,
+    flex: 1.9,
     flexDirection: "row",
     gap: 10,
   },
+
   leftColumn: {
-    flex: 1,
+    flex: 1.2,
     borderRadius: 20,
     overflow: "hidden",
   },
+
   rightColumn: {
-    flex: 2,
+    flex: 1.8,
     borderRadius: 10,
     overflow: "hidden",
   },
+
   bottomRow: {
-    flex: 1,
-    marginTop: 10,
+    flex: 0.65,
+    marginTop: 20,
     borderRadius: 20,
     overflow: "hidden",
   },
+
   badgeContainer: {
     position: "absolute",
-    top: 50,
+    bottom: 17,
     right: 16,
     zIndex: 99,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.55)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: "#6E6E6E",
+    paddingHorizontal: 14,
+    paddingVertical: 4,
     borderRadius: 20,
-    gap: 6,
   },
+
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 8
   },
+
   badgeText: {
     color: "#fff",
     fontSize: 11,
