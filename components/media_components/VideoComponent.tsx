@@ -1,4 +1,9 @@
-import { clearVideoCache, fetchSignageVideos, getSignageVersion, VideoItem } from "@/services/MediaService";
+import {
+  clearVideoCache,
+  fetchSignageVideos,
+  getSignageVersion,
+  VideoItem,
+} from "@/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -22,7 +27,6 @@ export const VideoComponent = ({
   onAllVideosFinished,
   onPlaybackStarted,
 }: Props) => {
-
   const { width, height } = useWindowDimensions();
   const styles = VideoStyles(width, height);
 
@@ -37,7 +41,7 @@ export const VideoComponent = ({
   const currentVideo = videos[currentIndex]; //Current video object
 
   /**
-    * Video player
+   * Video player
    */
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
@@ -45,12 +49,14 @@ export const VideoComponent = ({
 
   useEffect(() => {
     isMounted.current = true;
-    return () => { isMounted.current = false };
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
   /**
    * Fetch videos on mount
-  */
+   */
   useEffect(() => {
     const loadVideos = async () => {
       const fetchedVideos = await fetchSignageVideos();
@@ -70,8 +76,8 @@ export const VideoComponent = ({
   }, []);
 
   /**
- * Load current video into player when videos load or index changes
- */
+   * Load current video into player when videos load or index changes
+   */
   useEffect(() => {
     if (videosRef.current.length === 0) return;
 
@@ -85,17 +91,16 @@ export const VideoComponent = ({
           // Watchdog should fire after WATCHDOG_TIMEOUT_MS
           console.warn("[DEV] Playback blocked — watchdog test active");
           return; // never calls replaceAsync, never signals onPlaybackStarted
-      }
+        }
 
         await player.replaceAsync(url);
         player.play();
 
-      // Tell MediaController playback has started - cancel watchdog
-      if (!hasSignaled.current) {
-        hasSignaled.current = true;
-        onPlaybackStarted?.();
-    } 
-
+        // Tell MediaController playback has started - cancel watchdog
+        if (!hasSignaled.current) {
+          hasSignaled.current = true;
+          onPlaybackStarted?.();
+        }
       } catch (err) {
         console.error("Failed to load video:", err);
       }
@@ -112,15 +117,14 @@ export const VideoComponent = ({
 
     const nextIndex = currentIndex + 1;
     /**
-      * Playlist finished
-    */
+     * Playlist finished
+     */
     if (nextIndex >= videosRef.current.length) {
       onAllVideosFinished();
       return;
     }
 
     setCurrentIndex(nextIndex);
-
   }, [currentIndex, videos, onAllVideosFinished]);
 
   /**
@@ -131,12 +135,14 @@ export const VideoComponent = ({
 
     const subscription = player.addListener("playToEnd", playNextVideo);
 
-    return () => { subscription.remove() };
+    return () => {
+      subscription.remove();
+    };
   }, [player, playNextVideo]);
 
   /*
-    * Listen for playback errors
-  */
+   * Listen for playback errors
+   */
   useEffect(() => {
     const subscription = player.addListener("statusChange", (status) => {
       if (status.error) {
@@ -144,42 +150,48 @@ export const VideoComponent = ({
       }
     });
     return () => subscription.remove();
-  }, [player])
+  }, [player]);
 
   useEffect(() => {
     const checkForUpdates = async () => {
-        console.log("[VERSION CHECK] Checking signage videos for new content...");
+      console.log("[VERSION CHECK] Checking signage videos for new content...");
 
-        const serverEtag = await getSignageVersion();
-        if (!serverEtag) {
-            console.warn("[VERSION CHECK] Could not reach server — skipping");
-            return;
+      const serverEtag = await getSignageVersion();
+      if (!serverEtag) {
+        console.warn("[VERSION CHECK] Could not reach server — skipping");
+        return;
+      }
+
+      try {
+        const cachedRaw = await AsyncStorage.getItem("signage_videos_cache");
+        if (!cachedRaw) return;
+
+        const cache = JSON.parse(cachedRaw);
+
+        if (cache.etag !== serverEtag) {
+          console.log(
+            `[VERSION CHECK] Signage videos changed: ${cache.etag} → ${serverEtag}`,
+          );
+          console.log(
+            "[VERSION CHECK] Cache cleared — new videos load on next cycle",
+          );
+          await clearVideoCache();
+          // Don't interrupt current playback.
+          // Cache is cleared — when VideoComponent remounts after
+          // onAllVideosFinished, it will automatically fetch fresh.
+        } else {
+          console.log(
+            `[VERSION CHECK] Signage videos unchanged — etag: ${serverEtag}`,
+          );
         }
-
-        try {
-            const cachedRaw = await AsyncStorage.getItem("signage_videos_cache");
-            if (!cachedRaw) return;
-
-            const cache = JSON.parse(cachedRaw);
-
-            if (cache.etag !== serverEtag) {
-                console.log(`[VERSION CHECK] Signage videos changed: ${cache.etag} → ${serverEtag}`);
-                console.log("[VERSION CHECK] Cache cleared — new videos load on next cycle");
-                await clearVideoCache();
-                // Don't interrupt current playback.
-                // Cache is cleared — when VideoComponent remounts after
-                // onAllVideosFinished, it will automatically fetch fresh.
-            } else {
-                console.log(`[VERSION CHECK] Signage videos unchanged — etag: ${serverEtag}`);
-            }
-        } catch (err) {
-            console.warn("[VERSION CHECK] Error:", err);
-        }
+      } catch (err) {
+        console.warn("[VERSION CHECK] Error:", err);
+      }
     };
 
     const interval = setInterval(checkForUpdates, VERSION_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
-}, []);
+  }, []);
 
   /**
    * Loading state
@@ -193,9 +205,7 @@ export const VideoComponent = ({
           alignItems: "center",
         }}
       >
-        <Text>
-          No videos available
-        </Text>
+        <Text>No videos available</Text>
       </View>
     );
   }

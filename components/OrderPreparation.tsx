@@ -1,4 +1,5 @@
 import { useNetworkStatus } from '@/context/NetworkStatusContext';
+import { NetworkDebugOverlay } from '@/debugging/NetworkDebugOverlay';
 import Constants from 'expo-constants';
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -28,6 +29,7 @@ export const OrderPreparation: React.FC<OrderPreparationProps> = ({orderTracking
             allowsInlineMediaPlayback
             startInLoadingState
             />
+            <NetworkDebugOverlay />
             {/* Subtle offline overlay — covers the WebView error without alarming anyone */}
             {!isOnline && (
                 <View style={styles.offlineOverlay}>
