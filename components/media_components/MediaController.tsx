@@ -161,7 +161,7 @@ export const MediaController = () => {
 
     const interval = setInterval(() => {
       checkSignageVideos();
-    }, 30000); // every minute
+    }, 120000); // every 2 minutes
 
     return () => clearInterval(interval);
   }, []);
