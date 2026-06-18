@@ -3,10 +3,9 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { config } from "../api/client";
 
+import { getSignageVersion } from "@/services/MediaService";
 import { watchDogOverlayStyle as styles } from "@/styling/OverlayStyles";
 import { Text, View } from "react-native";
-
-import { api } from "../api/client";
 import { ImageComponent } from "./ImageComponent";
 import { VideoComponent } from "./VideoComponent";
 
@@ -20,6 +19,7 @@ export const MediaController = () => {
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES"); // Controls current screen mode
   const [hasSignageVideos, setHasSignageVideos] = useState(true);
   const { isOnline, setIsOnline } = useNetworkStatus();
+  const lastStatusRef = useRef<boolean | null>(null);
 
   /*
    * How long images show before videos start
@@ -37,34 +37,6 @@ export const MediaController = () => {
     if (watchdogRef.current) {
       clearTimeout(watchdogRef.current);
       watchdogRef.current = null;
-    }
-  };
-
-  const checkSignageVideos = async () => {
-    try {
-      console.log("[SIGNAGE STATUS] Checking Digital Signage folder...");
-
-      const response = await fetch(api.signageStatus);
-
-      console.log(
-        `[SIGNAGE STATUS] HTTP ${response.status} ${response.statusText}`,
-      );
-
-      const data = await response.json();
-
-      console.log("[SIGNAGE STATUS] Response:", data);
-
-      const hasVideos = Boolean(data.hasVideos);
-
-      setHasSignageVideos(hasVideos);
-
-      console.log(
-        `[SIGNAGE STATUS] Videos available: ${hasVideos ? "YES" : "NO"}`,
-      );
-    } catch (err) {
-      console.error("[SIGNAGE STATUS] Check failed:", err);
-
-      setHasSignageVideos(false);
     }
   };
 
@@ -103,6 +75,38 @@ export const MediaController = () => {
       }
     }
   }, [isOnline]);
+
+  const checkSignageVideos = async () => {
+    try {
+      console.log("[SIGNAGE CHECK] Checking folder status...");
+
+      const version = await getSignageVersion();
+      const hasVideos = version.itemCount > 0;
+
+      if (lastStatusRef.current !== hasVideos) {
+        console.log(
+          `[SIGNAGE STATUS CHANGED] ${hasVideos ? "VIDEOS FOUND" : "NO VIDEOS"}`,
+        );
+
+        lastStatusRef.current = hasVideos;
+      }
+      console.log(`TOTAL VIDEOS: ${version.itemCount}`);
+      setHasSignageVideos(hasVideos);
+    } catch (err) {
+      console.error("[SIGNAGE CHECK] Failed:", err);
+      setHasSignageVideos(false);
+    }
+  };
+
+  useEffect(() => {
+    checkSignageVideos();
+
+    const interval = setInterval(() => {
+      checkSignageVideos();
+    }, 120000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   /*
    * Switch from images -> videos
@@ -155,16 +159,6 @@ export const MediaController = () => {
       `[SIGNAGE STATUS] hasSignageVideos changed -> ${hasSignageVideos}`,
     );
   }, [hasSignageVideos]);
-
-  useEffect(() => {
-    checkSignageVideos();
-
-    const interval = setInterval(() => {
-      checkSignageVideos();
-    }, 120000); // every 2 minutes
-
-    return () => clearInterval(interval);
-  }, []);
 
   // Show error display for 8 seconds
   useEffect(() => {
