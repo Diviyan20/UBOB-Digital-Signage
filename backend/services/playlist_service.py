@@ -81,6 +81,13 @@ class PlaylistService:
         
         return videos
     
+    def has_signage_videos(self) -> bool:
+        prefix = "Digital Signage/"
+        
+        objects = list_s3_objects(prefix)
+        
+        return len(objects) > 0
+    
     def _compute_version(self, prefix: str) -> dict:
         """
         Computes a stable content fingerprint.

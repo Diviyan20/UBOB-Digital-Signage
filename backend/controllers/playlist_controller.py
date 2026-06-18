@@ -71,6 +71,22 @@ def get_videos():
             "message": str(e)
         }), 500
 
+@playlist_bp.route("/signage_status", methods=["GET"])
+def signage_status():
+    try:
+        has_videos = playlist_service.has_signage_videos()
+
+        return jsonify({
+            "success": True,
+            "hasVideos": has_videos
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
 # ================================
 # PLAYLIST VERSION CHECK
 # ================================
