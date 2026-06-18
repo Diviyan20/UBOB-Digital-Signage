@@ -16,7 +16,6 @@ export const api = {
   playlist: `${DEVELOPMENT_URL}/playlist`,
   playlistVersion: `${DEVELOPMENT_URL}/playlist_version`,
   signageVersion: `${DEVELOPMENT_URL}/signage_version`,
-  signageStatus: `${DEVELOPMENT_URL}/signage_status`,
 };
 
 export const config = `${DEVELOPMENT_URL}/config`;
