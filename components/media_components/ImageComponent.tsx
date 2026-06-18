@@ -17,6 +17,9 @@ import {
 } from "react-native";
 import { api, config } from "../api/client";
 
+const DEV_BLOCK_PROMOTIONS = false;
+const FALLBACK_IMAGE = require("C:/Dev/UBOB/UBOB-Digital-Signage/components/images/Logo.png");
+
 export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
   ({ endpoint = api.promotions }) => {
     const { width, height } = useWindowDimensions();
@@ -51,22 +54,21 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
     );
 
     // Fetch Image Display duration and Fade duration from Config
-    useEffect(() =>{
-      const fetchConfig = async () =>{
-        try{
+    useEffect(() => {
+      const fetchConfig = async () => {
+        try {
           const response = await fetch(config);
           const data = await response.json();
 
           setDisplayDuration(data.config.image_display_duration);
           setFadeDuration(data.config.fade_duration);
-        }
-        catch(e){
+        } catch (e) {
           console.error("CONFIG ERROR: ", e);
         }
       };
-      
+
       fetchConfig();
-    } ,[]);
+    }, []);
 
     /**
      * Optimized fetch function with request cancellation
@@ -75,18 +77,28 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
     const fetchMediaList = useCallback(async () => {
       try {
         console.log("[IMAGE COMPONENT] Loading media...");
-    
+
+        if (DEV_BLOCK_PROMOTIONS) {
+          console.warn("[DEV] Promotion fetch blocked — using fallback image");
+          throw new Error("DEV_BLOCK");
+        }
+
         const media = await fetchPromotions();
-    
+
         if (isMounted.current) {
           setMediaList(media);
           setCurrentIndex(0);
           setErrorVisible(media.length === 0);
         }
       } catch (err) {
-        console.error("[IMAGE COMPONENT]", err);
-    
+        console.error("[IMAGE COMPONENT] Falling back to local image:", err);
+
         if (isMounted.current) {
+          // Inject a fake MediaItem pointing at the local fallback
+          setMediaList([
+            { image: null, name: "", localFallback: FALLBACK_IMAGE },
+          ]);
+          setCurrentIndex(0);
           setErrorVisible(true);
         }
       } finally {
@@ -94,27 +106,29 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
           setLoading(false);
         }
       }
-      
     }, []);
 
     /*
-      * Occasional background fetch to check for new media in Odoo.
-      * Runs every 30 minutes to prevent unnecessary network spikes
-    */
+     * Occasional background fetch to check for new media in Odoo.
+     * Runs every 30 minutes to prevent unnecessary network spikes
+     */
     useEffect(() => {
       isMounted.current = true;
-    
+
       fetchMediaList();
-    
-      const refreshInterval = setInterval(() => {
-        console.log("[BACKGROUND REFRESH] Checking for promotion updates...");
-    
-        fetchMediaList();
-      }, 30 * 60 * 1000); // 30 seconds (Set it back to 30 * 60 * 1000 for 30 minutes)
-    
+
+      const refreshInterval = setInterval(
+        () => {
+          console.log("[BACKGROUND REFRESH] Checking for promotion updates...");
+
+          fetchMediaList();
+        },
+        30 * 60 * 1000,
+      ); // 30 seconds (Set it back to 30 * 60 * 1000 for 30 minutes)
+
       return () => {
         isMounted.current = false;
-    
+
         clearInterval(refreshInterval);
       };
     }, [fetchMediaList]);
@@ -208,41 +222,45 @@ export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
           <Text>Loading media...</Text>
 
           {errorVisible && (
-        <View
-          style={{
-            position: "absolute",
-            bottom: 20,
-            flexDirection: "row",
-            alignItems: "center",
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderRadius: 8,
-          }}
-        >
-          <Text style={{ fontSize: 11, marginRight: 8 }}>
-            ⚠️
-          </Text>
+            <View
+              style={{
+                position: "absolute",
+                bottom: 20,
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                borderRadius: 8,
+              }}
+            >
+              <Text style={{ fontSize: 11, marginRight: 8 }}>⚠️</Text>
 
-          <Text style={{ color: "#000", fontSize: 11, fontWeight: "bold"}}>
-            Network issues, undergoing repairs
-          </Text>
+              <Text style={{ color: "#000", fontSize: 11, fontWeight: "bold" }}>
+                Network issues, undergoing repairs
+              </Text>
+            </View>
+          )}
         </View>
-      )}
-    </View>
-  );
-}
+      );
+    }
 
     // Main rendering UI
     return (
       <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-        {currentImageUrl ? (
+        {currentMedia.localFallback ? (
+          <Image
+            source={currentMedia.localFallback}
+            style={styles.image}
+            contentFit="contain"
+          />
+        ) : currentImageUrl ? (
           <Image
             source={{ uri: currentImageUrl }}
             style={styles.image}
             contentFit="contain"
             transition={170}
             cachePolicy="memory-disk"
-            recyclingKey={`media-${currentIndex}`} // Added for memory efficiency
+            recyclingKey={`media-${currentIndex}`}
           />
         ) : (
           <Text style={styles.placeholderText}>No Image</Text>
