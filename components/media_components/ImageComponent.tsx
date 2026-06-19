@@ -15,261 +15,243 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { api, config } from "../api/client";
+import { config } from "../api/client";
 
 const DEV_BLOCK_PROMOTIONS = false;
 const FALLBACK_IMAGE = require("C:/Dev/UBOB/UBOB-Digital-Signage/components/images/Logo.png");
 
-export const ImageComponent: React.FC<{ endpoint?: string }> = React.memo(
-  ({ endpoint = api.promotions }) => {
-    const { width, height } = useWindowDimensions();
-    const styles = ImageStyles(width, height);
+export const ImageComponent: React.FC = React.memo(() => {
+  const { width, height } = useWindowDimensions();
+  const styles = ImageStyles(width, height);
 
-    const [mediaList, setMediaList] = useState<MediaItem[]>([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const [loading, setLoading] = useState(true);
-    const [errorVisible, setErrorVisible] = useState(false);
+  const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [errorVisible, setErrorVisible] = useState(false);
 
-    // Use fallback values for the intervals in case if Lambda fails
-    const [displayDuration, setDisplayDuration] = useState(5000);
-    const [fadeDuration, setFadeDuration] = useState(400);
+  // Use fallback values for the intervals in case if Lambda fails
+  const [displayDuration, setDisplayDuration] = useState(5000);
+  const [fadeDuration, setFadeDuration] = useState(400);
 
-    const fadeAnim = useRef(new Animated.Value(1)).current;
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const isMounted = useRef(true);
-    const abortControllerRef = useRef<AbortController | null>(null);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-    /**
-     * Memoized helper to form valid image URL
-     * Moved outside component and memoized to prevent recreation on every render
-     * Saves memory and prevent child component re-renders
-     */
-    const getImageUrl = useCallback(
-      (url?: string | null, bustCache = false) => {
-        if (!url) return null;
-        return bustCache ? `${url}?t=${Date.now()}` : url;
-      },
-      [],
-    );
+  /**
+   * Memoized helper to form valid image URL
+   * Moved outside component and memoized to prevent recreation on every render
+   * Saves memory and prevent child component re-renders
+   */
+  const getImageUrl = useCallback((url?: string | null, bustCache = false) => {
+    if (!url) return null;
+    return bustCache ? `${url}?t=${Date.now()}` : url;
+  }, []);
 
-    // Fetch Image Display duration and Fade duration from Config
-    useEffect(() => {
-      const fetchConfig = async () => {
-        try {
-          const response = await fetch(config);
-          const data = await response.json();
-
-          setDisplayDuration(data.config.image_display_duration);
-          setFadeDuration(data.config.fade_duration);
-        } catch (e) {
-          console.error("CONFIG ERROR: ", e);
-        }
-      };
-
-      fetchConfig();
-    }, []);
-
-    /**
-     * Optimized fetch function with request cancellation
-     * Prevents race conditions and memory leaks
-     */
-    const fetchMediaList = useCallback(async () => {
+  // Fetch Image Display duration and Fade duration from Config
+  useEffect(() => {
+    const fetchConfig = async () => {
       try {
-        console.log("[IMAGE COMPONENT] Loading media...");
+        const response = await fetch(config);
+        const data = await response.json();
 
-        if (DEV_BLOCK_PROMOTIONS) {
-          console.warn("[DEV] Promotion fetch blocked — using fallback image");
-          throw new Error("DEV_BLOCK");
-        }
-
-        const media = await fetchPromotions();
-
-        if (isMounted.current) {
-          setMediaList(media);
-          setCurrentIndex(0);
-          setErrorVisible(media.length === 0);
-        }
-      } catch (err) {
-        console.error("[IMAGE COMPONENT] Falling back to local image:", err);
-
-        if (isMounted.current) {
-          // Inject a fake MediaItem pointing at the local fallback
-          setMediaList([
-            { image: null, name: "", localFallback: FALLBACK_IMAGE },
-          ]);
-          setCurrentIndex(0);
-          setErrorVisible(true);
-        }
-      } finally {
-        if (isMounted.current) {
-          setLoading(false);
-        }
+        setDisplayDuration(data.config.image_display_duration);
+        setFadeDuration(data.config.fade_duration);
+      } catch (e) {
+        console.error("CONFIG ERROR: ", e);
       }
-    }, []);
+    };
 
-    /*
-     * Occasional background fetch to check for new media in Odoo.
-     * Runs every 30 minutes to prevent unnecessary network spikes
-     */
-    useEffect(() => {
-      isMounted.current = true;
+    fetchConfig();
+  }, []);
 
-      fetchMediaList();
+  /**
+   * Optimized fetch function with request cancellation
+   * Prevents race conditions and memory leaks
+   */
+  const fetchMediaList = useCallback(async () => {
+    try {
+      console.log("[IMAGE COMPONENT] Loading media...");
 
-      const refreshInterval = setInterval(
-        () => {
-          console.log("[BACKGROUND REFRESH] Checking for promotion updates...");
+      if (DEV_BLOCK_PROMOTIONS) {
+        console.warn("[DEV] Promotion fetch blocked — using fallback image");
+        throw new Error("DEV_BLOCK");
+      }
 
-          fetchMediaList();
-        },
-        30 * 60 * 1000,
-      ); // 30 seconds (Set it back to 30 * 60 * 1000 for 30 minutes)
+      const media = await fetchPromotions();
 
-      return () => {
-        isMounted.current = false;
+      if (isMounted.current) {
+        setMediaList(media);
+        setCurrentIndex(0);
+        setErrorVisible(media.length === 0);
+      }
+    } catch (err) {
+      console.error("[IMAGE COMPONENT] Falling back to local image:", err);
 
-        clearInterval(refreshInterval);
-      };
-    }, [fetchMediaList]);
+      if (isMounted.current) {
+        // Inject a fake MediaItem pointing at the local fallback
+        setMediaList([
+          { image: null, name: "", localFallback: FALLBACK_IMAGE },
+        ]);
+        setCurrentIndex(0);
+        setErrorVisible(true);
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
-    /**
-     * Memoized advance function
-     * Prevents recreation on every render and ensures proper closure capture
-     *
-     */
-    const advanceOnce = useCallback(() => {
-      if (mediaList.length <= 1) return;
-      const nextIndex = (currentIndex + 1) % mediaList.length;
+  /*
+   * Occasional background fetch to check for new media in Odoo.
+   * Runs every 30 minutes to prevent unnecessary network spikes
+   */
+  useEffect(() => {
+    isMounted.current = true;
+
+    fetchMediaList();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [fetchMediaList]);
+
+  /**
+   * Memoized advance function
+   * Prevents recreation on every render and ensures proper closure capture
+   */
+  const advanceOnce = useCallback(() => {
+    if (mediaList.length <= 1) return;
+    const nextIndex = (currentIndex + 1) % mediaList.length;
+
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: fadeDuration,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start(() => {
+      if (!isMounted.current) return;
+      setCurrentIndex(nextIndex);
 
       Animated.timing(fadeAnim, {
-        toValue: 0,
+        toValue: 1,
         duration: fadeDuration,
         easing: Easing.linear,
         useNativeDriver: true,
-      }).start(() => {
-        if (!isMounted.current) return;
-        setCurrentIndex(nextIndex);
+      }).start();
+    });
+  }, [mediaList.length, currentIndex, fadeAnim]);
 
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: fadeDuration,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }).start();
-      });
-    }, [mediaList.length, currentIndex, fadeAnim]);
+  // Component mount/unmount cleanup
+  useEffect(() => {
+    isMounted.current = true;
 
-    // Component mount/unmount cleanup
-    useEffect(() => {
-      isMounted.current = true;
+    fetchMediaList(); // Only fetch once on mount
 
-      fetchMediaList(); // Only fetch once on mount
+    return () => {
+      isMounted.current = false;
 
-      return () => {
-        isMounted.current = false;
+      // Cancel any ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchMediaList]);
 
-        // Cancel any ongoing requests
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-      };
-    }, [fetchMediaList]);
+  // Optimized cyling effect with better dependencies
+  useEffect(() => {
+    if (mediaList.length === 0) return;
 
-    // Optimized cyling effect with better dependencies
-    useEffect(() => {
-      if (mediaList.length === 0) return;
+    // Clear any existing intervals/timeouts
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-      // Clear any existing intervals/timeouts
+    const totalInterval = displayDuration + fadeDuration * 2;
+
+    // Start image cycle after DISPLAY_DURATION
+    timeoutRef.current = setTimeout(() => {
+      advanceOnce();
+      // Set up interval for continuous cycling
+      intervalRef.current = setInterval(advanceOnce, totalInterval);
+    }, displayDuration);
+
+    return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [mediaList.length, advanceOnce]);
 
-      const totalInterval = displayDuration + fadeDuration * 2;
+  // Memoized current media to prevent unnecessary recalculations
+  const currentMedia = useMemo(
+    () => mediaList[currentIndex],
+    [mediaList, currentIndex],
+  );
+  const currentImageUrl = useMemo(
+    () => getImageUrl(currentMedia?.image),
+    [getImageUrl, currentMedia?.image],
+  );
 
-      // Start image cycle after DISPLAY_DURATION
-      timeoutRef.current = setTimeout(() => {
-        advanceOnce();
-        // Set up interval for continuous cycling
-        intervalRef.current = setInterval(advanceOnce, totalInterval);
-      }, displayDuration);
-
-      return () => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      };
-    }, [mediaList.length, advanceOnce]);
-
-    // Memoized current media to prevent unnecessary recalculations
-    const currentMedia = useMemo(
-      () => mediaList[currentIndex],
-      [mediaList, currentIndex],
-    );
-    const currentImageUrl = useMemo(
-      () => getImageUrl(currentMedia?.image),
-      [getImageUrl, currentMedia?.image],
-    );
-
-    // Error States
-    if (!currentMedia) {
-      return (
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <Text>Loading media...</Text>
-
-          {errorVisible && (
-            <View
-              style={{
-                position: "absolute",
-                bottom: 20,
-                flexDirection: "row",
-                alignItems: "center",
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                borderRadius: 8,
-              }}
-            >
-              <Text style={{ fontSize: 11, marginRight: 8 }}>⚠️</Text>
-
-              <Text style={{ color: "#000", fontSize: 11, fontWeight: "bold" }}>
-                Network issues, undergoing repairs
-              </Text>
-            </View>
-          )}
-        </View>
-      );
-    }
-
-    // Main rendering UI
+  // Error States
+  if (!currentMedia) {
     return (
-      <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-        {currentMedia.localFallback ? (
-          <Image
-            source={currentMedia.localFallback}
-            style={styles.image}
-            contentFit="contain"
-          />
-        ) : currentImageUrl ? (
-          <Image
-            source={{ uri: currentImageUrl }}
-            style={styles.image}
-            contentFit="contain"
-            transition={170}
-            cachePolicy="memory-disk"
-            recyclingKey={`media-${currentIndex}`}
-          />
-        ) : (
-          <Text style={styles.placeholderText}>No Image</Text>
-        )}
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text>Loading media...</Text>
 
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
-        </View>
-      </Animated.View>
+        {errorVisible && (
+          <View
+            style={{
+              position: "absolute",
+              bottom: 20,
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ fontSize: 11, marginRight: 8 }}>⚠️</Text>
+
+            <Text style={{ color: "#000", fontSize: 11, fontWeight: "bold" }}>
+              Network issues, undergoing repairs
+            </Text>
+          </View>
+        )}
+      </View>
     );
-  },
-);
+  }
+
+  // Main rendering UI
+  return (
+    <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
+      {currentMedia.localFallback ? (
+        <Image
+          source={currentMedia.localFallback}
+          style={styles.image}
+          contentFit="contain"
+        />
+      ) : currentImageUrl ? (
+        <Image
+          source={{ uri: currentImageUrl }}
+          style={styles.image}
+          contentFit="contain"
+          transition={170}
+          cachePolicy="memory-disk"
+          recyclingKey={`media-${currentIndex}`}
+        />
+      ) : (
+        <Text style={styles.placeholderText}>No Image</Text>
+      )}
+
+      <View style={styles.textContainer}>
+        <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
+      </View>
+    </Animated.View>
+  );
+});
