@@ -1,9 +1,9 @@
 import { api } from "@/components/api/client";
 import {
-    fetchPlaylist,
-    getSignageVersion,
-    PlaylistItems,
-    VideoItem,
+  fetchPlaylist,
+  getSignageVersion,
+  PlaylistItems,
+  VideoItem,
 } from "@/services/MediaService";
 import { fetchPromotions, MediaItem } from "@/services/PromotionService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -47,9 +47,9 @@ class ApiScheduler {
 
   // Intervals
   private readonly HEARTBEAT_INTERVAL = 120_000; // 2 min
-  private readonly PROMOTION_INTERVAL = 60_000; // 30 min
-  private readonly PLAYLIST_INTERVAL = 60_000; // 30 min
-  private readonly SIGNAGE_VERSION_INTERVAL = 60_000; // 30 min
+  private readonly PROMOTION_INTERVAL = 30 * 60_000; // 30 min
+  private readonly PLAYLIST_INTERVAL = 30 * 60_000; // 30 min
+  private readonly SIGNAGE_VERSION_INTERVAL = 30 * 60_000; // 30 min
 
   // Called between tasks to add delay for each API call
   private sleep = (ms: number) =>
