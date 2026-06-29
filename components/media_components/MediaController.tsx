@@ -20,6 +20,7 @@ export const MediaController = () => {
   const [hasSignageVideos, setHasSignageVideos] = useState(true);
   const { isOnline, setIsOnline } = useNetworkStatus();
   const lastStatusRef = useRef<boolean | null>(null);
+  const transitionTimerRef = useRef<number | null>(null);
 
   /*
    * How long images show before videos start
@@ -112,12 +113,13 @@ export const MediaController = () => {
    * Switch from images -> videos
    */
   useEffect(() => {
+    const transitionAt = new Date(Date.now() + stateInterval);
+
     console.log(
-      `[MEDIA CHECK]
-       State=${mediaState}
-       Online=${isOnline}
-       HasVideos=${hasSignageVideos}
-       ShowError=${showError}`,
+      `[MEDIA TIMER]
+      Current Time : ${new Date().toLocaleTimeString()}
+      Transition At: ${transitionAt.toLocaleTimeString()}
+      Remaining    : ${stateInterval / 1000}s`,
     );
 
     if (mediaState !== "IMAGES") {
@@ -142,17 +144,28 @@ export const MediaController = () => {
       return;
     }
 
+    const switchAt = new Date(Date.now() + stateInterval);
+
     console.log(
-      `[MEDIA CHECK] Scheduling transition to VIDEOS in ${stateInterval}ms`,
+      `[MEDIA TIMER] IMAGES -> VIDEOS scheduled at ${switchAt.toLocaleTimeString()}`,
     );
 
-    const timer = setTimeout(() => {
-      console.log("[MEDIA CHECK] Switching to VIDEOS");
+    transitionTimerRef.current = setTimeout(() => {
+      console.log(
+        `[MEDIA TIMER] Switching to VIDEOS at ${new Date().toLocaleTimeString()}`,
+      );
+
+      transitionTimerRef.current = null;
       setMediaState("VIDEOS");
     }, stateInterval);
 
-    return () => clearTimeout(timer);
-  }, [mediaState, stateInterval, showError, isOnline, hasSignageVideos]);
+    return () => {
+      if (transitionTimerRef.current) {
+        clearTimeout(transitionTimerRef.current);
+        transitionTimerRef.current = null;
+      }
+    };
+  }, [mediaState, showError, isOnline, hasSignageVideos]);
 
   useEffect(() => {
     console.log(
@@ -172,6 +185,14 @@ export const MediaController = () => {
 
     return () => clearTimeout(timer);
   }, [showError]);
+
+  useEffect(() => {
+    console.log(
+      `[STATE CHANGE]
+     Time : ${new Date().toLocaleTimeString()}
+     State: ${mediaState}`,
+    );
+  }, [mediaState]);
 
   // Watchdog — fires when state switches to VIDEOS
   useEffect(() => {
@@ -208,7 +229,16 @@ export const MediaController = () => {
 
   // Called after all videos finish
   const handleVideosFinished = () => {
-    setMediaState("IMAGES");
+    console.log(
+      `[MEDIA TIMER]
+      Videos finished at ${new Date().toLocaleTimeString()}
+      Switching back to IMAGES`,
+    );
+
+    clearWatchdog();
+    requestAnimationFrame(() => {
+      setMediaState("IMAGES");
+    });
   };
 
   return (

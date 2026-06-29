@@ -143,22 +143,6 @@ export const ImageComponent: React.FC = React.memo(() => {
     });
   }, [mediaList.length, currentIndex, fadeAnim]);
 
-  // Component mount/unmount cleanup
-  useEffect(() => {
-    isMounted.current = true;
-
-    fetchMediaList(); // Only fetch once on mount
-
-    return () => {
-      isMounted.current = false;
-
-      // Cancel any ongoing requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [fetchMediaList]);
-
   // Optimized cyling effect with better dependencies
   useEffect(() => {
     if (mediaList.length === 0) return;
