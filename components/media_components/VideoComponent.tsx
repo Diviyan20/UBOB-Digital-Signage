@@ -7,7 +7,7 @@ import {
 import { VideoStyles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 interface Props {
@@ -35,6 +35,7 @@ export const VideoComponent = ({
 
   // Ref so effects always read the latest list without stale closures
   const videosRef = useRef<VideoItem[]>([]);
+  const advancingRef = useRef(false);
   const isMounted = useRef(true);
   const hasSignaled = useRef(false); // Only signal once per mount
 
@@ -64,9 +65,7 @@ export const VideoComponent = ({
 
       if (!isMounted.current) return;
 
-      const shuffled = [...fetchedVideos].sort(() => Math.random() - 0.5); // Shuffle videos randomly
-
-      const selectedVideos = shuffled.slice(0, 2); // Take only 2 videos
+      const selectedVideos = fetchedVideos.slice(0, 1); // Take only 2 videos
 
       videosRef.current = selectedVideos;
       setVideos(selectedVideos);
@@ -92,17 +91,29 @@ export const VideoComponent = ({
           console.warn("[DEV] Playback blocked — watchdog test active");
           return; // never calls replaceAsync, never signals onPlaybackStarted
         }
+        console.log(
+          `[VIDEO] Loading video ${currentIndex + 1}/${videosRef.current.length}`,
+        );
 
-        await player.replaceAsync(url);
+        const start = Date.now();
+        /*
+         * Add a pre-video timeout (Suppose if entire component hangs)
+         */
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Load timeout")), 8000),
+        );
+
+        await Promise.race([player.replaceAsync(url), timeoutPromise]);
+
+        console.log(
+          `[VIDEO] replaceAsync finished in ${Date.now() - start} ms`,
+        );
+
         player.play();
-
-        // Tell MediaController playback has started - cancel watchdog
-        if (!hasSignaled.current) {
-          hasSignaled.current = true;
-          onPlaybackStarted?.();
-        }
+        console.log("[VIDEO] play() called");
       } catch (err) {
         console.error("Failed to load video:", err);
+        playNextVideo();
       }
     };
 
@@ -112,20 +123,22 @@ export const VideoComponent = ({
   /**
    * Move to next video
    */
-  const playNextVideo = useCallback(() => {
+  const playNextVideo = () => {
     if (!isMounted.current) return;
 
-    const nextIndex = currentIndex + 1;
-    /**
-     * Playlist finished
-     */
-    if (nextIndex >= videosRef.current.length) {
-      onAllVideosFinished();
-      return;
-    }
+    setCurrentIndex((prev) => {
+      const next = prev + 1;
 
-    setCurrentIndex(nextIndex);
-  }, [currentIndex, videos, onAllVideosFinished]);
+      if (next >= videosRef.current.length) {
+        console.log("[VIDEO] Playlist finished");
+        onAllVideosFinished();
+        return prev;
+      }
+
+      console.log(`[VIDEO] Moving to video ${next}`);
+      return next;
+    });
+  };
 
   /**
    * Listen for video completion
@@ -145,12 +158,44 @@ export const VideoComponent = ({
    */
   useEffect(() => {
     const subscription = player.addListener("statusChange", (status) => {
-      if (status.error) {
-        console.error("VIDEO ERROR:", status.error);
+      console.log("[VIDEO STATUS]", status.status);
+      if (status.status === "readyToPlay" && !hasSignaled.current) {
+        hasSignaled.current = true;
+        onPlaybackStarted();
       }
     });
+
     return () => subscription.remove();
   }, [player]);
+
+  /*
+   * Cleanup for player
+   */
+  useEffect(() => {
+    return () => {
+      console.log("[VIDEO] Releasing player");
+
+      try {
+        player.release();
+      } catch (e) {
+        console.warn("Player cleanup failed:", e);
+      }
+    };
+  }, [player]);
+
+  /*
+   * Added emergency timeout in case watchdog fails
+   * Recovers after 45 seconds
+   */
+  useEffect(() => {
+    const emergencyTimer = setTimeout(() => {
+      console.warn("[VIDEO] Component stuck. Returning to images.");
+
+      onAllVideosFinished();
+    }, 45000);
+
+    return () => clearTimeout(emergencyTimer);
+  }, []);
 
   useEffect(() => {
     const checkForUpdates = async () => {

@@ -5,16 +5,17 @@ const DEVELOPMENT_URL =
   "https://kcs4utnpog.execute-api.ap-southeast-5.amazonaws.com";
 
 export const api = {
-  validateOutlet: `${PRODUCTION_URL}/validate_outlet`,
-  outletInfo: (outletId: string) => `${PRODUCTION_URL}/outlet_info/${outletId}`,
-  outletData: `${PRODUCTION_URL}/api/outlets`,
-  heartbeat: `${PRODUCTION_URL}/heartbeat`,
-  promotions: `${PRODUCTION_URL}/promotions`,
-  outletImages: `${PRODUCTION_URL}/outlet_image_combined`,
-  signageVideos: `${PRODUCTION_URL}/signage_videos`,
-  playlist: `${PRODUCTION_URL}/playlist`,
-  playlistVersion: `${PRODUCTION_URL}/playlist_version`,
-  signageVersion: `${PRODUCTION_URL}/signage_version`,
+  validateOutlet: `${DEVELOPMENT_URL}/validate_outlet`,
+  outletInfo: (outletId: string) =>
+    `${DEVELOPMENT_URL}/outlet_info/${outletId}`,
+  outletData: `${DEVELOPMENT_URL}/api/outlets`,
+  heartbeat: `${DEVELOPMENT_URL}/heartbeat`,
+  promotions: `${DEVELOPMENT_URL}/promotions`,
+  outletImages: `${DEVELOPMENT_URL}/outlet_image_combined`,
+  signageVideos: `${DEVELOPMENT_URL}/signage_videos`,
+  playlist: `${DEVELOPMENT_URL}/playlist`,
+  playlistVersion: `${DEVELOPMENT_URL}/playlist_version`,
+  signageVersion: `${DEVELOPMENT_URL}/signage_version`,
 };
 
-export const config = `${PRODUCTION_URL}/config`;
+export const config = `${DEVELOPMENT_URL}/config`;
