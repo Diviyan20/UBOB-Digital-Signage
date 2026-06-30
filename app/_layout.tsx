@@ -1,9 +1,11 @@
+import { initializeConsoleInterceptor } from "@/debugging/ConsoleInterceptor";
 import { Stack } from "expo-router";
-import * as Updates from 'expo-updates';
+import * as Updates from "expo-updates";
 import { useEffect } from "react";
 
+initializeConsoleInterceptor();
 export default function RootLayout() {
-  useEffect(() =>{
+  useEffect(() => {
     async function updateApp() {
       try {
         const update = await Updates.checkForUpdateAsync();
@@ -18,8 +20,7 @@ export default function RootLayout() {
     }
 
     updateApp();
-  },[]);
+  }, []);
 
-  return <Stack screenOptions={{ headerShown: false }}>
-  </Stack>
+  return <Stack screenOptions={{ headerShown: false }}></Stack>;
 }

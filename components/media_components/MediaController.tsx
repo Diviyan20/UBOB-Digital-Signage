@@ -9,13 +9,17 @@ import { Text, View } from "react-native";
 import { ImageComponent } from "./ImageComponent";
 import { VideoComponent } from "./VideoComponent";
 
+interface Props {
+  onStateChange?: (state: "IMAGES" | "VIDEOS") => void;
+}
+
 type MediaState = "IMAGES" | "VIDEOS";
 
 const WATCHDOG_TIMEOUT_MS = 12000; // if no playback after 12s, revert
 const MAX_RETRIES = 3; // after 3 failed attempts, show error
 const ERROR_DISPLAY_DURATION = 8000; // show error for 8 seconds
 
-export const MediaController = () => {
+export const MediaController: React.FC<Props> = ({ onStateChange }) => {
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES"); // Controls current screen mode
   const [hasSignageVideos, setHasSignageVideos] = useState(true);
   const { isOnline, setIsOnline } = useNetworkStatus();
@@ -76,6 +80,10 @@ export const MediaController = () => {
       }
     }
   }, [isOnline]);
+
+  useEffect(() => {
+    onStateChange?.(mediaState);
+  }, [mediaState]);
 
   const checkSignageVideos = async () => {
     try {

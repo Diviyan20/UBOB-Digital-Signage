@@ -1,9 +1,11 @@
 import { api } from "@/components/api/client";
 import { MediaController } from "@/components/media_components/MediaController";
 import { OutletDisplayComponent } from "@/components/media_components/OutletImageComponent";
-import { OrderPreparation } from "@/components/OrderPreparation";
 import { NetworkStatusContext } from "@/context/NetworkStatusContext";
 import { SchedulerProvider, useScheduler } from "@/context/SchedulerContext";
+import { DeviceDebugOverlay } from "@/debugging/DeviceDebugOverlay";
+import { LogOverlay } from "@/debugging/LogOverlay";
+import { NetworkDebugOverlay } from "@/debugging/NetworkDebugOverlay";
 import { MediaScreenStyle as styles } from "@/styling/MediaStyles";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
@@ -21,6 +23,7 @@ const MediaScreenInner: React.FC<{ outlet_id: string }> = ({ outlet_id }) => {
   const [outletInfo, setOutletInfo] = useState<OutletInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [mediaState, setMediaState] = useState<"IMAGES" | "VIDEOS">("IMAGES");
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {
@@ -77,10 +80,15 @@ const MediaScreenInner: React.FC<{ outlet_id: string }> = ({ outlet_id }) => {
       <View style={styles.container}>
         <View style={styles.topRow}>
           <View style={styles.leftColumn}>
-            <MediaController key={refreshKey} />
+            <MediaController key={refreshKey} onStateChange={setMediaState} />
           </View>
           <View style={styles.rightColumn}>
-            <OrderPreparation orderTrackingUrl={getOrderTrackingUrl()} />
+            <View style={styles.debugRow}>
+              <DeviceDebugOverlay mediaState={mediaState} />
+              <NetworkDebugOverlay />
+            </View>
+
+            <LogOverlay />
           </View>
         </View>
 

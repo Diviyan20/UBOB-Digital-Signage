@@ -21,7 +21,7 @@ export const ImageStyles = (width: number, height: number) =>
 
     image: {
       width: "100%",
-      height: height * 0.50,
+      height: height * 0.5,
     },
 
     textContainer: {
@@ -49,7 +49,6 @@ export const ImageStyles = (width: number, height: number) =>
 
 export const VideoStyles = (width: number, height: number) =>
   StyleSheet.create({
-
     /*
     =====================================
     LANDSCAPE VIDEO CARD
@@ -57,7 +56,7 @@ export const VideoStyles = (width: number, height: number) =>
     */
     landscapeCard: {
       flex: 1,
-      width:"100%",
+      width: "100%",
       height: height * 0.72,
       backgroundColor: "#FFFFCC",
       borderRadius: 20,
@@ -68,7 +67,7 @@ export const VideoStyles = (width: number, height: number) =>
       alignSelf: "center",
       justifyContent: "center",
       alignItems: "center",
-      overflow: "hidden"
+      overflow: "hidden",
     },
 
     /*
@@ -94,7 +93,7 @@ export const VideoStyles = (width: number, height: number) =>
 
     video: {
       width: "100%",
-      height: '100%',
+      height: "100%",
     },
 
     /*
@@ -169,6 +168,8 @@ export const MediaScreenStyle = StyleSheet.create({
     flex: 1.8,
     borderRadius: 10,
     overflow: "hidden",
+    flexDirection: "column",
+    gap: 10,
   },
 
   bottomRow: {
@@ -195,13 +196,23 @@ export const MediaScreenStyle = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginRight: 8
+    marginRight: 8,
   },
 
   badgeText: {
     color: "#fff",
     fontSize: 11,
     fontWeight: "600",
+  },
+
+  debugRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  logContainer: {
+    flex: 1,
   },
 });
 
@@ -210,12 +221,12 @@ export const VideoScreenStyle = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f0f0f0",
   },
-})
+});
 
 export const PlaylistStyles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f0f0f0"
+    backgroundColor: "#f0f0f0",
   },
 
   landscapeCard: {
