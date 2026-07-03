@@ -8,13 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Animated,
-  Easing,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Animated, Text, useWindowDimensions, View } from "react-native";
 import { config } from "../api/client";
 
 const DEV_BLOCK_PROMOTIONS = false;
@@ -31,13 +25,11 @@ export const ImageComponent: React.FC = React.memo(() => {
 
   // Use fallback values for the intervals in case if Lambda fails
   const [displayDuration, setDisplayDuration] = useState(5000);
-  const [fadeDuration, setFadeDuration] = useState(400);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(true);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   /**
    * Memoized helper to form valid image URL
@@ -57,7 +49,6 @@ export const ImageComponent: React.FC = React.memo(() => {
         const data = await response.json();
 
         setDisplayDuration(data.config.image_display_duration);
-        setFadeDuration(data.config.fade_duration);
       } catch (e) {
         console.error("CONFIG ERROR: ", e);
       }
@@ -123,41 +114,8 @@ export const ImageComponent: React.FC = React.memo(() => {
    */
   const advanceOnce = useCallback(() => {
     if (mediaList.length <= 1) return;
-    const nextIndex = (currentIndex + 1) % mediaList.length;
-
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: fadeDuration,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    }).start(() => {
-      if (!isMounted.current) return;
-      setCurrentIndex(nextIndex);
-
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: fadeDuration,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }).start();
-    });
-  }, [mediaList.length, currentIndex, fadeAnim]);
-
-  // Component mount/unmount cleanup
-  useEffect(() => {
-    isMounted.current = true;
-
-    fetchMediaList(); // Only fetch once on mount
-
-    return () => {
-      isMounted.current = false;
-
-      // Cancel any ongoing requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [fetchMediaList]);
+    setCurrentIndex((prev) => (prev + 1) % mediaList.length);
+  }, [mediaList.length]);
 
   // Optimized cyling effect with better dependencies
   useEffect(() => {
@@ -167,13 +125,11 @@ export const ImageComponent: React.FC = React.memo(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    const totalInterval = displayDuration + fadeDuration * 2;
-
     // Start image cycle after DISPLAY_DURATION
     timeoutRef.current = setTimeout(() => {
       advanceOnce();
       // Set up interval for continuous cycling
-      intervalRef.current = setInterval(advanceOnce, totalInterval);
+      intervalRef.current = setInterval(advanceOnce, displayDuration);
     }, displayDuration);
 
     return () => {
@@ -229,29 +185,31 @@ export const ImageComponent: React.FC = React.memo(() => {
 
   // Main rendering UI
   return (
-    <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
-      {currentMedia.localFallback ? (
-        <Image
-          source={currentMedia.localFallback}
-          style={styles.image}
-          contentFit="contain"
-        />
-      ) : currentImageUrl ? (
-        <Image
-          source={{ uri: currentImageUrl }}
-          style={styles.image}
-          contentFit="contain"
-          transition={170}
-          cachePolicy="memory-disk"
-          recyclingKey={`media-${currentIndex}`}
-        />
-      ) : (
-        <Text style={styles.placeholderText}>No Image</Text>
-      )}
+    <>
+      <View style={styles.card}>
+        {currentMedia.localFallback ? (
+          <Image
+            source={currentMedia.localFallback}
+            style={styles.image}
+            contentFit="contain"
+          />
+        ) : currentImageUrl ? (
+          <Image
+            source={{ uri: currentImageUrl }}
+            style={styles.image}
+            contentFit="contain"
+            transition={170}
+            cachePolicy="memory-disk"
+            recyclingKey={`media-${currentIndex}`}
+          />
+        ) : (
+          <Text style={styles.placeholderText}>No Image</Text>
+        )}
 
-      <View style={styles.textContainer}>
-        <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
+        <View style={styles.textContainer}>
+          <Text style={styles.title}>{currentMedia.name || "Untitled"}</Text>
+        </View>
       </View>
-    </Animated.View>
+    </>
   );
 });

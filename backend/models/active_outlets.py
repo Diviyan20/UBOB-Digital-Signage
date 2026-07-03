@@ -7,7 +7,7 @@ import boto3
 import psycopg2
 
 # ENVIRONMENT VARIABLES
-DB_NAME = os.getenv("OUTLET_DATABASE")
+DB_NAME = os.getenv("DB_NAME")
 DB_USERNAME = os.getenv("DB_USERNAME")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")
@@ -32,15 +32,14 @@ def get_db_connection():
     - Context manager for database connection
     - Automatically handles connection cleanup
     """
-    creds = get_db_credentials()
     conn = None
     cur = None
     try:
 
         conn = psycopg2.connect(
             database = DB_NAME,
-            user = creds["username"],
-            password = creds["password"],
+            user = DB_USERNAME,
+            password = DB_PASSWORD,
             host = DB_HOSTNAME,
             port = DB_PORT
         )
