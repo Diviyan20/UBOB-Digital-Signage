@@ -61,11 +61,12 @@ export const VideoComponent = ({
   useEffect(() => {
     const loadVideos = async () => {
       const fetchedVideos = await fetchSignageVideos();
+      const randomIndex = Math.floor(Math.random() * fetchedVideos.length);
       console.log("Fetched before slice:", fetchedVideos.length);
 
       if (!isMounted.current) return;
 
-      const selectedVideos = fetchedVideos.slice(0, 1); // Take only 2 videos
+      const selectedVideos = [fetchedVideos[randomIndex]];
 
       videosRef.current = selectedVideos;
       setVideos(selectedVideos);
