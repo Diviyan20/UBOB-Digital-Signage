@@ -1,11 +1,6 @@
 import { OutletLoginStyles as styles } from "@/styling/OutletLoginStyles";
 import { router } from "expo-router";
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Image, Pressable, Text, View } from "react-native";
 import { OutletDropdownComponent } from "../dropdowns/OutletDropdownComponent";
 import { SelectDropdown } from "../dropdowns/SelectDropdownComponent";
@@ -14,7 +9,11 @@ import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
 import { LoggingInOverlayComponent } from "../overlays/LogginInOverlayComponent";
 import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
 
-import { loadOutletSession, loginOutlet } from "@/services/LoginService";
+import {
+  loadOutletSession,
+  loginOutlet,
+  TierType,
+} from "@/services/LoginService";
 
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useWindowDimensions } from "react-native";
@@ -49,14 +48,8 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
       onBlur={onBlur}
       style={[
         styles.toggleButton,
-
-        // Active state
         active && styles.toggleButtonActive,
-
-        // Disabled state
         disabled && styles.disabledButton,
-
-        // Focus state (TV Remote / Keyboard)
         focused && styles.focusedButton,
       ]}
     >
@@ -75,12 +68,13 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
 
 export const OutletLoginForm: React.FC = () => {
   const { width, height } = useWindowDimensions();
-  const isPortrait = height > width; // real device dimensions, no flag needed
+  const isPortrait = height > width;
 
   const [outlet_id, setOutletId] = useState<string>("");
   const [screenType, setScreenType] = useState<ScreenType>("signage");
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
   const [batchNumber, setBatchNumber] = useState<number>(1);
+  const [tier, setTier] = useState<TierType>("Tier A");
   const [focusedButton, setFocusedButton] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -107,13 +101,12 @@ export const OutletLoginForm: React.FC = () => {
   const loginIdRef = useRef<string>("");
 
   useEffect(() => {
-    // Unlock so staff can rotate the phone to test portrait layout
     ScreenOrientation.unlockAsync();
-}, []);
+  }, []);
 
   /*
-    * Hydrate saved session on Mount
-  */
+   * Hydrate saved session on Mount
+   */
   useEffect(() => {
     const hydrateSavedSession = async () => {
       const session = await loadOutletSession();
@@ -124,44 +117,45 @@ export const OutletLoginForm: React.FC = () => {
       setOutletId(session.outletId);
       setScreenType(session.screenType);
       setBatchNumber(session.batchNumber);
+      setTier(session.tier);
       setOrientation(session.orientation);
       setShowSavedPrompt(true);
     };
     hydrateSavedSession();
   }, []);
 
-  // Regular login - Only validate outlet and show media screen
   const handleLogin = async (id?: string) => {
     const loginId = id ?? outlet_id;
-  
+
     if (loading) return;
     if (!loginId.trim()) return;
-  
+
     loginIdRef.current = loginId;
-  
+
     try {
       setLoading(true);
       setStatus("loading");
-  
+
       const response = await loginOutlet({
         outletId: loginId,
         screenType,
         batchNumber,
+        tier,
         orientation,
       });
-  
+
       if (!response.success) {
         setErrorVisible(true);
         setLoading(false);
         return;
       }
-  
+
       /*
         MEDIA PLAYER FLOW
       */
       if (response.route === "/screens/PlaylistScreen") {
         setStatus("success");
-  
+
         setTimeout(() => {
           setLoading(false);
 
@@ -169,35 +163,36 @@ export const OutletLoginForm: React.FC = () => {
             pathname: response.route as any,
             params: {
               outlet_id: loginIdRef.current,
+              batch_number: batchNumber.toString(),
+              tier,
+              orientation,
             },
           });
         }, 1000);
-  
+
         return;
       }
-  
+
       /*
         SIGNAGE FLOW
         Start image preload lifecycle
       */
       if (response.preloadImages?.length) {
         setStatus("preloading_images");
-  
         setImagesToPreload(response.preloadImages);
-  
         setPreloadingProgress({
           loaded: 0,
           total: response.preloadImages.length,
         });
-  
+
         return;
       }
-  
+
       // No promotions fallback
       if (response.route) {
         setTimeout(() => {
           setLoading(false);
-          
+
           router.replace({
             pathname: response.route as any,
             params: {
@@ -206,25 +201,22 @@ export const OutletLoginForm: React.FC = () => {
           });
         }, 1500);
       }
-  
     } catch (err) {
       setLoading(false);
-  
+
       Alert.alert(
         "Connection Error",
         "Could not connect to server. Please check:\n" +
-        "1. Flask server is running\n" +
-        "2. Using correct URL (10.0.2.2:5000 for emulator / https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com for APK.)\n" +
-        "3. Network connection is active",
+          "1. Flask server is running\n" +
+          "2. Using correct URL (10.0.2.2:5000 for emulator / https://wp6gcj3019.execute-api.ap-southeast-5.amazonaws.com for APK.)\n" +
+          "3. Network connection is active",
       );
     }
   };
 
   const handleSavedLogin = async () => {
     if (!savedOutlet) return;
-
     setShowSavedPrompt(false);
-
     await handleLogin(savedOutlet.id);
   };
 
@@ -232,7 +224,6 @@ export const OutletLoginForm: React.FC = () => {
     setShowSavedPrompt(false);
   };
 
-  // Handle all preloaded Images
   const handleImagesPreloaded = useCallback(() => {
     setStatus("success");
 
@@ -257,7 +248,6 @@ export const OutletLoginForm: React.FC = () => {
     console.warn("Image preloading error:", error);
   }, []);
 
-  // Helper function to get overlay message based on status
   const getOverlayMessage = () => {
     switch (status) {
       case "loading":
@@ -277,7 +267,10 @@ export const OutletLoginForm: React.FC = () => {
   return (
     <View style={[styles.container, isPortrait && styles.containerPortrait]}>
       <Image
-        style={[styles.imageContainer, isPortrait && styles.imageContainerPortrait]}
+        style={[
+          styles.imageContainer,
+          isPortrait && styles.imageContainerPortrait,
+        ]}
         source={require("../images/Logo.png")}
       />
       <View style={[styles.card, isPortrait && styles.cardPortrait]}>
@@ -286,7 +279,7 @@ export const OutletLoginForm: React.FC = () => {
         <View
           style={[
             { width: "100%", marginBottom: 16 },
-            inputFocused && styles.focusedInputContainer
+            inputFocused && styles.focusedInputContainer,
           ]}
         >
           <OutletDropdownComponent
@@ -300,8 +293,6 @@ export const OutletLoginForm: React.FC = () => {
         {/* Screen Type Selection */}
         <Text style={styles.label}>Screen Type</Text>
         <View style={styles.toggleRow}>
-
-          {/* Signage Screen */}
           <ToggleButton
             label="Signage Screen"
             active={screenType === "signage"}
@@ -310,8 +301,6 @@ export const OutletLoginForm: React.FC = () => {
             onBlur={() => setFocusedButton(null)}
             onPress={() => setScreenType("signage")}
           />
-
-          {/* Media Player */}
           <ToggleButton
             label="Media Player"
             active={screenType === "media"}
@@ -322,9 +311,10 @@ export const OutletLoginForm: React.FC = () => {
           />
         </View>
 
-        {/* Batch Buttons — only visible when Media Player is selected */}
+        {/* Media Player options — only visible when Media Player is selected */}
         {screenType === "media" && (
           <>
+            {/* Batch Number */}
             <Text style={styles.label}>Batch Number</Text>
             <SelectDropdown
               options={[
@@ -338,12 +328,24 @@ export const OutletLoginForm: React.FC = () => {
               onFocus={() => setFocusedButton("batch")}
               onBlur={() => setFocusedButton(null)}
             />
-          </>
-        )}
 
-        {/* Orientation — only visible when Media Player is selected */}
-        {screenType === "media" && (
-          <>
+            {/* Tier */}
+            <Text style={styles.label}>Tier</Text>
+            <View style={styles.toggleRow}>
+              {(["Tier A", "Tier B"] as TierType[]).map((t) => (
+                <ToggleButton
+                  key={t}
+                  label={t}
+                  active={tier === t}
+                  focused={focusedButton === t}
+                  onFocus={() => setFocusedButton(t)}
+                  onBlur={() => setFocusedButton(null)}
+                  onPress={() => setTier(t)}
+                />
+              ))}
+            </View>
+
+            {/* Orientation */}
             <Text style={styles.label}>Orientation</Text>
             <View style={styles.toggleRow}>
               {(["Landscape", "Portrait"] as OrientationType[]).map((o) => (
@@ -358,18 +360,19 @@ export const OutletLoginForm: React.FC = () => {
                 />
               ))}
             </View>
-
           </>
         )}
 
-        <Pressable style={[
-          styles.loginButton,
-          isPortrait && styles.loginButtonPortrait,
-          focusedButton === "login" && styles.focusedButton
-        ]}
+        <Pressable
+          style={[
+            styles.loginButton,
+            isPortrait && styles.loginButtonPortrait,
+            focusedButton === "login" && styles.focusedButton,
+          ]}
           onFocus={() => setFocusedButton("login")}
           onBlur={() => setFocusedButton(null)}
-          onPress={() => handleLogin()}>
+          onPress={() => handleLogin()}
+        >
           <Text style={styles.loginButtonText}>Log In</Text>
         </Pressable>
       </View>
@@ -388,7 +391,6 @@ export const OutletLoginForm: React.FC = () => {
         message={getOverlayMessage()}
       />
 
-      {/* Hidden preloader component */}
       {imagesToPreload.length > 0 && status === "preloading_images" && (
         <ImagePreloader
           images={imagesToPreload}
