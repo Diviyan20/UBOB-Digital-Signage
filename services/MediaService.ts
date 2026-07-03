@@ -31,6 +31,7 @@ interface PlaylistCache {
   playlist: PlaylistItems[];
   outletId: string;
   batchNumber: string;
+  tier: string;
   orientation: string;
 }
 
@@ -81,6 +82,7 @@ export const getSignageVersion = async (): Promise<SignageVersion> => {
 export const getPlaylistVersion = async (
   outletId: string,
   batchNumber: string,
+  tier: string,
   orientation: string,
 ): Promise<string | null> => {
   try {
@@ -220,6 +222,7 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
   const batchNumber = (await AsyncStorage.getItem("batch_number")) || "1";
   const orientation =
     (await AsyncStorage.getItem("orientation")) || "Landscape";
+  const tier = (await AsyncStorage.getItem("tier")) || "Tier A";
 
   if (!outletId) {
     console.warn("[FETCH] No outlet_id in AsyncStorage");
@@ -227,21 +230,24 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
   }
 
   console.log("========== PLAYLIST FETCH ==========");
-  console.log("outletId:", outletId);
-  console.log("batchNumber:", batchNumber);
-  console.log("orientation:", orientation);
+  console.log("Outlet ID:", outletId);
+  console.log("Batch Number:", batchNumber);
+  console.log("Tier:", tier);
+  console.log("Orientation:", orientation);
   console.log("====================================");
 
   // Step 1: Get server version (fast)
   const serverEtag = await getPlaylistVersion(
     outletId,
     batchNumber,
+    tier,
     orientation,
   );
   console.log("========== VERSION PARAMS ==========");
-  console.log("outletId:", outletId);
-  console.log("batchNumber:", batchNumber);
-  console.log("orientation:", orientation);
+  console.log("Outlet ID:", outletId);
+  console.log("Batch Number:", batchNumber);
+  console.log("Tier:", tier);
+  console.log("Orientation:", orientation);
   console.log("====================================");
 
   // Step 2: Check cache
@@ -253,6 +259,7 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
       const sameContext =
         cache.outletId === outletId &&
         cache.batchNumber === batchNumber &&
+        cache.tier === tier &&
         cache.orientation === orientation;
       const etagMatch = serverEtag && cache.etag === serverEtag;
 
@@ -282,6 +289,7 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
       body: JSON.stringify({
         outlet_id: outletId,
         batch_number: parseInt(batchNumber),
+        tier: tier,
         orientation,
       }),
     });
@@ -298,6 +306,7 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
       playlist,
       outletId,
       batchNumber,
+      tier,
       orientation,
     };
     await AsyncStorage.setItem(
