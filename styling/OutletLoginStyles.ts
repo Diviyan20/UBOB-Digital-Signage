@@ -230,9 +230,9 @@ export const OutletLoginStyles = StyleSheet.create({
     width: "100%",
     marginBottom: 8,
     zIndex: 10, // ensures dropdown list sits above elements below it
-},
+  },
 
-dropdownTrigger: {
+  dropdownTrigger: {
     width: "100%",
     flexDirection: "row",
     justifyContent: "space-between",
@@ -243,26 +243,26 @@ dropdownTrigger: {
     paddingVertical: 10,
     paddingHorizontal: 14,
     backgroundColor: "#fff",
-},
+  },
 
-dropdownTriggerOpen: {
+  dropdownTriggerOpen: {
     borderColor: "#2563EB",
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-},
+  },
 
-dropdownTriggerText: {
+  dropdownTriggerText: {
     fontSize: 14,
     color: "#333",
     fontWeight: "500",
-},
+  },
 
-dropdownArrow: {
+  dropdownArrow: {
     fontSize: 11,
     color: "#666",
-},
+  },
 
-dropdownList: {
+  dropdownList: {
     width: "100%",
     borderWidth: 1,
     borderTopWidth: 0,
@@ -271,65 +271,81 @@ dropdownList: {
     borderBottomRightRadius: 8,
     backgroundColor: "#fff",
     overflow: "hidden",
-},
+  },
 
-dropdownOption: {
+  dropdownOption: {
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
-},
+  },
 
-dropdownOptionActive: {
+  dropdownOptionActive: {
     backgroundColor: "#EFF6FF",
-},
+  },
 
-dropdownOptionText: {
+  dropdownOptionText: {
     fontSize: 14,
     color: "#333",
-},
+  },
 
-dropdownOptionTextActive: {
+  dropdownOptionTextActive: {
     color: "#2563EB",
     fontWeight: "600",
-},
+  },
 
-dropdownOptionFocused: {
-  backgroundColor: "#1E3A8A", // dark blue background on focus
-},
+  dropdownOptionFocused: {
+    backgroundColor: "#1E3A8A", // dark blue background on focus
+  },
 
-dropdownOptionTextFocused: {
-  color: "#ffffff",            // white text so it's readable on dark blue
-  fontWeight: "600",
-},
+  dropdownOptionTextFocused: {
+    color: "#ffffff", // white text so it's readable on dark blue
+    fontWeight: "600",
+  },
 
-// ── Portrait overrides ────────────────────────────────────────────────────────
-// Applied on top of base styles when isPortrait === true.
-// Portrait = tall narrow screen (phone in portrait, portrait TV)
-// ─────────────────────────────────────────────────────────────────────────────
+  // ── Portrait overrides ────────────────────────────────────────────────────────
+  // Applied on top of base styles when isPortrait === true.
+  // Portrait = tall narrow screen (phone in portrait, portrait TV)
+  // ─────────────────────────────────────────────────────────────────────────────
 
-containerPortrait: {
-  paddingHorizontal: 16,      // less side padding — screen is narrower
-  justifyContent: "flex-start",
-  paddingTop: 32,
-},
+  containerPortrait: {
+    paddingHorizontal: 16, // less side padding — screen is narrower
+    justifyContent: "flex-start",
+    paddingTop: 32,
+  },
 
-imageContainerPortrait: {
-  width: 120,                 // smaller logo — save vertical space
-  height: 80,
-  marginBottom: 12,
-},
+  imageContainerPortrait: {
+    width: 120, // smaller logo — save vertical space
+    height: 80,
+    marginBottom: 12,
+  },
 
-cardPortrait: {
-  width: "96%",               // almost full width — narrow screen needs it
-  maxWidth: 420,
-  paddingVertical: 20,
-  paddingHorizontal: 20,
-},
+  cardPortrait: {
+    width: "96%", // almost full width — narrow screen needs it
+    maxWidth: 420,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
 
-loginButtonPortrait: {
-  paddingVertical: 14,        // larger tap target — finger-friendly on phone
-  marginTop: 12,
-},
+  readOnlyField: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#f5f5f5",
+    marginBottom: 10,
+  },
 
+  readOnlyText: {
+    fontSize: 13,
+    color: "#888",
+    fontWeight: "500",
+  },
+
+  loginButtonPortrait: {
+    paddingVertical: 14, // larger tap target — finger-friendly on phone
+    marginTop: 12,
+  },
 });

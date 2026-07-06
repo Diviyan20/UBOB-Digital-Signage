@@ -83,7 +83,8 @@ def get_outlet_information(outlet_id: str) -> dict:
                     "active": outlet[4],
                     "last_seen": outlet[5],
                     "order_api_url": outlet[6],
-                    "order_api_key": outlet[7]
+                    "order_api_key": outlet[7],
+                    "tier": outlet[8]
                 }
             
     except Exception as e:
