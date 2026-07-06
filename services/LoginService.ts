@@ -25,6 +25,7 @@ export interface LoginResult {
   route?: string;
   preloadImages?: any[];
   status?: LoginStatus;
+  tier?: TierType;
   error?: string;
 }
 
@@ -48,6 +49,44 @@ export const validateOutlet = async (outletId: string) => {
     throw new Error("Invalid outlet");
   }
   return data;
+};
+
+export const syncOutletSession = async (outletData: any) => {
+  const values = await AsyncStorage.multiGet([
+    "saved_outlet",
+    "region",
+    "tier",
+  ]);
+
+  const mapped = Object.fromEntries(values);
+
+  const savedOutlet = mapped.saved_outlet
+    ? JSON.parse(mapped.saved_outlet)
+    : null;
+
+  const needsUpdate =
+    !savedOutlet ||
+    savedOutlet.name !== outletData.outlet_name ||
+    mapped.region !== outletData.outlet_location ||
+    mapped.tier !== outletData.tier;
+
+  if (!needsUpdate) {
+    return false;
+  }
+
+  await AsyncStorage.multiSet([
+    [
+      "saved_outlet",
+      JSON.stringify({
+        id: outletData.outlet_id,
+        name: outletData.outlet_name,
+      }),
+    ],
+    ["region", outletData.outlet_location],
+    ["tier", outletData.tier],
+  ]);
+
+  return true;
 };
 
 /*
@@ -105,13 +144,17 @@ export const loginOutlet = async (
 
     const outletData = await validateOutlet(outletId);
 
+    await syncOutletSession(outletData);
+
+    const dbTier = outletData.tier as TierType;
+
     await saveOutletSession(
       outletId,
       outletData.outlet_name,
       outletData.outlet_location,
       screenType,
       batchNumber,
-      tier,
+      outletData.tier,
       orientation,
     );
 
@@ -119,6 +162,7 @@ export const loginOutlet = async (
     if (screenType === "media") {
       return {
         success: true,
+        tier: dbTier,
         route: "/screens/PlaylistScreen",
         status: "success",
       };
@@ -129,6 +173,7 @@ export const loginOutlet = async (
     if (promotions.length === 0) {
       return {
         success: true,
+        tier: dbTier,
         route: "/screens/MediaScreen",
         status: "error",
       };
