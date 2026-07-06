@@ -94,6 +94,7 @@ export const getPlaylistVersion = async (
       body: JSON.stringify({
         outlet_id: outletId,
         batch_number: batchNumber,
+        tier: tier,
         orientation,
       }),
     });

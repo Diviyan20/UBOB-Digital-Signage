@@ -144,6 +144,10 @@ export const OutletLoginForm: React.FC = () => {
         orientation,
       });
 
+      if (response.tier) {
+        setTier(response.tier);
+      }
+
       if (!response.success) {
         setErrorVisible(true);
         setLoading(false);
@@ -331,18 +335,8 @@ export const OutletLoginForm: React.FC = () => {
 
             {/* Tier */}
             <Text style={styles.label}>Tier</Text>
-            <View style={styles.toggleRow}>
-              {(["Tier A", "Tier B"] as TierType[]).map((t) => (
-                <ToggleButton
-                  key={t}
-                  label={t}
-                  active={tier === t}
-                  focused={focusedButton === t}
-                  onFocus={() => setFocusedButton(t)}
-                  onBlur={() => setFocusedButton(null)}
-                  onPress={() => setTier(t)}
-                />
-              ))}
+            <View style={styles.readOnlyField}>
+              <Text style={styles.readOnlyText}>{tier}</Text>
             </View>
 
             {/* Orientation */}
