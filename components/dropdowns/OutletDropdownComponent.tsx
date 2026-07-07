@@ -6,7 +6,7 @@ import {
   Pressable,
   Text,
   TextInput,
-  View
+  View,
 } from "react-native";
 import { api } from "../api/client";
 
@@ -18,12 +18,17 @@ interface Outlet {
 
 interface OutletDropdownProps {
   onSelect: (outletId: string) => void;
-  onFocus?: () => void,
-  onBlur?: () => void,
+  onFocus?: () => void;
+  onBlur?: () => void;
   prefillId?: string;
 }
 
-export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelect, prefillId, onFocus, onBlur }) => {
+export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({
+  onSelect,
+  prefillId,
+  onFocus,
+  onBlur,
+}) => {
   const [search, setSearch] = useState("");
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [filtered, setFiltered] = useState<Outlet[]>([]);
@@ -65,7 +70,7 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
         (o) =>
           o.outlet_id.startsWith(search) ||
           o.outlet_id.endsWith(search) ||
-          o.outlet_name.toLowerCase().includes(search.toLowerCase())
+          o.outlet_name.toLowerCase().includes(search.toLowerCase()),
       );
       setFiltered(results);
       setShowDropdown(results.length > 0);
@@ -78,7 +83,7 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
 
   useEffect(() => {
     if (!prefillId || outlets.length === 0) return;
-  
+
     const match = outlets.find((o) => o.outlet_id === prefillId);
     if (match) {
       setSearch(`${match.outlet_id} - ${match.outlet_name}`);
@@ -93,7 +98,7 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
       setShowDropdown(false);
       onSelect(outlet.outlet_id);
     },
-    [onSelect]
+    [onSelect],
   );
 
   return (
@@ -110,7 +115,9 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
           keyboardType="numeric"
           autoCapitalize="none"
         />
-        {loading && <ActivityIndicator size="small" color="#888" style={styles.spinner} />}
+        {loading && (
+          <ActivityIndicator size="small" color="#888" style={styles.spinner} />
+        )}
       </View>
 
       {showDropdown && (
@@ -132,14 +139,29 @@ export const OutletDropdownComponent: React.FC<OutletDropdownProps> = ({ onSelec
                 onHoverIn={() => setFocusedIndex(index)}
                 onHoverOut={() => setFocusedIndex(null)}
               >
-                <Text style={[styles.outletId, focusedIndex === index && styles.focusedText]}>
-                {item.outlet_id}
+                <Text
+                  style={[
+                    styles.outletId,
+                    focusedIndex === index && styles.focusedText,
+                  ]}
+                >
+                  {item.outlet_id}
                 </Text>
-                <Text style={[styles.outletName, focusedIndex === index && styles.focusedText]}>
-                {item.outlet_name}
+                <Text
+                  style={[
+                    styles.outletName,
+                    focusedIndex === index && styles.focusedText,
+                  ]}
+                >
+                  {item.outlet_name}
                 </Text>
-                <Text style={[styles.outletRegion, focusedIndex === index && styles.focusedText]}>
-                {item.region_name}
+                <Text
+                  style={[
+                    styles.outletRegion,
+                    focusedIndex === index && styles.focusedText,
+                  ]}
+                >
+                  {item.region_name}
                 </Text>
               </Pressable>
             )}
