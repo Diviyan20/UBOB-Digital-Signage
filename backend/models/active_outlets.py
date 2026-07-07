@@ -144,7 +144,7 @@ def mark_device_offline(outlet_id):
         conn.commit()
 
 def register_outlet(outlet_id:str, outlet_name:str, region_name:str, 
-                    order_api_url:str, order_api_key:str):
+                    order_api_url:str, order_api_key:str, tier:str):
     """
     Register a new outlet into the Database.
     
@@ -167,11 +167,11 @@ def register_outlet(outlet_id:str, outlet_name:str, region_name:str,
             query = """
                     INSERT INTO active_outlets 
                     (outlet_id, outlet_name, outlet_status, outlet_location, 
-                     active, last_seen, order_api_url, order_api_key)
-                    VALUES (%s, %s, 'offline', %s, %s, %s, %s, %s)
+                     active, last_seen, order_api_url, order_api_key, tier)
+                    VALUES (%s, %s, 'offline', %s, %s, %s, %s, %s, %s)
                     RETURNING *
                 """
-            cur.execute(query, (outlet_id, outlet_name, region_name, now, now, order_api_url, order_api_key))
+            cur.execute(query, (outlet_id, outlet_name, region_name, now, now, order_api_url, order_api_key, tier))
                 
             outlet = cur.fetchone()
             conn.commit()
@@ -183,7 +183,8 @@ def register_outlet(outlet_id:str, outlet_name:str, region_name:str,
                 "outlet_status": outlet[2],
                 "outlet_location": outlet[3],
                 "order_api_url": outlet[6],
-                "order_api_key": outlet[7]
+                "order_api_key": outlet[7],
+                "tier": outlet[8]
             }
     
     except Exception as e:

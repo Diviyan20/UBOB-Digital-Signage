@@ -29,7 +29,7 @@ def get_playlist():
 
         outlet_id = str(data.get("outlet_id", "")).strip()
         batch_number = data.get("batch_number")
-        tier = data.get("tier").strip()
+        tier = data.get("tier", "Tier A").strip()
         orientation = data.get("orientation", "Landscape").strip()
 
         if not outlet_id or batch_number is None:
