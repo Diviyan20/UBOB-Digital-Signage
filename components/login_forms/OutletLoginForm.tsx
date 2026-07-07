@@ -13,6 +13,7 @@ import {
   loadOutletSession,
   loginOutlet,
   TierType,
+  validateOutlet,
 } from "@/services/LoginService";
 
 import * as ScreenOrientation from "expo-screen-orientation";
@@ -99,6 +100,21 @@ export const OutletLoginForm: React.FC = () => {
   }>({ loaded: 0, total: 0 });
 
   const loginIdRef = useRef<string>("");
+
+  const handleOutletIdSelected = async (id: string) => {
+    setOutletId(id);
+
+    try {
+      const outlet = await validateOutlet(id);
+
+      if (outlet.tier) {
+        setTier(outlet.tier);
+      }
+    } catch {
+      console.warn("No Tier set, defaulting to Tier A");
+      setTier("Tier A");
+    }
+  };
 
   useEffect(() => {
     ScreenOrientation.unlockAsync();
@@ -287,7 +303,7 @@ export const OutletLoginForm: React.FC = () => {
           ]}
         >
           <OutletDropdownComponent
-            onSelect={(id) => setOutletId(id)}
+            onSelect={handleOutletIdSelected}
             prefillId={outlet_id}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
