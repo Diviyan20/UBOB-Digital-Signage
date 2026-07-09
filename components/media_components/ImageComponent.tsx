@@ -8,11 +8,11 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Animated, Text, useWindowDimensions, View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 import { config } from "../api/client";
 
 const DEV_BLOCK_PROMOTIONS = false;
-const FALLBACK_IMAGE = require("C:/Dev/UBOB/UBOB-Digital-Signage/components/images/Logo.png");
+const FALLBACK_IMAGE = require("../images/Logo.png");
 
 export const ImageComponent: React.FC = React.memo(() => {
   const { width, height } = useWindowDimensions();
@@ -26,7 +26,6 @@ export const ImageComponent: React.FC = React.memo(() => {
   // Use fallback values for the intervals in case if Lambda fails
   const [displayDuration, setDisplayDuration] = useState(5000);
 
-  const fadeAnim = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMounted = useRef(true);
