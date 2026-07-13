@@ -363,7 +363,7 @@ export const OutletLoginForm: React.FC = () => {
         </View>
 
         {/* Screen Type Selection */}
-        <Text style={styles.label}>Screen Type</Text>
+        <Text style={styles.label}>Choose Screen Type</Text>
         <View style={styles.toggleRow}>
           <ToggleButton
             label="Signage Screen"
