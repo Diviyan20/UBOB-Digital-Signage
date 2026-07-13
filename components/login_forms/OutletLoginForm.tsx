@@ -336,7 +336,7 @@ export const OutletLoginForm: React.FC = () => {
         source={require("../images/Logo.png")}
       />
       <View style={[styles.card, isPortrait && styles.cardPortrait]}>
-        <Text style={styles.label}>Enter Outlet ID</Text>
+        <Text style={styles.label}>Outlet ID</Text>
 
         <View
           style={[
