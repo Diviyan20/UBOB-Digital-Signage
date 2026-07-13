@@ -22,6 +22,7 @@ export const UpdateOverlay: React.FC<Props> = ({
   onUpdate,
 }) => {
   const [downloading, setDownloading] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const handleUpdate = async () => {
     setDownloading(true);
@@ -50,7 +51,12 @@ export const UpdateOverlay: React.FC<Props> = ({
               <Text style={styles.downloadingText}>Downloading...</Text>
             </View>
           ) : (
-            <Pressable style={styles.updateButton} onPress={handleUpdate}>
+            <Pressable
+              style={styles.updateButton}
+              onPress={handleUpdate}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+            >
               <Text style={styles.updateButtonText}>Update</Text>
             </Pressable>
           )}
