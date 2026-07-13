@@ -52,7 +52,10 @@ export const UpdateOverlay: React.FC<Props> = ({
             </View>
           ) : (
             <Pressable
-              style={styles.updateButton}
+              style={[
+                styles.updateButton,
+                focused && styles.updateButtonFocused,
+              ]}
               onPress={handleUpdate}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
@@ -126,6 +129,12 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 15,
     fontWeight: "600",
+  },
+
+  updateButtonFocused: {
+    borderColor: "#FFD700",
+    borderWidth: 3,
+    transform: [{ scale: 1.03 }],
   },
 
   downloadingRow: {
