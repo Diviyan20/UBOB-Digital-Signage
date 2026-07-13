@@ -286,16 +286,6 @@ export const OutletLoginForm: React.FC = () => {
     }
   };
 
-  const handleSavedLogin = async () => {
-    if (!savedOutlet) return;
-    setShowSavedPrompt(false);
-    await handleLogin(savedOutlet.id);
-  };
-
-  const handleIgnoreSaved = () => {
-    setShowSavedPrompt(false);
-  };
-
   const handleImagesPreloaded = useCallback(() => {
     setStatus("success");
 
@@ -346,7 +336,7 @@ export const OutletLoginForm: React.FC = () => {
         source={require("../images/Logo.png")}
       />
       <View style={[styles.card, isPortrait && styles.cardPortrait]}>
-        <Text style={styles.label}>Outlet ID</Text>
+        <Text style={styles.label}>Enter Outlet ID</Text>
 
         <View
           style={[
