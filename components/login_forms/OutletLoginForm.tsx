@@ -1,13 +1,21 @@
 import { OutletLoginStyles as styles } from "@/styling/OutletLoginStyles";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Image, Pressable, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { OutletDropdownComponent } from "../dropdowns/OutletDropdownComponent";
 import { SelectDropdown } from "../dropdowns/SelectDropdownComponent";
 import { ImagePreloader } from "../media_components/ImagePreloader";
 import { ErrorOverlayComponent } from "../overlays/ErrorOverlayComponent";
 import { LoggingInOverlayComponent } from "../overlays/LogginInOverlayComponent";
-import SavedOutletOverlay from "../overlays/SavedOutletOverlay";
+import { ReleaseNotesOverlay } from "../overlays/ReleaseNotesOverlay";
+import { UpdateOverlay } from "../overlays/UpdateOverlay";
 
 import {
   loadOutletSession,
@@ -16,8 +24,18 @@ import {
   validateOutlet,
 } from "@/services/LoginService";
 
+import {
+  checkForUpdate,
+  downloadAndApplyUpdate,
+  markReleaseNotesSeen,
+  shouldShowReleaseNotes,
+  UpdateInfo,
+} from "@/services/UpdateService";
+
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useWindowDimensions } from "react-native";
+
+const releaseNotes = require("../../assets/release_notes.json");
 
 type ScreenType = "signage" | "media";
 type OrientationType = "Landscape" | "Portrait";
@@ -99,47 +117,82 @@ export const OutletLoginForm: React.FC = () => {
     total: number;
   }>({ loaded: 0, total: 0 });
 
+  // Update flow state
+  const [checkingUpdate, setCheckingUpdate] = useState(true);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [showUpdateOverlay, setShowUpdateOverlay] = useState(false);
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
+
   const loginIdRef = useRef<string>("");
 
+  // ─── On mount: unlock orientation, hydrate session, check for updates ─────────
+
+  useEffect(() => {
+    ScreenOrientation.unlockAsync();
+  }, []);
+
+  // Hydrate saved session fields from AsyncStorage — no prompt, just fills inputs
+  useEffect(() => {
+    const hydrateSavedSession = async () => {
+      const session = await loadOutletSession();
+      if (!session) return;
+
+      if (session.outletId) setOutletId(session.outletId);
+      setScreenType(session.screenType);
+      setBatchNumber(session.batchNumber);
+      setTier(session.tier);
+      setOrientation(session.orientation);
+    };
+    hydrateSavedSession();
+  }, []);
+
+  // Check for OTA update on mount
+  useEffect(() => {
+    const runUpdateCheck = async () => {
+      setCheckingUpdate(true);
+
+      const info = await checkForUpdate(
+        releaseNotes.version,
+        releaseNotes.size ?? "—",
+      );
+
+      setCheckingUpdate(false);
+
+      if (info.available) {
+        setUpdateInfo(info);
+        setShowUpdateOverlay(true);
+        return; // don't check release notes until after update + reboot
+      }
+
+      // No update — check if user needs to see release notes from a previous update
+      const needsNotes = await shouldShowReleaseNotes(releaseNotes.version);
+      if (needsNotes) {
+        setShowReleaseNotes(true);
+      }
+    };
+
+    runUpdateCheck();
+  }, []);
+
+  const handleReleaseNotesClose = async () => {
+    await markReleaseNotesSeen(releaseNotes.version);
+    setShowReleaseNotes(false);
+  };
+
+  // Outlet ID Selection
   const handleOutletIdSelected = async (id: string) => {
     setOutletId(id);
-
     try {
       const outlet = await validateOutlet(id);
 
-      if (outlet.tier) {
-        setTier(outlet.tier);
-      }
+      if (outlet.tier) setTier(outlet.tier);
     } catch {
       console.warn("No Tier set, defaulting to Tier A");
       setTier("Tier A");
     }
   };
 
-  useEffect(() => {
-    ScreenOrientation.unlockAsync();
-  }, []);
-
-  /*
-   * Hydrate saved session on Mount
-   */
-  useEffect(() => {
-    const hydrateSavedSession = async () => {
-      const session = await loadOutletSession();
-
-      if (!session?.savedOutlet) return;
-
-      setSavedOutlet(session.savedOutlet);
-      setOutletId(session.outletId);
-      setScreenType(session.screenType);
-      setBatchNumber(session.batchNumber);
-      setTier(session.tier);
-      setOrientation(session.orientation);
-      setShowSavedPrompt(true);
-    };
-    hydrateSavedSession();
-  }, []);
-
+  // Login
   const handleLogin = async (id?: string) => {
     const loginId = id ?? outlet_id;
 
@@ -194,8 +247,7 @@ export const OutletLoginForm: React.FC = () => {
       }
 
       /*
-        SIGNAGE FLOW
-        Start image preload lifecycle
+        SIGNAGE FLOW - Preload images
       */
       if (response.preloadImages?.length) {
         setStatus("preloading_images");
@@ -387,6 +439,32 @@ export const OutletLoginForm: React.FC = () => {
         </Pressable>
       </View>
 
+      {/* Checking for updates indicator — bottom left */}
+      {checkingUpdate && (
+        <View style={styles.updateCheckBadge}>
+          <ActivityIndicator size="small" color="#888" />
+          <Text style={styles.updateCheckText}>Checking for updates...</Text>
+        </View>
+      )}
+
+      {/* Update available overlay */}
+      {updateInfo && (
+        <UpdateOverlay
+          visible={showUpdateOverlay}
+          version={updateInfo.version}
+          sizeLabel={updateInfo.sizeLabel}
+          onUpdate={downloadAndApplyUpdate}
+        />
+      )}
+
+      {/* Release notes overlay — shown after update applied on next boot */}
+      <ReleaseNotesOverlay
+        visible={showReleaseNotes}
+        version={releaseNotes.version}
+        notes={releaseNotes.notes}
+        onClose={handleReleaseNotesClose}
+      />
+
       {errorVisible && (
         <ErrorOverlayComponent
           visible={errorVisible}
@@ -409,13 +487,6 @@ export const OutletLoginForm: React.FC = () => {
           onError={handlePreloadingError}
         />
       )}
-
-      <SavedOutletOverlay
-        visible={showSavedPrompt}
-        savedOutlet={savedOutlet}
-        onUseSaved={handleSavedLogin}
-        onIgnoreSaved={handleIgnoreSaved}
-      />
     </View>
   );
 };
