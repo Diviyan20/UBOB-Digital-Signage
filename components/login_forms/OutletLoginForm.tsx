@@ -286,16 +286,6 @@ export const OutletLoginForm: React.FC = () => {
     }
   };
 
-  const handleSavedLogin = async () => {
-    if (!savedOutlet) return;
-    setShowSavedPrompt(false);
-    await handleLogin(savedOutlet.id);
-  };
-
-  const handleIgnoreSaved = () => {
-    setShowSavedPrompt(false);
-  };
-
   const handleImagesPreloaded = useCallback(() => {
     setStatus("success");
 
