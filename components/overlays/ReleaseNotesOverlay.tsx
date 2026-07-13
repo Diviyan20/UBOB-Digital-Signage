@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
     Modal,
     Pressable,
@@ -21,6 +21,8 @@ export const ReleaseNotesOverlay: React.FC<Props> = ({
   notes,
   onClose,
 }) => {
+  const [focused, setFocused] = useState(false);
+
   return (
     <Modal transparent animationType="fade" visible={visible}>
       <View style={styles.backdrop}>
@@ -40,7 +42,12 @@ export const ReleaseNotesOverlay: React.FC<Props> = ({
             ))}
           </ScrollView>
 
-          <Pressable style={styles.closeButton} onPress={onClose}>
+          <Pressable
+            style={[styles.closeButton, focused && styles.closeButtonFocused]}
+            onPress={onClose}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+          >
             <Text style={styles.closeButtonText}>Close</Text>
           </Pressable>
         </View>
@@ -124,5 +131,11 @@ const styles = StyleSheet.create({
     color: "#333",
     fontSize: 15,
     fontWeight: "600",
+  },
+
+  closeButtonFocused: {
+    borderColor: "#FFD700",
+    borderWidth: 3,
+    transform: [{ scale: 1.03 }],
   },
 });
