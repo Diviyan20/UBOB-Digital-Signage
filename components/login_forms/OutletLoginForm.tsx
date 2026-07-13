@@ -106,12 +106,6 @@ export const OutletLoginForm: React.FC = () => {
     | undefined
   >();
   const [imagesToPreload, setImagesToPreload] = useState<any[]>([]);
-  const [savedOutlet, setSavedOutlet] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-
-  const [showSavedPrompt, setShowSavedPrompt] = useState(false);
   const [preloadingProgress, setPreloadingProgress] = useState<{
     loaded: number;
     total: number;

@@ -19,7 +19,6 @@ interface OutletInfo {
 const MediaScreenInner: React.FC<{ outlet_id: string }> = ({ outlet_id }) => {
   const { isOnline } = useScheduler();
   const [outletInfo, setOutletInfo] = useState<OutletInfo | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const appState = useRef(AppState.currentState);
 
@@ -51,7 +50,7 @@ const MediaScreenInner: React.FC<{ outlet_id: string }> = ({ outlet_id }) => {
           throw new Error(data.error || "Failed to fetch outlet info");
         setOutletInfo(data.outlet);
       } catch (err: any) {
-        setError(err.message);
+        console.warn("Outlet info unavailable, running without order tracking:", err.message);
       }
     };
     if (outlet_id) fetchOutletInfo();
@@ -62,14 +61,6 @@ const MediaScreenInner: React.FC<{ outlet_id: string }> = ({ outlet_id }) => {
       return undefined;
     return `${outletInfo.order_api_url}?access_token=${outletInfo.order_api_key}`;
   };
-
-  if (error) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.errorText}>Error: {error}</Text>
-      </View>
-    );
-  }
 
   return (
     // setIsOnline is a no-op here — scheduler owns online state now
