@@ -27,6 +27,7 @@ export interface LoginResult {
   status?: LoginStatus;
   tier?: TierType;
   error?: string;
+  params?: Record<string, string>;
 }
 
 /*
@@ -191,6 +192,73 @@ export const loginOutlet = async (
       error: error?.message || "Login failed",
     };
   }
+};
+
+/*
+ * Check if all required credentials exist in AsyncStorage for offline login
+ */
+export const checkOfflineCredentials = async (): Promise<boolean> => {
+  try {
+    const values = await AsyncStorage.multiGet([
+      "saved_outlet",
+      "region",
+      "screen_type",
+      "batch_number",
+      "tier",
+      "orientation",
+    ]);
+
+    const mapped = Object.fromEntries(values);
+
+    const savedOutlet = mapped.saved_outlet
+      ? JSON.parse(mapped.saved_outlet)
+      : null;
+    if (!savedOutlet?.id || !savedOutlet?.name) return false;
+
+    if (!mapped.region) return false;
+    if (!mapped.screen_type || !["signage", "media"].includes(mapped.screen_type)) return false;
+    if (!mapped.batch_number) return false;
+    if (!mapped.tier || !["Tier A", "Tier B"].includes(mapped.tier)) return false;
+    if (!mapped.orientation || !["Landscape", "Portrait"].includes(mapped.orientation)) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/*
+ * Login using cached credentials - bypasses validate_outlet endpoint
+ */
+export const offlineLogin = async (): Promise<LoginResult> => {
+  const session = await loadOutletSession();
+
+  if (!session) {
+    return { success: false, status: "error", error: "No cached session" };
+  }
+
+  if (session.screenType === "media") {
+    return {
+      success: true,
+      route: "/screens/PlaylistScreen",
+      status: "success",
+      params: {
+        outlet_id: session.outletId,
+        batch_number: session.batchNumber.toString(),
+        tier: session.tier,
+        orientation: session.orientation,
+      },
+    };
+  }
+
+  return {
+    success: true,
+    route: "/screens/MediaScreen",
+    status: "success",
+    params: {
+      outlet_id: session.outletId,
+    },
+  };
 };
 
 /*
