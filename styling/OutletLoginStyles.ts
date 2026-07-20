@@ -348,18 +348,4 @@ export const OutletLoginStyles = StyleSheet.create({
     paddingVertical: 14, // larger tap target — finger-friendly on phone
     marginTop: 12,
   },
-
-  updateCheckBadge: {
-    position: "absolute",
-    bottom: 16,
-    left: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  updateCheckText: {
-    fontSize: 12,
-    color: "#888",
-  },
 });
