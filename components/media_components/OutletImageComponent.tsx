@@ -4,7 +4,6 @@ import {
   getCachedOutletImages,
 } from "@/services/OutletImageService";
 import { OutletImageStyle } from "@/styling/OutletImageStyle";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import React, {
   useCallback,
@@ -17,17 +16,15 @@ import { Animated, Text, View, useWindowDimensions } from "react-native";
 import { config } from "../api/client";
 
 const ITEMS_PER_PAGE = 7;
-const SESSION_FETCHED_KEY = "outlet_images_session_fetched"; // Flag: did we already fetch this session?
 
-export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.memo(
-  ({ endpoint }) => {
+export const OutletDisplayComponent: React.FC<{ endpoint?: string }> =
+  React.memo(({ endpoint }) => {
     const { width, height } = useWindowDimensions();
     const styles = OutletImageStyle(width, height);
 
     const [images, setImages] = useState<OutletImageItem[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
+    const [ready, setReady] = useState(false); // true only when images are in storage
     const [currentPage, setCurrentPage] = useState(0);
-    const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
     const [flipInterval, setFlipInterval] = useState(5000);
     const [fadeDuration, setFadeDuration] = useState(400);
 
@@ -42,37 +39,30 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
       return result;
     }, [images]);
 
-    // Core logic: load cache immediately, fetch fresh only if this session hasn't fetched yet
     const loadImages = useCallback(async () => {
-      setLoading(true);
+      setReady(false);
 
-      // Step 1: Load from cache right away so the screen isn't blank
+      // Step 1: Show cached images immediately (already valid data URIs)
       const cached = await getCachedOutletImages();
       if (isMounted.current && cached.length > 0) {
         setImages(cached);
-        setLoading(false); // Show cached images immediately, don't make user wait
+        setReady(true);
       }
 
-      // Step 2: Check if we already fetched during this login session
-      const alreadyFetched = await AsyncStorage.getItem(SESSION_FETCHED_KEY);
-
-      if (!alreadyFetched) {
-        // First time after login — fetch fresh data
-        try {
-          const fresh = await fetchAndCacheOutletImages(endpoint);
-          if (isMounted.current) {
-            setImages(fresh);
-            setImageErrors(new Set()); // Clear any stale errors
-          }
-          // Mark that we've fetched for this session
-          await AsyncStorage.setItem(SESSION_FETCHED_KEY, "true");
-        } catch (err) {
-          console.error("[OUTLET IMAGE FETCH ERROR] Fresh fetch failed, using cache:", err);
-          // Cache is already loaded above — nothing extra needed here
+      // Step 2: Fetch fresh — blocks until ALL images are saved to AsyncStorage
+      try {
+        const fresh = await fetchAndCacheOutletImages(endpoint);
+        if (isMounted.current) {
+          setImages(fresh);
+          setReady(true);
+        }
+      } catch (err) {
+        console.error("[OUTLET IMAGE FETCH ERROR]", err);
+        // Fall back to cache if fetch fails — already shown above
+        if (isMounted.current && !ready) {
+          setReady(true);
         }
       }
-
-      if (isMounted.current) setLoading(false);
     }, [endpoint]);
 
     useEffect(() => {
@@ -83,7 +73,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
       };
     }, [loadImages]);
 
-    // Config fetch (flip interval + fade duration)
+    // Config fetch
     useEffect(() => {
       const fetchConfig = async () => {
         try {
@@ -92,7 +82,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
           setFlipInterval(data.config.outlet_image_flip_interval);
           setFadeDuration(data.config.fade_duration);
         } catch (e) {
-          console.error("CONFIG ERROR: ", e);
+          console.error("CONFIG ERROR:", e);
         }
       };
       fetchConfig();
@@ -118,15 +108,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
       }, flipInterval);
 
       return () => clearInterval(interval);
-    }, [pages.length, flipAnim, fadeDuration, flipInterval]); // Added missing deps
-
-    const handleImageError = useCallback((imageId: string) => {
-      setImageErrors((prev) => {
-        const next = new Set(prev);
-        next.add(imageId);
-        return next;
-      });
-    }, []);
+    }, [pages.length, flipAnim, fadeDuration, flipInterval]);
 
     const opacity = flipAnim.interpolate({
       inputRange: [0, 0.5],
@@ -138,8 +120,10 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
       outputRange: [1, 0.92],
     });
 
-    if (loading && images.length === 0) return <Text>Loading Images...</Text>;
-    if (images.length === 0) return <Text>No images available.</Text>;
+    // Hold render until images are ready — no placeholder flashing
+    if (!ready || images.length === 0) {
+      return <Text>Loading Images...</Text>;
+    }
 
     const currentItems = pages[currentPage] || [];
 
@@ -150,12 +134,13 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
             style={[styles.pageContainer, { opacity, transform: [{ scale }] }]}
           >
             {currentItems.map((item, i) => {
-              const imageId = item.id || item.outlet_id || `image-${i}`;
-              const uri = item.image;
-              const hasError = imageErrors.has(imageId);
+              const imageId = item.id || `image-${i}`;
 
               return (
-                <View key={imageId} style={{ alignItems: "center", marginHorizontal: 8 }}>
+                <View
+                  key={imageId}
+                  style={{ alignItems: "center", marginHorizontal: 8 }}
+                >
                   <Animated.View
                     style={[
                       styles.imageWrapper,
@@ -171,26 +156,15 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
                       },
                     ]}
                   >
-                    {uri && !hasError ? (
-                      <Image
-                        source={{ uri }}
-                        style={styles.image}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        recyclingKey={imageId}
-                        priority="low"
-                        onError={() => handleImageError(imageId)}
-                      />
-                    ) : (
-                      <View
-                        style={[
-                          styles.image,
-                          { justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" },
-                        ]}
-                      >
-                        <Text style={styles.placeholder}>No Image</Text>
-                      </View>
-                    )}
+                    {/* dataUri is a data:image/png;base64 string — no file system needed */}
+                    <Image
+                      source={{ uri: item.dataUri }}
+                      style={styles.image}
+                      contentFit="cover"
+                      cachePolicy="memory"
+                      recyclingKey={imageId}
+                      priority="normal"
+                    />
                   </Animated.View>
 
                   <Text
@@ -216,5 +190,4 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> = React.mem
         </View>
       </View>
     );
-  }
-);
+  });
