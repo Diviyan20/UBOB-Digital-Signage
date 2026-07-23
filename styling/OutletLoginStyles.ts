@@ -20,7 +20,7 @@ export const OutletLoginStyles = StyleSheet.create({
     maxWidth: 500,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    paddingVertical: 15,
+    paddingVertical: 10,
     paddingHorizontal: 24,
     alignItems: "center",
     shadowColor: "#000",
@@ -39,10 +39,10 @@ export const OutletLoginStyles = StyleSheet.create({
 
   label: {
     alignSelf: "flex-start",
-    fontSize: 13,
+    fontSize: 12,
     color: "#333",
     fontWeight: "500",
-    marginBottom: 4,
+    marginBottom: 2,
   },
 
   input: {
@@ -62,8 +62,8 @@ export const OutletLoginStyles = StyleSheet.create({
     borderRadius: 8,
     width: "100%",
     alignItems: "center",
-    paddingVertical: 10,
-    marginTop: 8,
+    paddingVertical: 8,
+    marginTop: 6,
   },
 
   adminButton: {
@@ -173,14 +173,14 @@ export const OutletLoginStyles = StyleSheet.create({
   toggleRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 6,
     width: "100%",
   },
 
   toggleButton: {
     minWidth: 100,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
     borderWidth: 1,
@@ -332,10 +332,10 @@ export const OutletLoginStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 14,
     backgroundColor: "#f5f5f5",
-    marginBottom: 10,
+    marginBottom: 6,
   },
 
   readOnlyText: {
