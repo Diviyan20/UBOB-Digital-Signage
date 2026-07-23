@@ -276,7 +276,7 @@ export const OutletLoginForm: React.FC = () => {
 
         <View
           style={[
-            { width: "100%", marginBottom: 16 },
+            { width: "100%", marginBottom: 8 },
             inputFocused && styles.focusedInputContainer,
           ]}
         >
