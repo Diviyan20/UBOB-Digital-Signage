@@ -1,129 +1,141 @@
+import base64
 import hashlib
+import io
+import os
+from pathlib import Path
 
-from models.active_outlets import get_outlet_information
-from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects
+from flask import abort, send_file
+from PIL import Image
+from utils.cache_helper import load_cache, save_cache
+from utils.odoo_helper import fetch_odoo_promotions
+
+# =======================
+# ENVIRONMENT VARIABLES
+# =======================
+PUBLIC_HOST_URL = os.getenv("PUBLIC_HOST_URL")
+
+# =====================
+# LAMBDA CACHE DIRECTORY
+CACHE_DIR = Path("/tmp/promotion_cache")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class PlaylistService:
+class PromotionService:
     """
-    Handles media playlist logic
-
-    Responsibilities:
-        - Find outlet information
-        - Determine outlet region
-        - Build S3 Folder path
-        - Fetch media from S3
+    Handles:
+        - Promotion Fetching from Odoo
+        - Converting base64 -> PNG
+        - Caching Images Locally
+        - Returning lightweight image URLs
     """
-
-    # ======================
-    # OUTLET REGION HELPER
-    # ======================
-    def get_outlet_region(self, outlet_id: str):
+    
+    CACHE_FILE = "promotion_cache.json"
+    
+    def get_promotions(self):
         """
-        Gets outlet region from database
+        Main API used by controller.
+
+        Flow:
+        1. Check cache
+        2. If cache exists -> return it
+        3. Else fetch from Odoo
+        4. Process images
+        5. Save cache
         """
-        outlet = get_outlet_information(outlet_id)
+        # Step 1: Try cache first
+        cached_data = load_cache(self.CACHE_FILE)
+        
+        if cached_data:
+            return cached_data
 
-        if not outlet:
-            raise Exception("Outlet Not Found")
+        # Step 2: Fetch raw data from Odoo
+        raw_promotions = fetch_odoo_promotions()
+        
+        processed_promotions = []
+        
+        for promo in raw_promotions:
+            
+            name = promo.get("name", "unknown")
+            description = promo.get("description", "")
+            raw_image = promo.get("image")
+            
+            if not raw_image:
+                continue
+            
+            # Generate unique image ID
+            image_id = self.generate_image_id(name, raw_image)
+            
+            # Save image only if not already cached
+            image_path = self.get_image_path(image_id)
+            
+            if not image_path.exists():
+                self.save_base64_as_png(raw_image, image_id)
+            
+            processed_promotions.append({
+                "type": "image",
+                "name": name,
+                "description": description,
+                "image": f"{PUBLIC_HOST_URL}/promotion_image/{image_id}"
+            })
+        
+        # Save lightweight metadata cache
+        save_cache(self.CACHE_FILE, processed_promotions)
 
-        region = outlet.get("outlet_location")
+        return processed_promotions
 
-        if not region:
-            raise Exception("Outlet Region Not Configured")
-
-        return region
-
-    # ======================
-    # MIXED MEDIA PLAYLIST
-    # ======================
-    def normalize_region(self, region: str) -> str:
+    def stream_promotion_image(self, image_id):
         """
-        Remove any special characters from string
-
-        Example: Kuala_Lumpur -> Kuala Lumpur
+        Streams cached files
         """
-        return region.strip().replace("_", " ")
-
-    def get_playlist(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape"):
-        """
-        Builds S3 path based on region, batch, tier, and orientation.
-
-        Example: Selangor/Batch 2/Tier A/Landscape/
-        """
-        # Step 1: Get outlet region
-        region = self.get_outlet_region(outlet_id)
-        normalized_region = self.normalize_region(region)
-
-        # Step 2: Build S3 folder path
-        prefix = f"{normalized_region}/Batch {batch_number}/{tier}/{orientation}/"
-
-        print(f"[PLAYLIST PREFIX] {prefix}")
-
-        # Step 3: Fetch mixed media
-        media = get_s3_playlist_media(prefix)
-
-        return media
-
-    # ========================
-    # VIDEO SIGNAGE PLAYLIST
-    # ========================
-    def get_signage_videos(self):
-        """
-        - Used for signage screen
-        - Always points to the Digital Signage folder
-        """
-        prefix = "Digital Signage/"
-        videos = get_video_media(prefix)
-        return videos
-
-    def has_signage_videos(self) -> bool:
-        prefix = "Digital Signage/"
-        objects = list_s3_objects(prefix)
-        return len(objects) > 0
-
-    def _compute_version(self, prefix: str) -> dict:
-        """
-        Computes a stable content fingerprint.
-
-        Changes whenever:
-        - file added
-        - file removed
-        - file renamed
-        - file replaced
-        """
-        objects = list_s3_objects(prefix)
-
-        fingerprint = "".join(
-            f"{obj['key']}:{obj['size']}:{obj['modified']}"
-            for obj in sorted(objects, key=lambda x: x["key"])
+        path = self.get_image_path(image_id)
+        
+        if not path.exists():
+            abort(404, "Image not found")
+        
+        return send_file(
+            path,
+            mimetype="image/png",
+            as_attachment=False
         )
-
-        etag = hashlib.md5(fingerprint.encode()).hexdigest()[:12]
-
-        print("\n========== VERSION CHECK ==========")
-        print(f"PREFIX      : {prefix}")
-        print(f"ITEM COUNT  : {len(objects)}")
-        print(f"ETAG        : {etag}")
-        print("===================================")
-
-        return {
-            "etag": etag,
-            "itemCount": len(objects)
-        }
-
-    def get_playlist_version(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape") -> dict:
+    
+    # =================
+    # HELPER FUNCTIONS
+    # =================
+    
+    def generate_image_id(self, name, raw_image):
         """
-        Returns version info for a playlist screen's S3 folder.
+        Generates a unique stable Image ID
         """
-        region = self.get_outlet_region(outlet_id)
-        normalized_region = self.normalize_region(region)
-        prefix = f"{normalized_region}/Batch {batch_number}/{tier}/{orientation}/"
-        return self._compute_version(prefix)
-
-    def get_signage_version(self) -> dict:
+        seed = f"{name}:{raw_image[:50]}"
+        
+        return hashlib.md5(seed.encode()).hexdigest()[:12]
+    
+    def get_image_path(self, image_id):
         """
-        Returns version info for the Digital Signage folder.
+        Returns image path
         """
-        prefix = "Digital Signage/"
-        return self._compute_version(prefix)
+        return CACHE_DIR / f"{image_id}.png"
+    
+    def save_base64_as_png(self, base64_data, image_id):
+        """
+        Converts base64 image -> PNG file
+        """
+        # Remove base64 prefix if exists
+        if "," in base64_data:
+            base64_data = base64_data.split(",", 1)[1]
+            
+        image_bytes = base64.b64decode(base64_data)
+        
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            # Convert unsupported modes
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
+            
+            # Resize for performance
+            img.thumbnail((1280,720))
+            
+            img.save(
+                self.get_image_path(image_id),
+                format="PNG",
+                optimize=True
+            )
