@@ -51,8 +51,9 @@ backend/layer-build
 controllers/cache/
 backend/controllers/cache/**
 
-# Encryption/Decryption Tools
+# Backend Tools
 backend/password_hasher.py
+backend/request_size.py
 
 # Debugging files
 debugging/
