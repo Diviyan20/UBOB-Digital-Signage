@@ -57,8 +57,9 @@ def admin_register_outlet():
     region_name = data.get("region_name")
     order_api_url = data.get("order_api_url")
     order_api_key = data.get("order_api_key")
+    tier = data.get("tier")
     
-    if not all([outlet_id, outlet_name, region_name, order_api_url, order_api_key]):
+    if not all([outlet_id, outlet_name, region_name, order_api_url, order_api_key, tier]):
         return jsonify({"error": "All fields are required"}), 400
 
     result = register_outlet(
@@ -66,7 +67,8 @@ def admin_register_outlet():
         outlet_name=outlet_name,
         region_name=region_name,
         order_api_url=order_api_url,
-        order_api_key=order_api_key
+        order_api_key=order_api_key,
+        tier = tier
     )
 
     if not result.get("success"):

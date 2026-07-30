@@ -34,7 +34,6 @@ def get_db_connection():
     conn = None
     cur = None
     try:
-        
         conn = psycopg2.connect(
             database = OUTLET_DATABASE,
             user = creds["username"],
