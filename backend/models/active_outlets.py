@@ -7,7 +7,7 @@ import boto3
 import psycopg2
 
 # ENVIRONMENT VARIABLES
-DB_NAME = os.getenv("OUTLET_DATABASE")
+DB_NAME = os.getenv("DB_NAME")
 DB_USERNAME = os.getenv("DB_USERNAME")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")

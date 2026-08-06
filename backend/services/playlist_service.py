@@ -1,8 +1,10 @@
 import hashlib
+from urllib.parse import quote
 
 from models.active_outlets import get_outlet_information
-from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects
+from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects, get_video_url
 
+CLOUDFRONT_DOMAIN = "d30au7cngoylsj.cloudfront.net"
 
 class PlaylistService:
     """
@@ -45,9 +47,13 @@ class PlaylistService:
         """
         return region.strip().replace("_", " ")
 
-    def get_playlist(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape"):
+    def get_playlist(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape", filter_keys: list = None):
         """
         Builds S3 path based on region, batch, tier, and orientation.
+        
+        filter_keys: optional list of S3 keys — when provided, only returns
+        those specific items. Used by the frontend diff sync to fetch only
+        new files rather than the full playlist.
 
         Example: Selangor/Batch 2/Tier A/Landscape/
         """
@@ -62,6 +68,12 @@ class PlaylistService:
 
         # Step 3: Fetch mixed media
         media = get_s3_playlist_media(prefix)
+        
+        # Filter to only requested keys if provided
+        if filter_keys:
+            filter_set = set(filter_keys)
+            media = [item for item in media if item.get("key") in filter_set]
+            print(f"[PLAYLIST] Filtered to {len(media)} items from filter_keys")
 
         return media
 
@@ -74,8 +86,7 @@ class PlaylistService:
         - Always points to the Digital Signage folder
         """
         prefix = "Digital Signage/"
-        videos = get_video_media(prefix)
-        return videos
+        return get_video_media(prefix)
 
     def has_signage_videos(self) -> bool:
         prefix = "Digital Signage/"
@@ -84,13 +95,18 @@ class PlaylistService:
 
     def _compute_version(self, prefix: str) -> dict:
         """
-        Computes a stable content fingerprint.
-
-        Changes whenever:
-        - file added
-        - file removed
-        - file renamed
-        - file replaced
+         Computes a stable content fingerprint and returns the full file manifest.
+ 
+        The manifest is used by the frontend to diff against its cache —
+        only added/removed files are downloaded or deleted. Nothing is
+        transferred if the etag matches.
+ 
+        Returns:
+            etag        — short hash of the folder contents
+            itemCount   — number of files in the folder
+            manifest    — list of {key, url} for every file in the folder
+                          Frontend compares this against its cached URL list
+                          to find what to add or remove.
         """
         objects = list_s3_objects(prefix)
 
@@ -106,10 +122,24 @@ class PlaylistService:
         print(f"ITEM COUNT  : {len(objects)}")
         print(f"ETAG        : {etag}")
         print("===================================")
+        
+        """
+            Build manifest — key identifies the file, 
+                             url is what the frontend downloads
+        """
+        manifest = [
+            {
+                "key": obj["key"],
+                "url": get_video_url(obj["key"]), # presigned or CloudFront URL from s3_helper
+            }
+            
+            for obj in objects
+        ]
 
         return {
             "etag": etag,
-            "itemCount": len(objects)
+            "itemCount": len(objects),
+            "manifest": manifest
         }
 
     def get_playlist_version(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape") -> dict:

@@ -96,6 +96,7 @@ def get_s3_playlist_media(prefix: str):
                     warn(f"⚠ Large video: {key} ({file_size_mb} MB) — may buffer on weak TVs")
                 
                 playlist.append({
+                    "key": key,
                     "type": "video",
                     "url": url,
                     "rotate": False
@@ -105,7 +106,9 @@ def get_s3_playlist_media(prefix: str):
             if lower_key.endswith(tuple(IMAGE_EXTENSIONS)):
                 image_count += 1
                 playlist_size += bytes_to_mb(obj.get("Size",0))
+                
                 playlist.append({
+                    "key": key,
                     "type": "image",
                     "url": url
                 })

@@ -12,13 +12,17 @@ playlist_service = PlaylistService()
 # - Mixed media screen
 # - Staff chooses batch and tier manually
 #
+# Optional filter_keys: list of S3 keys — when provided, only returns
+# those specific items (used by frontend diff sync to fetch only new files)
+#
 # Example:
 # POST /playlist
 # {
 #   "outlet_id": "42",
 #   "batch_number": 2,
 #   "tier": "Tier A",
-#   "orientation": "Landscape"
+#   "orientation": "Landscape",
+#   "filter_keys": ["Selangor/Batch 2/Tier A/Landscape/video1.mp4"]  <- optional
 # }
 # ===================================
 
@@ -31,6 +35,7 @@ def get_playlist():
         batch_number = data.get("batch_number")
         tier = data.get("tier", "Tier A").strip()
         orientation = data.get("orientation", "Landscape").strip()
+        filter_keys = data.get("filter_keys")
 
         if not outlet_id or batch_number is None:
             return jsonify({
@@ -44,7 +49,12 @@ def get_playlist():
                 "message": "Invalid tier. Must be 'Tier A' or 'Tier B'"
             }), 400
 
-        playlist = playlist_service.get_playlist(outlet_id, batch_number, tier, orientation)
+        playlist = playlist_service.get_playlist(
+            outlet_id, 
+            batch_number, 
+            tier, 
+            orientation, 
+            filter_keys=filter_keys)
 
         return jsonify({
             "success": True,
@@ -102,8 +112,9 @@ def signage_status():
 # ================================
 # PLAYLIST VERSION CHECK
 # ================================
-# Lightweight endpoint — no media URLs generated, just an etag.
-# Frontend calls this periodically to detect new content.
+# Returns etag + full file manifest.
+# Frontend diffs the manifest against its cache to find what changed.
+# Only added/removed files are transferred — unchanged files cost nothing.
 #
 # POST /playlist_version
 # {
@@ -148,7 +159,12 @@ def get_playlist_version():
             orientation
         )
 
-        print(f"RETURNING VERSION: {version}")
+        print(f"""
+              RETURNING VERSION: 
+                    etag={version['etag']} 
+                    items={version['itemCount']} 
+                    manifest={len(version['manifest'])} files
+              """)
 
         return jsonify({
             "success": True,
@@ -165,8 +181,6 @@ def get_playlist_version():
 
 # ================================
 # SIGNAGE VERSION CHECK
-# ================================
-# GET /signage_version
 # ================================
 @playlist_bp.route("/signage_version", methods=["GET"])
 def get_signage_version():
