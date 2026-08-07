@@ -12,16 +12,13 @@ import { Text, useWindowDimensions, View } from "react-native";
 
 interface Props {
   onAllVideosFinished: () => void;
-  onPlaybackStarted: () => void; // signals watchdog to cancel
+  onPlaybackStarted: () => void;
 }
-/*
-  * Set to true to simulate video failure 
 
-  * NOTE: ALWAYS SET TO 'FALSE' FOR PRODUCTION
-*/
 const DEV_BLOCK_PLAYBACK = false;
+// NOTE: ALWAYS SET TO 'FALSE' FOR PRODUCTION
 
-const VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000; // Check every 30 minutes
+const VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 export const VideoComponent = ({
   onAllVideosFinished,
@@ -30,20 +27,15 @@ export const VideoComponent = ({
   const { width, height } = useWindowDimensions();
   const styles = VideoStyles(width, height);
 
-  const [videos, setVideos] = useState<VideoItem[]>([]); // All fetched videos
-  const [currentIndex, setCurrentIndex] = useState(0); // Current playing video index
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Ref so effects always read the latest list without stale closures
   const videosRef = useRef<VideoItem[]>([]);
-  const advancingRef = useRef(false);
   const isMounted = useRef(true);
-  const hasSignaled = useRef(false); // Only signal once per mount
+  const hasSignaled = useRef(false);
 
-  const currentVideo = videos[currentIndex]; //Current video object
+  const currentVideo = videos[currentIndex];
 
-  /**
-   * Video player
-   */
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
@@ -56,16 +48,18 @@ export const VideoComponent = ({
   }, []);
 
   /**
-   * Fetch videos on mount
+   * Fetch videos on mount — videoURI is now a local file:// path
    */
   useEffect(() => {
     const loadVideos = async () => {
       const fetchedVideos = await fetchSignageVideos();
-      const randomIndex = Math.floor(Math.random() * fetchedVideos.length);
-      console.log("Fetched before slice:", fetchedVideos.length);
+      console.log("Fetched signage videos:", fetchedVideos.length);
 
       if (!isMounted.current) return;
+      if (fetchedVideos.length === 0) return;
 
+      // Pick a random video to start the cycle
+      const randomIndex = Math.floor(Math.random() * fetchedVideos.length);
       const selectedVideos = [fetchedVideos[randomIndex]];
 
       videosRef.current = selectedVideos;
@@ -76,36 +70,32 @@ export const VideoComponent = ({
   }, []);
 
   /**
-   * Load current video into player when videos load or index changes
+   * Load current video — videoURI points to local storage
    */
   useEffect(() => {
     if (videosRef.current.length === 0) return;
 
-    const url = videosRef.current[currentIndex]?.videoURI;
-    if (!url) return;
+    const uri = videosRef.current[currentIndex]?.videoURI;
+    if (!uri) return;
 
     const load = async () => {
       try {
         if (DEV_BLOCK_PLAYBACK) {
-          // Simulates a hung video load — player stays idle
-          // Watchdog should fire after WATCHDOG_TIMEOUT_MS
           console.warn("[DEV] Playback blocked — watchdog test active");
-          return; // never calls replaceAsync, never signals onPlaybackStarted
+          return;
         }
+
         console.log(
           `[VIDEO] Loading video ${currentIndex + 1}/${videosRef.current.length}`,
         );
+        console.log(`[VIDEO] URI: ${uri}`);
 
         const start = Date.now();
-        /*
-         * Add a pre-video timeout (Suppose if entire component hangs)
-         */
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("Load timeout")), 8000),
         );
 
-        await Promise.race([player.replaceAsync(url), timeoutPromise]);
-
+        await Promise.race([player.replaceAsync(uri), timeoutPromise]);
         console.log(
           `[VIDEO] replaceAsync finished in ${Date.now() - start} ms`,
         );
@@ -119,44 +109,29 @@ export const VideoComponent = ({
     };
 
     load();
-  }, [currentIndex, videos]); // fires when videos first load, and on every index change
+  }, [currentIndex, videos]);
 
-  /**
-   * Move to next video
-   */
   const playNextVideo = () => {
     if (!isMounted.current) return;
 
     setCurrentIndex((prev) => {
       const next = prev + 1;
-
       if (next >= videosRef.current.length) {
         console.log("[VIDEO] Playlist finished");
         onAllVideosFinished();
         return prev;
       }
-
       console.log(`[VIDEO] Moving to video ${next}`);
       return next;
     });
   };
 
-  /**
-   * Listen for video completion
-   */
   useEffect(() => {
     if (!player) return;
-
     const subscription = player.addListener("playToEnd", playNextVideo);
-
-    return () => {
-      subscription.remove();
-    };
+    return () => subscription.remove();
   }, [player, playNextVideo]);
 
-  /*
-   * Listen for playback errors
-   */
   useEffect(() => {
     const subscription = player.addListener("statusChange", (status) => {
       console.log("[VIDEO STATUS]", status.status);
@@ -165,17 +140,12 @@ export const VideoComponent = ({
         onPlaybackStarted();
       }
     });
-
     return () => subscription.remove();
   }, [player]);
 
-  /*
-   * Cleanup for player
-   */
   useEffect(() => {
     return () => {
       console.log("[VIDEO] Releasing player");
-
       try {
         player.release();
       } catch (e) {
@@ -184,51 +154,45 @@ export const VideoComponent = ({
     };
   }, [player]);
 
-  /*
-   * Added emergency timeout in case watchdog fails
-   * Recovers after 45 seconds
-   */
   useEffect(() => {
     const emergencyTimer = setTimeout(() => {
       console.warn("[VIDEO] Component stuck. Returning to images.");
-
       onAllVideosFinished();
     }, 45000);
-
     return () => clearTimeout(emergencyTimer);
   }, []);
 
+  /**
+   * Periodic version check — clears cache if content changed.
+   * VideoComponent remounts after onAllVideosFinished and fetches fresh.
+   */
   useEffect(() => {
     const checkForUpdates = async () => {
       console.log("[VERSION CHECK] Checking signage videos for new content...");
 
-      const serverEtag = await getSignageVersion();
-      if (!serverEtag) {
-        console.warn("[VERSION CHECK] Could not reach server — skipping");
-        return;
-      }
-
       try {
-        const cachedRaw = await AsyncStorage.getItem("signage_videos_cache");
-        if (!cachedRaw) return;
+        const { etag: serverEtag } = await getSignageVersion();
 
-        const cache = JSON.parse(cachedRaw);
+        if (!serverEtag) {
+          console.warn("[VERSION CHECK] Could not reach server — skipping");
+          return;
+        }
 
-        if (cache.etag !== serverEtag) {
-          console.log(
-            `[VERSION CHECK] Signage videos changed: ${cache.etag} → ${serverEtag}`,
-          );
+        const metaRaw = await AsyncStorage.getItem("signage_videos_meta");
+        if (!metaRaw) return;
+
+        const meta = JSON.parse(metaRaw);
+
+        if (meta.etag !== serverEtag) {
+          console.log(`[VERSION CHECK] Changed: ${meta.etag} → ${serverEtag}`);
           console.log(
             "[VERSION CHECK] Cache cleared — new videos load on next cycle",
           );
           await clearVideoCache();
-          // Don't interrupt current playback.
-          // Cache is cleared — when VideoComponent remounts after
-          // onAllVideosFinished, it will automatically fetch fresh.
+          // Don't interrupt current playback —
+          // cache cleared, VideoComponent fetches fresh on next remount
         } else {
-          console.log(
-            `[VERSION CHECK] Signage videos unchanged — etag: ${serverEtag}`,
-          );
+          console.log(`[VERSION CHECK] Unchanged — etag: ${serverEtag}`);
         }
       } catch (err) {
         console.warn("[VERSION CHECK] Error:", err);
@@ -239,18 +203,9 @@ export const VideoComponent = ({
     return () => clearInterval(interval);
   }, []);
 
-  /**
-   * Loading state
-   */
   if (!videos.length) {
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>No videos available</Text>
       </View>
     );
