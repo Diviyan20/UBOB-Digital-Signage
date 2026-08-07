@@ -19,6 +19,7 @@ export interface PlaylistItems {
 
 const VIDEO_CACHE_KEY = "signage_videos_cache";
 const PLAYLIST_META_KEY = "playlist_meta";
+const PLAYLIST_ETAG_KEY = "playlist_etag"; // stored separately for fast reads
 const CACHE_TTL_MS = 23 * 60 * 60 * 1000;
 
 interface VideoCache {
@@ -67,7 +68,6 @@ export const sanitizeVideoUrl = (url?: string): string => {
 
 // ─── File system helpers ──────────────────────────────────────────────────────
 
-// Playlist directory inside app's document directory
 const getPlaylistDir = (): Directory => {
   return new Directory(Paths.document, "playlist");
 };
@@ -86,20 +86,10 @@ const keyToFilename = (key: string): string => {
   return filename.replace(/\s+/g, "-");
 };
 
-const getLocalFile = (key: string): File => {
-  const dir = getPlaylistDir();
-  return new File(dir, keyToFilename(key));
-};
-
-/**
- * Downloads a single file to local storage.
- * Skips download if the file already exists on disk.
- */
 const downloadFile = async (key: string, url: string): Promise<string> => {
   const dir = getPlaylistDir();
   const filename = keyToFilename(key);
 
-  // Check if file already exists
   const existing = new File(dir, filename);
   if (existing.exists) {
     console.log(`[FS] Already exists, skipping: ${filename}`);
@@ -107,18 +97,11 @@ const downloadFile = async (key: string, url: string): Promise<string> => {
   }
 
   console.log(`[FS] Downloading: ${filename}`);
-
-  // File.downloadFileAsync(url, destination) — static method, destination is a Directory
-  // Returns the downloaded File instance with its uri
   const downloaded = await File.downloadFileAsync(url, dir);
-
+  console.log(`[FS] Downloaded: ${filename}`);
   return downloaded.uri;
 };
 
-/**
- * Deletes all files in the playlist directory and recreates it.
- * Called when etag changes — full redownload.
- */
 const clearPlaylistFiles = (): void => {
   const dir = getPlaylistDir();
   if (dir.exists) {
@@ -147,6 +130,7 @@ export const getPlaylistVersion = async (
   tier: string,
   orientation: string,
 ): Promise<PlaylistVersionResult> => {
+  // Let network errors throw — caller handles offline case
   const response = await fetch(api.playlistVersion, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -179,13 +163,157 @@ export const clearVideoCache = async (): Promise<void> => {
 };
 
 export const clearPlaylistCache = async (): Promise<void> => {
-  await AsyncStorage.removeItem(PLAYLIST_META_KEY);
+  await AsyncStorage.multiRemove([PLAYLIST_META_KEY, PLAYLIST_ETAG_KEY]);
   clearPlaylistFiles();
   console.log("[CACHE] Playlist cache cleared");
 };
 
-// ─── Main playlist fetch with local download ──────────────────────────────────
+// ─── Cache helpers ────────────────────────────────────────────────────────────
 
+const loadCachedMeta = async (
+  outletId: string,
+  batchNumber: string,
+  tier: string,
+  orientation: string,
+): Promise<PlaylistMeta | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
+    if (!raw) return null;
+
+    const parsed: PlaylistMeta = JSON.parse(raw);
+    const sameContext =
+      parsed.outletId === outletId &&
+      parsed.batchNumber === batchNumber &&
+      parsed.tier === tier &&
+      parsed.orientation === orientation;
+
+    return sameContext ? parsed : null;
+  } catch {
+    console.warn("[CACHE] Failed to read playlist meta");
+    return null;
+  }
+};
+
+const cachedFilesExistOnDisk = (meta: PlaylistMeta): boolean => {
+  if (meta.items.length === 0) return false;
+  // Check first file — if it exists, assume the rest do too
+  const firstFile = new File(meta.items[0].localUri);
+  return firstFile.exists;
+};
+
+const metaToPlaylistItems = (meta: PlaylistMeta): PlaylistItems[] =>
+  meta.items.map((item) => ({
+    key: item.key,
+    type: item.type,
+    url: item.url,
+    localUri: item.localUri,
+    rotate: item.rotate,
+  }));
+
+// ─── Download helpers ─────────────────────────────────────────────────────────
+
+const fetchTypeMap = async (
+  outletId: string,
+  batchNumber: string,
+  tier: string,
+  orientation: string,
+): Promise<Record<string, { type: "video" | "image"; rotate?: boolean }>> => {
+  const response = await fetch(api.playlist, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      outlet_id: outletId,
+      batch_number: parseInt(batchNumber),
+      tier,
+      orientation,
+    }),
+  });
+  const data = await response.json();
+  const items: PlaylistItems[] = data.playlist || [];
+  return Object.fromEntries(
+    items.map((item) => [item.key, { type: item.type, rotate: item.rotate }]),
+  );
+};
+
+const downloadManifest = async (
+  manifest: ManifestItem[],
+  typeMap: Record<string, { type: "video" | "image"; rotate?: boolean }>,
+): Promise<PlaylistItems[]> => {
+  const results = await Promise.allSettled(
+    manifest.map(async (item) => {
+      const localUri = await downloadFile(item.key, item.url);
+      const meta = typeMap[item.key] ?? { type: "video" as const };
+      return {
+        key: item.key,
+        type: meta.type,
+        url: item.url,
+        localUri,
+        rotate: meta.rotate,
+      } as PlaylistItems;
+    }),
+  );
+
+  const failed = results.filter((r) => r.status === "rejected").length;
+  if (failed > 0) console.warn(`[SYNC] ${failed} file(s) failed to download`);
+
+  return results
+    .filter(
+      (r): r is PromiseFulfilledResult<PlaylistItems> =>
+        r.status === "fulfilled",
+    )
+    .map((r) => r.value);
+};
+
+const savePlaylistMeta = async (
+  items: PlaylistItems[],
+  etag: string,
+  outletId: string,
+  batchNumber: string,
+  tier: string,
+  orientation: string,
+): Promise<void> => {
+  const meta: PlaylistMeta = {
+    etag,
+    outletId,
+    batchNumber,
+    tier,
+    orientation,
+    items: items.map((item) => ({
+      key: item.key,
+      type: item.type,
+      url: item.url,
+      localUri: item.localUri,
+      rotate: item.rotate,
+    })),
+  };
+
+  // Save meta and etag together
+  await AsyncStorage.multiSet([
+    [PLAYLIST_META_KEY, JSON.stringify(meta)],
+    [PLAYLIST_ETAG_KEY, etag],
+  ]);
+
+  console.log(
+    `[CACHE] Playlist meta saved — ${items.length} items, etag: ${etag}`,
+  );
+};
+
+// ─── Main playlist fetch ──────────────────────────────────────────────────────
+
+/**
+ * Playlist sync flow:
+ *
+ * 1. Load cache from AsyncStorage
+ * 2. If cache exists and files are on disk → return immediately
+ * 3. Check etag from server in background
+ *    - Offline → already returned cache in step 2, or return empty if no cache
+ *    - etag matches → cache is current, already returned
+ *    - etag differs → clear files, redownload, update cache
+ * 4. First run (no cache) → download everything
+ *
+ * Cache is always checked before any network call.
+ * etag is stored in AsyncStorage for fast comparison.
+ */
 export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
   const outletId = await AsyncStorage.getItem("outlet_id");
   const batchNumber = (await AsyncStorage.getItem("batch_number")) || "1";
@@ -204,25 +332,23 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
 
   ensurePlaylistDir();
 
-  // Step 1: Load cached meta
-  let cachedMeta: PlaylistMeta | null = null;
-  try {
-    const raw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
-    if (raw) {
-      const parsed: PlaylistMeta = JSON.parse(raw);
-      const sameContext =
-        parsed.outletId === outletId &&
-        parsed.batchNumber === batchNumber &&
-        parsed.tier === tier &&
-        parsed.orientation === orientation;
+  // ── Step 1: Load cache ────────────────────────────────────────────────────
+  const cachedMeta = await loadCachedMeta(
+    outletId,
+    batchNumber,
+    tier,
+    orientation,
+  );
+  const hasValidCache =
+    cachedMeta !== null && cachedFilesExistOnDisk(cachedMeta);
 
-      if (sameContext) cachedMeta = parsed;
-    }
-  } catch {
-    console.warn("[CACHE] Failed to read playlist meta");
+  if (hasValidCache) {
+    console.log(
+      `[CACHE] Found ${cachedMeta!.items.length} cached items on disk`,
+    );
   }
 
-  // Step 2: Fetch etag + manifest (lightweight metadata only)
+  // ── Step 2: Try to get server etag ───────────────────────────────────────
   let serverEtag: string | null = null;
   let manifest: ManifestItem[] = [];
 
@@ -236,56 +362,39 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
     serverEtag = version.etag;
     manifest = version.manifest;
   } catch {
-    console.warn("[PLAYLIST] Version check failed — offline, using cache");
+    console.warn("[PLAYLIST] Version check failed — offline");
   }
 
-  // Step 3: No server response — return cache immediately (offline)
-  if (!serverEtag && cachedMeta && cachedMeta.items.length > 0) {
-    console.log(
-      `[OFFLINE] No server response — serving ${cachedMeta.items.length} cached items`,
-    );
-    return cachedMeta.items.map((item) => ({
-      key: item.key,
-      type: item.type,
-      url: item.url,
-      localUri: item.localUri,
-      rotate: item.rotate,
-    }));
-  }
-
-  // Step 3b: Online and etag matches — return cache, nothing to download
-  if (
-    serverEtag &&
-    cachedMeta &&
-    cachedMeta.etag === serverEtag &&
-    cachedMeta.items.length > 0
-  ) {
-    const firstFile = new File(cachedMeta.items[0].localUri);
-    if (firstFile.exists) {
+  // ── Step 3: Offline — serve cache or return empty ─────────────────────────
+  if (!serverEtag) {
+    if (hasValidCache) {
       console.log(
-        `[CACHE HIT] etag unchanged — serving ${cachedMeta.items.length} cached items`,
+        `[OFFLINE] Serving ${cachedMeta!.items.length} cached items (no server response)`,
       );
-      return cachedMeta.items.map((item) => ({
-        key: item.key,
-        type: item.type,
-        url: item.url,
-        localUri: item.localUri,
-        rotate: item.rotate,
-      }));
+      return metaToPlaylistItems(cachedMeta!);
     }
-    console.warn("[CACHE] etag matches but files missing — redownloading");
+    console.warn("[OFFLINE] No cache available — cannot serve media");
+    return [];
   }
 
-  // Step 4: Etag differs — clear and redownload
-  if (cachedMeta && cachedMeta.etag !== serverEtag) {
+  // ── Step 4: Online — compare etag ────────────────────────────────────────
+  const cachedEtag = cachedMeta?.etag ?? null;
+
+  if (serverEtag === cachedEtag && hasValidCache) {
     console.log(
-      `[SYNC] Content changed: ${cachedMeta.etag} → ${serverEtag} — clearing`,
+      `[CACHE HIT] etag unchanged (${serverEtag}) — serving ${cachedMeta!.items.length} cached items`,
+    );
+    return metaToPlaylistItems(cachedMeta!);
+  }
+
+  // ── Step 5: etag changed or no cache — redownload ────────────────────────
+  if (cachedMeta && cachedEtag !== serverEtag) {
+    console.log(
+      `[SYNC] etag changed: ${cachedEtag} → ${serverEtag} — clearing files`,
     );
     clearPlaylistFiles();
   } else {
-    // Truly no cache at all
-    console.log(`[SYNC] No cache — downloading ${manifest.length} item(s)`);
-    ensurePlaylistDir();
+    console.log(`[SYNC] No cache — first download`);
   }
 
   if (manifest.length === 0) {
@@ -293,80 +402,40 @@ export const fetchPlaylist = async (): Promise<PlaylistItems[]> => {
     return [];
   }
 
-  // Step 5: Fetch type metadata (video vs image) from /playlist
+  // ── Step 6: Fetch type metadata and download ──────────────────────────────
   let typeMap: Record<string, { type: "video" | "image"; rotate?: boolean }> =
     {};
   try {
-    const response = await fetch(api.playlist, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        outlet_id: outletId,
-        batch_number: parseInt(batchNumber),
-        tier,
-        orientation,
-      }),
-    });
-    const data = await response.json();
-    const items: PlaylistItems[] = data.playlist || [];
-    typeMap = Object.fromEntries(
-      items.map((item) => [item.key, { type: item.type, rotate: item.rotate }]),
-    );
+    typeMap = await fetchTypeMap(outletId, batchNumber, tier, orientation);
   } catch (err) {
     console.error("[FETCH ERROR] Could not fetch playlist metadata:", err);
+    // Fall back to cache if available — better than showing nothing
+    if (hasValidCache) {
+      console.warn("[FALLBACK] Using stale cache after metadata fetch failure");
+      return metaToPlaylistItems(cachedMeta!);
+    }
     return [];
   }
 
-  // Step 6: Download all files in parallel
   console.log(`[SYNC] Downloading ${manifest.length} item(s)...`);
-
-  const downloadResults = await Promise.allSettled(
-    manifest.map(async (item) => {
-      const localUri = await downloadFile(item.key, item.url);
-      const meta = typeMap[item.key] ?? { type: "video" as const };
-      return {
-        key: item.key,
-        type: meta.type,
-        url: item.url,
-        localUri,
-        rotate: meta.rotate,
-      } as PlaylistItems;
-    }),
-  );
-
-  const successful = downloadResults
-    .filter(
-      (r): r is PromiseFulfilledResult<PlaylistItems> =>
-        r.status === "fulfilled",
-    )
-    .map((r) => r.value);
-
-  const failed = downloadResults.filter((r) => r.status === "rejected").length;
-  if (failed > 0) console.warn(`[SYNC] ${failed} file(s) failed to download`);
-
+  const successful = await downloadManifest(manifest, typeMap);
   console.log(
     `[SYNC] Downloaded ${successful.length}/${manifest.length} item(s)`,
   );
 
-  // Step 7: Save meta to AsyncStorage
-  const newMeta: PlaylistMeta = {
-    etag: serverEtag || "",
+  if (successful.length === 0) {
+    console.warn("[SYNC] All downloads failed — falling back to cache");
+    return hasValidCache ? metaToPlaylistItems(cachedMeta!) : [];
+  }
+
+  // ── Step 7: Save updated meta ─────────────────────────────────────────────
+  await savePlaylistMeta(
+    successful,
+    serverEtag,
     outletId,
     batchNumber,
     tier,
     orientation,
-    items: successful.map((item) => ({
-      key: item.key,
-      type: item.type,
-      url: item.url,
-      localUri: item.localUri,
-      rotate: item.rotate,
-    })),
-  };
-
-  await AsyncStorage.setItem(PLAYLIST_META_KEY, JSON.stringify(newMeta));
-  console.log(
-    `[CACHE] Playlist meta saved — ${successful.length} items, etag: ${serverEtag}`,
   );
 
   return successful;
