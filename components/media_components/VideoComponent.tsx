@@ -33,6 +33,7 @@ export const VideoComponent = ({
   const videosRef = useRef<VideoItem[]>([]);
   const isMounted = useRef(true);
   const hasSignaled = useRef(false);
+  const isLoading = useRef(true);
 
   const currentVideo = videos[currentIndex];
 
@@ -54,6 +55,7 @@ export const VideoComponent = ({
     const loadVideos = async () => {
       const fetchedVideos = await fetchSignageVideos();
       console.log("Fetched signage videos:", fetchedVideos.length);
+      isLoading.current = false;
 
       if (!isMounted.current) return;
       if (fetchedVideos.length === 0) return;
@@ -204,6 +206,9 @@ export const VideoComponent = ({
   }, []);
 
   if (!videos.length) {
+    // Still loading from cache - show nothing rather than flashing "No videos"
+    if (isLoading.current) return null;
+
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>No videos available</Text>
