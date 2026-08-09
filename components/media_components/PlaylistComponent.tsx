@@ -1,9 +1,4 @@
-import {
-  clearPlaylistCache,
-  fetchPlaylist,
-  getPlaylistVersion,
-  PlaylistItems,
-} from "@/services/MediaService";
+import { fetchPlaylist, PlaylistItems } from "@/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
@@ -19,14 +14,15 @@ import {
 } from "react-native";
 import { config } from "../api/client";
 
-const VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000; // check every 30 minutes
+const VERSION_CHECK_INTERVAL_MS = 10 * 60 * 1000; // 30 minutes
 
-// Separate types for the two lists
 interface VideoEntry {
-  url: string;
+  url: string; // CloudFront URL (kept for reference)
+  localUri: string; // local file:// path — what the player uses
 }
 interface ImageEntry {
   url: string;
+  localUri: string;
 }
 
 type PlaybackMode = "loading" | "video" | "image" | "empty";
@@ -47,7 +43,6 @@ export const PlaylistComponent: React.FC = () => {
   const isMounted = useRef(true);
   const appStateRef = useRef(AppState.currentState);
 
-  // Ref so useEffect can read latest videos without being a dependency
   const videosRef = useRef<VideoEntry[]>([]);
   const imagesRef = useRef<ImageEntry[]>([]);
 
@@ -68,15 +63,16 @@ export const PlaylistComponent: React.FC = () => {
 
   const loadPlaylist = useCallback(async () => {
     const playlist: PlaylistItems[] = await fetchPlaylist();
+    console.log(`[PLAYLIST] Loaded ${playlist.length} items`);
 
-    // Separate the combined playlist into 2 lists by type
+    // Separate by type — use localUri for playback
     const fetchedVideos = playlist
       .filter((item) => item.type === "video")
-      .map((item) => ({ url: item.url }));
+      .map((item) => ({ url: item.url, localUri: item.localUri }));
 
     const fetchedImages = playlist
       .filter((item) => item.type === "image")
-      .map((item) => ({ url: item.url }));
+      .map((item) => ({ url: item.url, localUri: item.localUri }));
 
     return { fetchedVideos, fetchedImages };
   }, []);
@@ -85,7 +81,6 @@ export const PlaylistComponent: React.FC = () => {
     if (!isMounted.current) return;
     setMode("loading");
 
-    // Read orientation from AsyncStorage — determines card style and S3 folder
     const savedOrientation = await AsyncStorage.getItem("orientation");
     if (savedOrientation === "Portrait" || savedOrientation === "Landscape") {
       setOrientation(savedOrientation);
@@ -96,7 +91,6 @@ export const PlaylistComponent: React.FC = () => {
 
     if (!isMounted.current) return;
 
-    // Update refs first — the useEffect reads from these synchronously
     videosRef.current = fetchedVideos;
     imagesRef.current = fetchedImages;
 
@@ -106,7 +100,6 @@ export const PlaylistComponent: React.FC = () => {
     setCurrentImageIndex(0);
     fadeAnim.setValue(1);
 
-    // Just set mode — the useEffect below owns all player.replace calls
     if (fetchedVideos.length > 0) {
       setMode("video");
     } else if (fetchedImages.length > 0) {
@@ -116,7 +109,7 @@ export const PlaylistComponent: React.FC = () => {
     }
   }, [fetchConfig, loadPlaylist, fadeAnim]);
 
-  // Mount + Resume from background
+  // Mount + resume from background
   useEffect(() => {
     isMounted.current = true;
     initialize();
@@ -128,7 +121,7 @@ export const PlaylistComponent: React.FC = () => {
           appStateRef.current.match(/inactive|background/) &&
           nextState === "active"
         ) {
-          initialize(); // Re-fetch when app comes back to foreground
+          initialize();
         }
         appStateRef.current = nextState;
       },
@@ -140,18 +133,18 @@ export const PlaylistComponent: React.FC = () => {
     };
   }, [initialize]);
 
-  // Single place that loads videos into the player — replaceAsync avoids main thread freeze
+  // Load video into player — uses localUri
   useEffect(() => {
     if (mode !== "video" || videosRef.current.length === 0) return;
 
-    const url = videosRef.current[currentVideoIndex]?.url;
-    if (!url) return;
+    const localUri = videosRef.current[currentVideoIndex]?.localUri;
+    if (!localUri) return;
 
     const load = async () => {
       try {
         player.loop =
           videosRef.current.length === 1 && imagesRef.current.length === 0;
-        await player.replaceAsync(url);
+        await player.replaceAsync(localUri);
         player.play();
       } catch (err) {
         console.error("Failed to load video:", err);
@@ -165,9 +158,8 @@ export const PlaylistComponent: React.FC = () => {
   useEffect(() => {
     if (mode !== "video") return;
 
-    // Single looping video — no playlist transitions needed
     if (videosRef.current.length === 1 && imagesRef.current.length === 0) {
-      return;
+      return; // Single looping video — listener not needed
     }
 
     const subscription = player.addListener("playToEnd", () => {
@@ -175,9 +167,8 @@ export const PlaylistComponent: React.FC = () => {
 
       const nextIndex = currentVideoIndex + 1;
       if (nextIndex < videosRef.current.length) {
-        setCurrentVideoIndex(nextIndex); // More videos — play next
+        setCurrentVideoIndex(nextIndex);
       } else {
-        // All videos done — switch to images (or restart videos if no images)
         setCurrentVideoIndex(0);
         setMode(imagesRef.current.length > 0 ? "image" : "video");
       }
@@ -190,16 +181,14 @@ export const PlaylistComponent: React.FC = () => {
   useEffect(() => {
     if (mode !== "image" || imagesRef.current.length === 0) return;
 
-    // Single static image — no transitions needed
     if (imagesRef.current.length === 1 && videosRef.current.length === 0) {
       fadeAnim.setValue(1);
       return;
     }
 
-    fadeAnim.setValue(1); // Start fully visible
+    fadeAnim.setValue(1);
 
     const timer = setTimeout(() => {
-      // Fade Out
       Animated.timing(fadeAnim, {
         toValue: 0,
         duration: fadeDuration,
@@ -210,11 +199,9 @@ export const PlaylistComponent: React.FC = () => {
 
         const nextIndex = currentImageIndex + 1;
         if (nextIndex >= imagesRef.current.length) {
-          // All images shown — switch to videos (or restart images if no videos)
           setCurrentImageIndex(0);
           setMode(videosRef.current.length > 0 ? "video" : "image");
         } else {
-          // Advance to next image and fade in
           setCurrentImageIndex(nextIndex);
           Animated.timing(fadeAnim, {
             toValue: 1,
@@ -229,58 +216,13 @@ export const PlaylistComponent: React.FC = () => {
     return () => clearTimeout(timer);
   }, [mode, currentImageIndex, displayDuration, fadeDuration]);
 
+  // Periodic version check — fetchPlaylist handles etag internally
   useEffect(() => {
-    const checkForUpdates = async () => {
-      console.log("[VERSION CHECK] Checking playlist for new content...");
+    const interval = setInterval(() => {
+      console.log("[VERSION CHECK] Periodic refresh — checking for updates...");
+      initialize();
+    }, VERSION_CHECK_INTERVAL_MS);
 
-      const outletId = await AsyncStorage.getItem("outlet_id");
-      const batchNumber = (await AsyncStorage.getItem("batch_number")) || "1";
-      const tier = (await AsyncStorage.getItem("tier")) || "Tier A";
-      const orientation =
-        (await AsyncStorage.getItem("orientation")) || "Landscape";
-
-      if (!outletId) return;
-
-      const serverEtag = await getPlaylistVersion(
-        outletId,
-        batchNumber,
-        tier,
-        orientation,
-      );
-      if (!serverEtag) {
-        console.warn("[VERSION CHECK] Could not reach server — skipping");
-        return;
-      }
-
-      // Compare with what's currently cached
-      try {
-        const cachedRaw = await AsyncStorage.getItem("playlist_cache");
-        if (!cachedRaw) {
-          console.log("[VERSION CHECK] No cache — refreshing");
-          initialize();
-          return;
-        }
-
-        const cache = JSON.parse(cachedRaw);
-
-        if (cache.etag !== serverEtag) {
-          console.log(
-            `[VERSION CHECK] Content changed: ${cache.etag} → ${serverEtag}`,
-          );
-          console.log("[VERSION CHECK] Clearing cache and reinitializing...");
-          await clearPlaylistCache();
-          initialize(); // fetchPlaylist will now fetch fresh since cache is gone
-        } else {
-          console.log(
-            `[VERSION CHECK] Content unchanged — etag: ${serverEtag}`,
-          );
-        }
-      } catch (err) {
-        console.warn("[VERSION CHECK] Error reading cache:", err);
-      }
-    };
-
-    const interval = setInterval(checkForUpdates, VERSION_CHECK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [initialize]);
 
@@ -307,13 +249,14 @@ export const PlaylistComponent: React.FC = () => {
     }
 
     if (mode === "image") {
+      const localUri = images[currentImageIndex]?.localUri;
       return (
         <Animated.View style={[styles.media, { opacity: fadeAnim }]}>
           <Image
-            source={{ uri: images[currentImageIndex]?.url }}
+            source={{ uri: localUri }}
             style={styles.media}
             contentFit="contain"
-            cachePolicy="memory-disk"
+            cachePolicy="memory"
             recyclingKey={`image-${currentImageIndex}`}
           />
         </Animated.View>
@@ -323,7 +266,6 @@ export const PlaylistComponent: React.FC = () => {
     return null;
   };
 
-  // Card style switches based on orientation read from AsyncStorage
   const cardStyle =
     orientation === "Portrait" ? styles.portraitCard : styles.landscapeCard;
 

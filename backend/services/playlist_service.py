@@ -1,18 +1,11 @@
 import base64
 import hashlib
-import io
-import os
-from pathlib import Path
+from urllib.parse import quote
 
-from flask import abort, send_file
-from PIL import Image
-from utils.cache_helper import load_cache, save_cache
-from utils.odoo_helper import fetch_odoo_promotions
+from models.active_outlets import get_outlet_information
+from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects, get_video_url
 
-# =======================
-# ENVIRONMENT VARIABLES
-# =======================
-PUBLIC_HOST_URL = os.getenv("PUBLIC_HOST_URL")
+CLOUDFRONT_DOMAIN = "d30au7cngoylsj.cloudfront.net"
 
 # =====================
 # LAMBDA CACHE DIRECTORY
@@ -20,97 +13,114 @@ CACHE_DIR = Path("/tmp/promotion_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class PromotionService:
-    """
-    Handles:
-        - Promotion Fetching from Odoo
-        - Converting base64 -> PNG
-        - Caching Images Locally
-        - Returning lightweight image URLs
-    """
-    
-    CACHE_FILE = "promotion_cache.json"
-    
-    def get_promotions(self):
+        return region
+
+    # ======================
+    # MIXED MEDIA PLAYLIST
+    # ======================
+    def normalize_region(self, region: str) -> str:
         """
-        Main API used by controller.
+        Remove any special characters from string
 
-        Flow:
-        1. Check cache
-        2. If cache exists -> return it
-        3. Else fetch from Odoo
-        4. Process images
-        5. Save cache
+        Example: Kuala_Lumpur -> Kuala Lumpur
         """
-        # Step 1: Try cache first
-        cached_data = load_cache(self.CACHE_FILE)
-        
-        if cached_data:
-            return cached_data
+        return region.strip().replace("_", " ")
 
-        # Step 2: Fetch raw data from Odoo
-        raw_promotions = fetch_odoo_promotions()
+    def get_playlist(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape", filter_keys: list = None):
+        """
+        Builds S3 path based on region, batch, tier, and orientation.
         
-        processed_promotions = []
-        
-        for promo in raw_promotions:
-            
-            name = promo.get("name", "unknown")
-            description = promo.get("description", "")
-            raw_image = promo.get("image")
-            
-            if not raw_image:
-                continue
-            
-            # Generate unique image ID
-            image_id = self.generate_image_id(name, raw_image)
-            
-            # Save image only if not already cached
-            image_path = self.get_image_path(image_id)
-            
-            if not image_path.exists():
-                self.save_base64_as_png(raw_image, image_id)
-            
-            processed_promotions.append({
-                "type": "image",
-                "name": name,
-                "description": description,
-                "image": f"{PUBLIC_HOST_URL}/promotion_image/{image_id}"
-            })
-        
-        # Save lightweight metadata cache
-        save_cache(self.CACHE_FILE, processed_promotions)
+        filter_keys: optional list of S3 keys — when provided, only returns
+        those specific items. Used by the frontend diff sync to fetch only
+        new files rather than the full playlist.
 
-        return processed_promotions
+        Example: Selangor/Batch 2/Tier A/Landscape/
+        """
+        # Step 1: Get outlet region
+        region = self.get_outlet_region(outlet_id)
+        normalized_region = self.normalize_region(region)
 
-    def stream_promotion_image(self, image_id):
+        # Step 2: Build S3 folder path
+        prefix = f"{normalized_region}/Batch {batch_number}/{tier}/{orientation}/"
+
+        print(f"[PLAYLIST PREFIX] {prefix}")
+
+        # Step 3: Fetch mixed media
+        media = get_s3_playlist_media(prefix)
+        
+        # Filter to only requested keys if provided
+        if filter_keys:
+            filter_set = set(filter_keys)
+            media = [item for item in media if item.get("key") in filter_set]
+            print(f"[PLAYLIST] Filtered to {len(media)} items from filter_keys")
+
+        return media
+
+    # ========================
+    # VIDEO SIGNAGE PLAYLIST
+    # ========================
+    def get_signage_videos(self):
         """
         Streams cached files
         """
-        path = self.get_image_path(image_id)
-        
-        if not path.exists():
-            abort(404, "Image not found")
-        
-        return send_file(
-            path,
-            mimetype="image/png",
-            as_attachment=False
+        prefix = "Digital Signage/"
+        return get_video_media(prefix)
+
+    def has_signage_videos(self) -> bool:
+        prefix = "Digital Signage/"
+        objects = list_s3_objects(prefix)
+        return len(objects) > 0
+
+    def _compute_version(self, prefix: str) -> dict:
+        """
+         Computes a stable content fingerprint and returns the full file manifest.
+ 
+        The manifest is used by the frontend to diff against its cache —
+        only added/removed files are downloaded or deleted. Nothing is
+        transferred if the etag matches.
+ 
+        Returns:
+            etag        — short hash of the folder contents
+            itemCount   — number of files in the folder
+            manifest    — list of {key, url} for every file in the folder
+                          Frontend compares this against its cached URL list
+                          to find what to add or remove.
+        """
+        objects = list_s3_objects(prefix)
+
+        fingerprint = "".join(
+            f"{obj['key']}:{obj['size']}:{obj['modified']}"
+            for obj in sorted(objects, key=lambda x: x["key"])
         )
-    
-    # =================
-    # HELPER FUNCTIONS
-    # =================
-    
-    def generate_image_id(self, name, raw_image):
-        """
-        Generates a unique stable Image ID
-        """
-        seed = f"{name}:{raw_image[:50]}"
+
+        etag = hashlib.md5(fingerprint.encode()).hexdigest()[:12]
+
+        print("\n========== VERSION CHECK ==========")
+        print(f"PREFIX      : {prefix}")
+        print(f"ITEM COUNT  : {len(objects)}")
+        print(f"ETAG        : {etag}")
+        print("===================================")
         
-        return hashlib.md5(seed.encode()).hexdigest()[:12]
-    
-    def get_image_path(self, image_id):
+        """
+            Build manifest — key identifies the file, 
+                             url is what the frontend downloads
+        """
+        manifest = [
+            {
+                "key": obj["key"],
+                "url": get_video_url(obj["key"]), # presigned or CloudFront URL from s3_helper
+            }
+            
+            for obj in objects
+        ]
+
+        return {
+            "etag": etag,
+            "itemCount": len(objects),
+            "manifest": manifest
+        }
+
+    def get_playlist_version(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape") -> dict:
         """
         Returns image path
         """

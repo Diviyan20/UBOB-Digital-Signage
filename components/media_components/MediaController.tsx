@@ -11,25 +11,18 @@ import { VideoComponent } from "./VideoComponent";
 
 type MediaState = "IMAGES" | "VIDEOS";
 
-const WATCHDOG_TIMEOUT_MS = 12000; // if no playback after 12s, revert
-const MAX_RETRIES = 3; // after 3 failed attempts, show error
-const ERROR_DISPLAY_DURATION = 8000; // show error for 8 seconds
+const WATCHDOG_TIMEOUT_MS = 12000;
+const MAX_RETRIES = 3;
+const ERROR_DISPLAY_DURATION = 8000;
 
 export const MediaController = () => {
-  const [mediaState, setMediaState] = useState<MediaState>("IMAGES"); // Controls current screen mode
+  const [mediaState, setMediaState] = useState<MediaState>("IMAGES");
   const [hasSignageVideos, setHasSignageVideos] = useState(true);
-  const { isOnline, setIsOnline } = useNetworkStatus();
+  const { isOnline } = useNetworkStatus();
   const lastStatusRef = useRef<boolean | null>(null);
   const transitionTimerRef = useRef<number | null>(null);
 
-  /*
-   * How long images show before videos start
-   */
-  const [stateInterval, setStateInterval] = useState(60000); // Used as a fallback if config fails
-
-  /*
-   * Parameters for watchdog timer
-   */
+  const [stateInterval, setStateInterval] = useState(60000);
   const [retryCount, setRetryCount] = useState(0);
   const [showError, setShowError] = useState(false);
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,80 +34,83 @@ export const MediaController = () => {
     }
   };
 
-  /*
-   * Fetch interval config from backend
-   */
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const response = await fetch(config);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         setStateInterval(data.config.state_interval);
       } catch (error) {
         console.error("CONFIG ERROR: ", error);
+        // Fallback value already in state — controller keeps running
       }
     };
     fetchConfig();
   }, []);
 
-  // Backend unreachable - Lock state to IMAGES
-  useEffect(() => {
-    if (!isOnline) {
-      console.warn("[NETWORK] Offline - locking controller to IMAGES");
-
-      clearWatchdog();
-      setRetryCount(0);
-      setShowError(false);
-
-      if (mediaState !== "IMAGES") {
-        setMediaState("IMAGES");
-      }
-    }
-  }, [isOnline]);
+  /*
+   * Offline no longer locks to IMAGES.
+   * VideoComponent now plays from local file storage — no internet needed.
+   * The transition timer still runs so cached videos play on schedule.
+   * If there are no cached videos, VideoComponent returns empty and
+   * onAllVideosFinished fires immediately, reverting to IMAGES naturally.
+   */
 
   const checkSignageVideos = async () => {
     try {
       console.log("[SIGNAGE CHECK] Checking folder status...");
 
-      const version = await getSignageVersion();
-      const hasVideos = version.itemCount > 0;
+      // Online: check live item count from server
+      if (isOnline) {
+        const version = await getSignageVersion();
+        const hasVideos = version.itemCount > 0;
 
-      if (lastStatusRef.current !== hasVideos) {
-        console.log(
-          `[SIGNAGE STATUS CHANGED] ${hasVideos ? "VIDEOS FOUND" : "NO VIDEOS"}`,
-        );
+        if (lastStatusRef.current !== hasVideos) {
+          console.log(
+            `[SIGNAGE STATUS CHANGED] ${hasVideos ? "VIDEOS FOUND" : "NO VIDEOS"}`,
+          );
+          lastStatusRef.current = hasVideos;
+        }
 
-        lastStatusRef.current = hasVideos;
+        console.log(`TOTAL VIDEOS: ${version.itemCount}`);
+        setHasSignageVideos(hasVideos);
+        return;
       }
-      console.log(`TOTAL VIDEOS: ${version.itemCount}`);
-      setHasSignageVideos(hasVideos);
+
+      // Offline: check if we have locally cached videos
+      const AsyncStorage = (
+        await import("@react-native-async-storage/async-storage")
+      ).default;
+      const metaRaw = await AsyncStorage.getItem("signage_videos_meta");
+
+      if (metaRaw) {
+        const meta = JSON.parse(metaRaw);
+        const hasCachedVideos = meta.items && meta.items.length > 0;
+        console.log(
+          `[SIGNAGE CHECK] Offline — ${hasCachedVideos ? meta.items.length + " cached videos" : "no cache"}`,
+        );
+        setHasSignageVideos(hasCachedVideos);
+      } else {
+        console.log("[SIGNAGE CHECK] Offline — no cache found");
+        setHasSignageVideos(false);
+      }
     } catch (err) {
       console.error("[SIGNAGE CHECK] Failed:", err);
-      setHasSignageVideos(false);
+      // Don't set hasSignageVideos to false on error —
+      // keep last known state so cached videos still play
     }
   };
 
   useEffect(() => {
     checkSignageVideos();
-
-    const interval = setInterval(() => {
-      checkSignageVideos();
-    }, 120000);
-
+    const interval = setInterval(checkSignageVideos, 120000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isOnline]);
 
-  /*
-   * Switch from images -> videos
-   */
+  // Transition timer — IMAGES → VIDEOS
   useEffect(() => {
     const transitionAt = new Date(Date.now() + stateInterval);
-
     console.log(
       `[MEDIA TIMER]
       Current Time : ${new Date().toLocaleTimeString()}
@@ -132,20 +128,14 @@ export const MediaController = () => {
       return;
     }
 
-    if (!isOnline) {
-      console.log("[MEDIA CHECK] Blocked - offline");
-      return;
-    }
-
     if (!hasSignageVideos) {
       console.log(
-        "[MEDIA CHECK] Blocked - no videos in Digital Signage folder",
+        "[MEDIA CHECK] Blocked - no videos available (online or cached)",
       );
       return;
     }
 
     const switchAt = new Date(Date.now() + stateInterval);
-
     console.log(
       `[MEDIA TIMER] IMAGES -> VIDEOS scheduled at ${switchAt.toLocaleTimeString()}`,
     );
@@ -154,7 +144,6 @@ export const MediaController = () => {
       console.log(
         `[MEDIA TIMER] Switching to VIDEOS at ${new Date().toLocaleTimeString()}`,
       );
-
       transitionTimerRef.current = null;
       setMediaState("VIDEOS");
     }, stateInterval);
@@ -165,7 +154,7 @@ export const MediaController = () => {
         transitionTimerRef.current = null;
       }
     };
-  }, [mediaState, showError, isOnline, hasSignageVideos]);
+  }, [mediaState, showError, hasSignageVideos, stateInterval]);
 
   useEffect(() => {
     console.log(
@@ -173,16 +162,13 @@ export const MediaController = () => {
     );
   }, [hasSignageVideos]);
 
-  // Show error display for 8 seconds
   useEffect(() => {
     if (!showError) return;
-
     const timer = setTimeout(() => {
       console.log("[WATCHDOG] Error dismissed - resuming image display");
       setShowError(false);
-      setRetryCount(0); // Reset retries to 0 so videos can be attempted again later
+      setRetryCount(0);
     }, ERROR_DISPLAY_DURATION);
-
     return () => clearTimeout(timer);
   }, [showError]);
 
@@ -194,7 +180,7 @@ export const MediaController = () => {
     );
   }, [mediaState]);
 
-  // Watchdog — fires when state switches to VIDEOS
+  // Watchdog
   useEffect(() => {
     if (mediaState !== "VIDEOS") return;
 
@@ -214,27 +200,24 @@ export const MediaController = () => {
       } else {
         setRetryCount(nextRetry);
       }
-      setMediaState("IMAGES"); // always revert to images
+      setMediaState("IMAGES");
     }, WATCHDOG_TIMEOUT_MS);
 
     return () => clearWatchdog();
   }, [mediaState]);
 
-  // Called by VideoComponent when first frame actually starts playing
   const handlePlaybackStarted = () => {
     console.log("[WATCHDOG] Playback confirmed — watchdog cancelled");
     clearWatchdog();
-    setRetryCount(0); // reset retries on success
+    setRetryCount(0);
   };
 
-  // Called after all videos finish
   const handleVideosFinished = () => {
     console.log(
       `[MEDIA TIMER]
       Videos finished at ${new Date().toLocaleTimeString()}
       Switching back to IMAGES`,
     );
-
     clearWatchdog();
     requestAnimationFrame(() => {
       setMediaState("IMAGES");
@@ -252,7 +235,6 @@ export const MediaController = () => {
         />
       )}
 
-      {/* Error overlay — shown after max retries, stays until app restart */}
       {showError && (
         <View style={styles.errorOverlay}>
           <View style={styles.errorCard}>
