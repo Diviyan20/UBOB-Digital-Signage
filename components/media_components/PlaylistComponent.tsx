@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { config } from "../api/client";
 
-const VERSION_CHECK_INTERVAL_MS = 10 * 60 * 1000; // 30 minutes
+const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000; // check every 5 hours
 
 interface VideoEntry {
   url: string; // CloudFront URL (kept for reference)
