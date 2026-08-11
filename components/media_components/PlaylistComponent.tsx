@@ -14,7 +14,9 @@ import {
 } from "react-native";
 import { config } from "../api/client";
 
-const VERSION_CHECK_INTERVAL_MS = 10 * 60 * 1000; // 30 minutes
+// Fallback value if the config API/database cannot be reached.
+// 5 hours = 18,000,000 ms
+const DEFAULT_VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
 
 interface VideoEntry {
   url: string; // CloudFront URL (kept for reference)
@@ -39,6 +41,12 @@ export const PlaylistComponent: React.FC = () => {
   const [fadeDuration, setFadeDuration] = useState(400);
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
 
+  // Database-driven version check interval.
+  // Value is already expected to be milliseconds.
+  const [versionCheckIntervalMs, setVersionCheckIntervalMs] = useState(
+    DEFAULT_VERSION_CHECK_INTERVAL_MS,
+  );
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const isMounted = useRef(true);
   const appStateRef = useRef(AppState.currentState);
@@ -52,12 +60,46 @@ export const PlaylistComponent: React.FC = () => {
 
   const fetchConfig = useCallback(async () => {
     try {
+      console.log("[CONFIG] Fetching:", config);
+
       const response = await fetch(config);
+
+      console.log("[CONFIG] HTTP status:", response.status);
+
       const data = await response.json();
+
+      console.log("[CONFIG] Full response:", JSON.stringify(data, null, 2));
+      console.log("[CONFIG] version_check:", data?.config?.version_check);
+      console.log(
+        "[CONFIG] version_check type:",
+        typeof data?.config?.version_check,
+      );
+
+      if (!response.ok) {
+        throw new Error(`Config request failed with HTTP ${response.status}`);
+      }
+
       setDisplayDuration(data.config.image_display_duration);
       setFadeDuration(data.config.fade_duration);
-    } catch {
-      // Fallback values already in state
+
+      const versionCheck = data?.config?.version_check;
+
+      if (typeof versionCheck === "number" && versionCheck > 0) {
+        setVersionCheckIntervalMs(versionCheck);
+
+        console.log(`[CONFIG] Using database version_check: ${versionCheck}ms`);
+      } else {
+        console.warn(
+          "[CONFIG] Invalid version_check. Using fallback:",
+          DEFAULT_VERSION_CHECK_INTERVAL_MS,
+        );
+
+        setVersionCheckIntervalMs(DEFAULT_VERSION_CHECK_INTERVAL_MS);
+      }
+    } catch (err) {
+      console.error("[CONFIG] Failed to fetch configuration:", err);
+      // Keep using the fallback value.
+      setVersionCheckIntervalMs(DEFAULT_VERSION_CHECK_INTERVAL_MS);
     }
   }, []);
 
@@ -82,6 +124,7 @@ export const PlaylistComponent: React.FC = () => {
     setMode("loading");
 
     const savedOrientation = await AsyncStorage.getItem("orientation");
+
     if (savedOrientation === "Portrait" || savedOrientation === "Landscape") {
       setOrientation(savedOrientation);
     }
@@ -218,13 +261,22 @@ export const PlaylistComponent: React.FC = () => {
 
   // Periodic version check — fetchPlaylist handles etag internally
   useEffect(() => {
-    const interval = setInterval(() => {
-      console.log("[VERSION CHECK] Periodic refresh — checking for updates...");
-      initialize();
-    }, VERSION_CHECK_INTERVAL_MS);
+    console.log(
+      `[VERSION CHECK] Interval configured to ${versionCheckIntervalMs}ms`,
+    );
 
-    return () => clearInterval(interval);
-  }, [initialize]);
+    const interval = setInterval(() => {
+      if (!isMounted.current) return;
+
+      console.log("[VERSION CHECK] Periodic refresh — checking for updates...");
+
+      initialize();
+    }, versionCheckIntervalMs);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [versionCheckIntervalMs, initialize]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
 

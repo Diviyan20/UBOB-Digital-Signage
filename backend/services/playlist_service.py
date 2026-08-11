@@ -1,4 +1,3 @@
-import base64
 import hashlib
 from urllib.parse import quote
 
@@ -7,11 +6,33 @@ from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_obje
 
 CLOUDFRONT_DOMAIN = "d30au7cngoylsj.cloudfront.net"
 
-# =====================
-# LAMBDA CACHE DIRECTORY
-CACHE_DIR = Path("/tmp/promotion_cache")
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
+class PlaylistService:
+    """
+    Handles media playlist logic
 
+    Responsibilities:
+        - Find outlet information
+        - Determine outlet region
+        - Build S3 Folder path
+        - Fetch media from S3
+    """
+
+    # ======================
+    # OUTLET REGION HELPER
+    # ======================
+    def get_outlet_region(self, outlet_id: str):
+        """
+        Gets outlet region from database
+        """
+        outlet = get_outlet_information(outlet_id)
+
+        if not outlet:
+            raise Exception("Outlet Not Found")
+
+        region = outlet.get("outlet_location")
+
+        if not region:
+            raise Exception("Outlet Region Not Configured")
 
         return region
 
@@ -61,7 +82,8 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
     # ========================
     def get_signage_videos(self):
         """
-        Streams cached files
+        - Used for signage screen
+        - Always points to the Digital Signage folder
         """
         prefix = "Digital Signage/"
         return get_video_media(prefix)
@@ -122,30 +144,16 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     def get_playlist_version(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape") -> dict:
         """
-        Returns image path
+        Returns version info for a playlist screen's S3 folder.
         """
-        return CACHE_DIR / f"{image_id}.png"
-    
-    def save_base64_as_png(self, base64_data, image_id):
+        region = self.get_outlet_region(outlet_id)
+        normalized_region = self.normalize_region(region)
+        prefix = f"{normalized_region}/Batch {batch_number}/{tier}/{orientation}/"
+        return self._compute_version(prefix)
+
+    def get_signage_version(self) -> dict:
         """
-        Converts base64 image -> PNG file
+        Returns version info for the Digital Signage folder.
         """
-        # Remove base64 prefix if exists
-        if "," in base64_data:
-            base64_data = base64_data.split(",", 1)[1]
-            
-        image_bytes = base64.b64decode(base64_data)
-        
-        with Image.open(io.BytesIO(image_bytes)) as img:
-            # Convert unsupported modes
-            if img.mode not in ("RGB", "RGBA"):
-                img = img.convert("RGB")
-            
-            # Resize for performance
-            img.thumbnail((1280,720))
-            
-            img.save(
-                self.get_image_path(image_id),
-                format="PNG",
-                optimize=True
-            )
+        prefix = "Digital Signage/"
+        return self._compute_version(prefix)
