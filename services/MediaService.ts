@@ -30,6 +30,13 @@ export interface PlaylistVersionResult {
   manifest: ManifestItem[];
 }
 
+export interface PlaylistRefreshResult {
+  changed: boolean;
+  playlist: PlaylistItems[];
+  oldFilesToDelete: string[];
+  etag: string | null;
+}
+
 interface SignageMeta {
   etag: string;
   outletId: string;
@@ -140,14 +147,33 @@ const ensurePlaylistDir = (): Directory => {
   return dir;
 };
 
-const clearPlaylistFiles = (): void => {
-  const dir = getPlaylistDir();
+export const deletePlaylistFiles = async (
+  files: string[],
+  activeLocalUri?: string,
+): Promise<void> => {
+  for (const uri of files) {
+    if (!uri) {
+      continue;
+    }
 
-  if (dir.exists) {
-    dir.delete();
-    console.log("[FS] Cleared playlist directory");
+    // Never delete the file currently being played.
+    if (uri === activeLocalUri) {
+      console.log(`[CLEANUP] Keeping active file: ${uri}`);
+      continue;
+    }
+
+    try {
+      const file = new File(uri);
+
+      if (file.exists) {
+        file.delete();
+
+        console.log(`[CLEANUP] Deleted obsolete file: ${uri}`);
+      }
+    } catch (error) {
+      console.warn(`[CLEANUP] Failed to delete: ${uri}`, error);
+    }
   }
-  dir.create();
 };
 
 const getSafeFilename = (key: string): string => {
@@ -230,6 +256,209 @@ const fetchPlaylistTypes = async (
     ]),
   );
 };
+
+const getLocalPlaylistContext = async (): Promise<{
+  outletId: string;
+  batchNumber: string;
+  tier: string;
+  orientation: string;
+}> => {
+  const outletId = await AsyncStorage.getItem("outlet_id");
+  const batchNumber = (await AsyncStorage.getItem("batch_number")) || "1";
+  const tier = (await AsyncStorage.getItem("tier")) || "Tier A";
+  const orientation =
+    (await AsyncStorage.getItem("orientation")) || "Landscape";
+
+  if (!outletId) throw new Error("No Outlet ID found.");
+
+  return {
+    outletId,
+    batchNumber,
+    tier,
+    orientation,
+  };
+};
+
+export const refreshPreparedPlaylist =
+  async (): Promise<PlaylistRefreshResult> => {
+    const { outletId, batchNumber, tier, orientation } =
+      await getLocalPlaylistContext();
+
+    // Load what the TV is currently using.
+    const currentPlaylist = await loadPreparedPlaylist();
+
+    if (currentPlaylist.length === 0) {
+      console.warn("[REFRESH] No prepared playlist found");
+
+      return {
+        changed: false,
+        playlist: [],
+        oldFilesToDelete: [],
+        etag: null,
+      };
+    }
+
+    const currentMetaRaw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
+
+    if (!currentMetaRaw) {
+      console.warn("[REFRESH] No playlist metadata found");
+
+      return {
+        changed: false,
+        playlist: currentPlaylist,
+        oldFilesToDelete: [],
+        etag: null,
+      };
+    }
+
+    const currentMeta: PlaylistMeta = JSON.parse(currentMetaRaw);
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 1
+    // Only check the server version.
+    // ───────────────────────────────────────────────────────────────────────
+
+    const version = await getPlaylistVersion(
+      outletId,
+      batchNumber,
+      tier,
+      orientation,
+    );
+
+    if (!version.etag) {
+      console.warn("[REFRESH] Server returned no ETag");
+
+      return {
+        changed: false,
+        playlist: currentPlaylist,
+        oldFilesToDelete: [],
+        etag: currentMeta.etag,
+      };
+    }
+
+    // Nothing changed.
+    if (version.etag === currentMeta.etag) {
+      console.log(`[REFRESH] No changes — ETag ${version.etag}`);
+
+      return {
+        changed: false,
+        playlist: currentPlaylist,
+        oldFilesToDelete: [],
+        etag: version.etag,
+      };
+    }
+
+    console.log(
+      `[REFRESH] Playlist changed: ${currentMeta.etag} → ${version.etag}`,
+    );
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 2
+    // Get the new type information.
+    // ───────────────────────────────────────────────────────────────────────
+
+    const typeMap = await fetchPlaylistTypes(
+      outletId,
+      batchNumber,
+      tier,
+      orientation,
+    );
+
+    // Current items by key.
+    const currentByKey = new Map(
+      currentPlaylist.map((item) => [item.key, item]),
+    );
+
+    // New playlist in server order.
+    const newPlaylist: PlaylistItems[] = [];
+
+    for (const manifestItem of version.manifest) {
+      const url = sanitizeVideoUrl(manifestItem.url);
+
+      if (!url.startsWith("https://")) {
+        throw new Error(`Invalid media URL: ${manifestItem.key}`);
+      }
+
+      const metadata = typeMap[manifestItem.key];
+
+      if (!metadata) {
+        throw new Error(`Missing media type: ${manifestItem.key}`);
+      }
+
+      const existing = currentByKey.get(manifestItem.key);
+
+      // Same key + same URL + local file still exists.
+      // Nothing needs downloading.
+      if (
+        existing &&
+        existing.url === url &&
+        new File(existing.localUri).exists
+      ) {
+        newPlaylist.push({
+          ...existing,
+          type: metadata.type,
+          rotate: metadata.rotate,
+        });
+
+        currentByKey.delete(manifestItem.key);
+
+        continue;
+      }
+
+      // New media OR same key with a different URL.
+      console.log(`[REFRESH] Downloading: ${manifestItem.key}`);
+
+      const localUri = await downloadMediaFile(manifestItem.key, url);
+
+      newPlaylist.push({
+        key: manifestItem.key,
+        type: metadata.type,
+        url,
+        localUri,
+        rotate: metadata.rotate,
+      });
+
+      // Mark it as handled.
+      currentByKey.delete(manifestItem.key);
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 3
+    // Anything left in currentByKey no longer exists
+    // in the new server playlist.
+    //
+    // IMPORTANT:
+    // We DO NOT delete these files yet.
+    // PlaylistComponent may still be playing one of them.
+    // ───────────────────────────────────────────────────────────────────────
+
+    const oldFilesToDelete = Array.from(currentByKey.values()).map(
+      (item) => item.localUri,
+    );
+
+    // ───────────────────────────────────────────────────────────────────────
+    // STEP 4
+    // Save the new playlist metadata.
+    // ───────────────────────────────────────────────────────────────────────
+
+    await savePreparedPlaylist(
+      outletId,
+      batchNumber,
+      tier,
+      orientation,
+      version.etag,
+      newPlaylist,
+    );
+
+    console.log(`[REFRESH] New playlist ready — ${newPlaylist.length} item(s)`);
+
+    return {
+      changed: true,
+      playlist: newPlaylist,
+      oldFilesToDelete,
+      etag: version.etag,
+    };
+  };
 
 /*
 ─────────────────────────────────────────────────────────────────────────────

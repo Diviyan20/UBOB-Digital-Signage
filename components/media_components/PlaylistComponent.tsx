@@ -1,18 +1,21 @@
-import { loadPreparedPlaylist, PlaylistItems } from "@/services/MediaService";
+import {
+  deletePlaylistFiles,
+  loadPreparedPlaylist,
+  PlaylistItems,
+  refreshPreparedPlaylist,
+} from "@/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  Text,
-  View
-} from "react-native";
+import { Animated, Easing, Text, View } from "react-native";
 import { config } from "../api/client";
 
 type PlaybackMode = "loading" | "video" | "image" | "empty";
 type OrientationType = "Landscape" | "Portrait";
+
+// Fallback value in case database value fails (5 hours)
+const DEFAULT_VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
 
 export const PlaylistComponent: React.FC = () => {
   const [playlist, setPlaylist] = useState<PlaylistItems[]>([]);
@@ -23,10 +26,14 @@ export const PlaylistComponent: React.FC = () => {
   const [displayDuration, setDisplayDuration] = useState(5000);
   const [fadeDuration, setFadeDuration] = useState(400);
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
+  const [versionCheckInterval, setVersionCheckInterval] = useState(
+    DEFAULT_VERSION_CHECK_INTERVAL_MS,
+  );
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const currentIndexRef = useRef(0);
   const playlistRef = useRef<PlaylistItems[]>([]);
+  const pendingDeleteRef = useRef<string[]>([]);
 
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
@@ -50,8 +57,26 @@ export const PlaylistComponent: React.FC = () => {
         setDisplayDuration(data.config?.image_display_duration ?? 5000);
 
         setFadeDuration(data.config?.fade_duration ?? 400);
+
+        const versionCheck = data.config?.version_check;
+
+        if (typeof versionCheck === "number" && versionCheck > 0) {
+          setVersionCheckInterval(versionCheck);
+          console.log(`[CONFIG] version_check = ${versionCheck}ms`);
+        } else {
+          console.warn(
+            `[CONFIG] Invalid version_check. Using fallback ${DEFAULT_VERSION_CHECK_INTERVAL_MS}ms`,
+          );
+
+          setVersionCheckInterval(DEFAULT_VERSION_CHECK_INTERVAL_MS);
+        }
       } catch (error) {
-        console.warn("[CONFIG] Using default playback settings:", error);
+        console.warn(
+          "[CONFIG] Failed to load configuration. Using defaults.",
+          error,
+        );
+
+        setVersionCheckInterval(DEFAULT_VERSION_CHECK_INTERVAL_MS);
       }
     };
 
@@ -156,7 +181,7 @@ export const PlaylistComponent: React.FC = () => {
    ─────────────────────────────────────────────────────────────────────────
    */
   useEffect(() => {
-    const subscription = player.addListener("playToEnd", () => {
+    const subscription = player.addListener("playToEnd", async () => {
       const items = playlistRef.current;
 
       if (items.length === 0) {
@@ -169,10 +194,98 @@ export const PlaylistComponent: React.FC = () => {
 
       setCurrentIndex(nextIndex);
       setMode(items[nextIndex].type);
+
+      await cleanupPendingFiles(items[nextIndex].localUri);
     });
 
     return () => subscription.remove();
   }, [player]);
+
+  /*
+  CLEAN UP PLAYLIST FILES
+  */
+  const refreshPlaylist = async () => {
+    try {
+      console.log("[REFRESH] Checking playlist version...");
+
+      const result = await refreshPreparedPlaylist();
+
+      if (!result.changed) {
+        console.log("[REFRESH] Playlist unchanged");
+        return;
+      }
+
+      console.log(
+        `[REFRESH] Playlist updated: ${result.playlist.length} item(s)`,
+      );
+
+      const currentItem = playlistRef.current[currentIndexRef.current];
+
+      pendingDeleteRef.current = result.oldFilesToDelete;
+
+      const currentKey = currentItem?.key;
+
+      // Update refs first
+      playlistRef.current = result.playlist;
+
+      // Try to keep the currently playing item
+      const newIndex = result.playlist.findIndex(
+        (item) => item.key === currentKey,
+      );
+
+      if (newIndex >= 0) {
+        currentIndexRef.current = newIndex;
+        setCurrentIndex(newIndex);
+      } else {
+        // Current item was removed.
+        // Start from the first item in the new playlist.
+        currentIndexRef.current = 0;
+        setCurrentIndex(0);
+
+        if (result.playlist.length > 0) {
+          setMode(result.playlist[0].type);
+        } else {
+          setMode("empty");
+        }
+      }
+
+      setPlaylist(result.playlist);
+
+      // Delete obsolete files but never delete the file currently being played
+      await deletePlaylistFiles(result.oldFilesToDelete, currentItem?.localUri);
+    } catch (error) {
+      console.warn(
+        "[REFRESH] Playlist refresh failed. Keeping current playlist.",
+        error,
+      );
+    }
+  };
+
+  const cleanupPendingFiles = async (activeLocalUri?: string) => {
+    if (pendingDeleteRef.current.length === 0) {
+      return;
+    }
+
+    const files = pendingDeleteRef.current;
+    pendingDeleteRef.current = [];
+
+    await deletePlaylistFiles(files, activeLocalUri);
+  };
+
+  /*
+  VERSION CHECK TIMER
+  */
+  useEffect(() => {
+    console.log(`[VERSION CHECK] Running every ${versionCheckInterval}ms`);
+
+    const interval = setInterval(() => {
+      refreshPlaylist();
+    }, versionCheckInterval);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [versionCheckInterval]);
 
   /*
    ─────────────────────────────────────────────────────────────────────────
