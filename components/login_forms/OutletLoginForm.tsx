@@ -81,16 +81,17 @@ export const OutletLoginForm: React.FC = () => {
   const [errorVisible, setErrorVisible] = useState(false);
   const [status, setStatus] = useState<
     | "loading"
-    | "fetching_promotions"
+    | "downloading_media"
     | "preloading_images"
     | "success"
     | undefined
   >();
   const [imagesToPreload, setImagesToPreload] = useState<any[]>([]);
-  const [preloadingProgress, setPreloadingProgress] = useState<{
-    loaded: number;
-    total: number;
-  }>({ loaded: 0, total: 0 });
+  const [downloadProgress, setDownloadProgress] = useState({
+    loaded: 0,
+    total: 0,
+    currentFile: "",
+  });
 
   const loginIdRef = useRef<string>("");
 
@@ -141,13 +142,24 @@ export const OutletLoginForm: React.FC = () => {
       setLoading(true);
       setStatus("loading");
 
-      const response = await loginOutlet({
-        outletId: loginId,
-        screenType,
-        batchNumber,
-        tier,
-        orientation,
-      });
+      const response = await loginOutlet(
+        {
+          outletId: loginId,
+          screenType,
+          batchNumber,
+          tier,
+          orientation,
+        },
+        (progress) => {
+          setStatus("downloading_media");
+
+          setDownloadProgress({
+            loaded: progress.completed,
+            total: progress.total,
+            currentFile: progress.currentFile,
+          });
+        },
+      );
 
       if (response.tier) {
         setTier(response.tier);
@@ -188,11 +200,6 @@ export const OutletLoginForm: React.FC = () => {
       if (response.preloadImages?.length) {
         setStatus("preloading_images");
         setImagesToPreload(response.preloadImages);
-        setPreloadingProgress({
-          loaded: 0,
-          total: response.preloadImages.length,
-        });
-
         return;
       }
 
@@ -235,13 +242,6 @@ export const OutletLoginForm: React.FC = () => {
     }, 1500);
   }, []);
 
-  const handlePreloadingProgress = useCallback(
-    (loaded: number, total: number) => {
-      setPreloadingProgress({ loaded, total });
-    },
-    [],
-  );
-
   const handlePreloadingError = useCallback((error: string) => {
     console.warn("Image preloading error:", error);
   }, []);
@@ -250,13 +250,13 @@ export const OutletLoginForm: React.FC = () => {
     switch (status) {
       case "loading":
         return "Logging in...";
-      case "fetching_promotions":
-        return "Fetching Promotions...";
-      case "preloading_images":
-        const { loaded, total } = preloadingProgress;
-        return `Loading Images... (${loaded}/${total})`;
+
+      case "downloading_media":
+        return "Preparing Media...";
+
       case "success":
         return "Success! Loading Media...";
+
       default:
         return "Loading...";
     }
@@ -351,6 +351,69 @@ export const OutletLoginForm: React.FC = () => {
           </>
         )}
 
+        {status === "downloading_media" && downloadProgress.total > 0 && (
+          <View
+            style={{
+              width: "100%",
+              marginTop: 16,
+              marginBottom: 12,
+            }}
+          >
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 16,
+                marginBottom: 8,
+              }}
+            >
+              Downloading media...
+            </Text>
+
+            <Text
+              style={{
+                color: "#CCCCCC",
+                fontSize: 14,
+                marginBottom: 8,
+              }}
+            >
+              {downloadProgress.loaded} / {downloadProgress.total}
+            </Text>
+
+            <View
+              style={{
+                width: "100%",
+                height: 10,
+                backgroundColor: "#333333",
+                borderRadius: 5,
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  width: `${
+                    (downloadProgress.loaded / downloadProgress.total) * 100
+                  }%`,
+                  height: "100%",
+                  backgroundColor: "#4CAF50",
+                }}
+              />
+            </View>
+
+            {downloadProgress.currentFile ? (
+              <Text
+                numberOfLines={1}
+                style={{
+                  color: "#AAAAAA",
+                  fontSize: 12,
+                  marginTop: 8,
+                }}
+              >
+                {downloadProgress.currentFile}
+              </Text>
+            ) : null}
+          </View>
+        )}
+
         <Pressable
           style={[
             styles.loginButton,
@@ -375,7 +438,6 @@ export const OutletLoginForm: React.FC = () => {
 
       <LoggingInOverlayComponent
         visible={loading}
-        status={status || "loading"}
         message={getOverlayMessage()}
       />
 
@@ -383,7 +445,6 @@ export const OutletLoginForm: React.FC = () => {
         <ImagePreloader
           images={imagesToPreload}
           onAllImagesLoaded={handleImagesPreloaded}
-          onProgress={handlePreloadingProgress}
           onError={handlePreloadingError}
         />
       )}

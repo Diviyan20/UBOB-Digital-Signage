@@ -1,5 +1,6 @@
 import { api } from "@/components/api/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MediaDownloadProgress, prepareMediaPlaylist } from "./MediaService";
 
 export type ScreenType = "signage" | "media";
 export type OrientationType = "Landscape" | "Portrait";
@@ -7,7 +8,7 @@ export type TierType = "Tier A" | "Tier B";
 
 export type LoginStatus =
   | "loading"
-  | "fetching_promotions"
+  | "downloading_media"
   | "preloading_images"
   | "success"
   | "error";
@@ -139,9 +140,10 @@ export const fetchOutletImages = async (outletId: string) => {
 
 export const loginOutlet = async (
   payload: LoginPayload,
+  onMediaProgress?: (progress: MediaDownloadProgress) => void,
 ): Promise<LoginResult> => {
   try {
-    const { outletId, screenType, batchNumber, tier, orientation } = payload;
+    const { outletId, screenType, batchNumber, orientation } = payload;
 
     const outletData = await validateOutlet(outletId);
 
@@ -149,18 +151,38 @@ export const loginOutlet = async (
 
     const dbTier = outletData.tier as TierType;
 
-    await saveOutletSession(
-      outletId,
-      outletData.outlet_name,
-      outletData.outlet_location,
-      screenType,
-      batchNumber,
-      outletData.tier,
-      orientation,
-    );
+    /*
+    ───────────────────────────────────────────────────────────────────────
+      MEDIA PLAYER
+    ───────────────────────────────────────────────────────────────────────
+    */
 
-    // MEDIA PLAYER FLOW
     if (screenType === "media") {
+      console.log("[LOGIN] Media Player selected");
+      console.log("[LOGIN] Preparing all media before navigation...");
+
+      await prepareMediaPlaylist(
+        outletId,
+        batchNumber,
+        dbTier,
+        orientation,
+        onMediaProgress,
+      );
+
+      // Only save the media-player session AFTER
+      // the entire playlist has been downloaded successfully.
+      await saveOutletSession(
+        outletId,
+        outletData.outlet_name,
+        outletData.outlet_location,
+        screenType,
+        batchNumber,
+        dbTier,
+        orientation,
+      );
+
+      console.log("[LOGIN] Media preparation successful. Ready for player.");
+
       return {
         success: true,
         tier: dbTier,
@@ -169,7 +191,21 @@ export const loginOutlet = async (
       };
     }
 
-    // SIGNAGE FLOW
+    /*
+    ───────────────────────────────────────────────────────────────────────
+    SIGNAGE SCREEN
+    ───────────────────────────────────────────────────────────────────────
+    */
+    await saveOutletSession(
+      outletId,
+      outletData.outlet_name,
+      outletData.outlet_location,
+      screenType,
+      batchNumber,
+      dbTier,
+      orientation,
+    );
+
     const promotions = await fetchOutletImages(outletId);
     if (promotions.length === 0) {
       return {
@@ -213,13 +249,25 @@ export const checkOfflineCredentials = async (): Promise<boolean> => {
     const savedOutlet = mapped.saved_outlet
       ? JSON.parse(mapped.saved_outlet)
       : null;
-    if (!savedOutlet?.id || !savedOutlet?.name) return false;
 
+    if (!savedOutlet?.id || !savedOutlet?.name) return false;
     if (!mapped.region) return false;
-    if (!mapped.screen_type || !["signage", "media"].includes(mapped.screen_type)) return false;
+
+    if (
+      !mapped.screen_type ||
+      !["signage", "media"].includes(mapped.screen_type)
+    )
+      return false;
+
     if (!mapped.batch_number) return false;
-    if (!mapped.tier || !["Tier A", "Tier B"].includes(mapped.tier)) return false;
-    if (!mapped.orientation || !["Landscape", "Portrait"].includes(mapped.orientation)) return false;
+    if (!mapped.tier || !["Tier A", "Tier B"].includes(mapped.tier))
+      return false;
+
+    if (
+      !mapped.orientation ||
+      !["Landscape", "Portrait"].includes(mapped.orientation)
+    )
+      return false;
 
     return true;
   } catch {
@@ -238,6 +286,18 @@ export const offlineLogin = async (): Promise<LoginResult> => {
   }
 
   if (session.screenType === "media") {
+    const { isMediaReady } = await import("./MediaService");
+
+    const ready = await isMediaReady();
+
+    if (!ready) {
+      return {
+        success: false,
+        status: "error",
+        error: "Media is not fully downloaded",
+      };
+    }
+
     return {
       success: true,
       route: "/screens/PlaylistScreen",

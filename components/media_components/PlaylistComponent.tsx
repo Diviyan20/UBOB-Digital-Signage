@@ -1,231 +1,192 @@
-import { fetchPlaylist, PlaylistItems } from "@/services/MediaService";
+import { loadPreparedPlaylist, PlaylistItems } from "@/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
-  AppState,
-  AppStateStatus,
   Easing,
   Text,
-  View,
+  View
 } from "react-native";
 import { config } from "../api/client";
-
-// Fallback value if the config API/database cannot be reached.
-// 5 hours = 18,000,000 ms
-const DEFAULT_VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
-
-interface VideoEntry {
-  url: string; // CloudFront URL (kept for reference)
-  localUri: string; // local file:// path — what the player uses
-}
-interface ImageEntry {
-  url: string;
-  localUri: string;
-}
 
 type PlaybackMode = "loading" | "video" | "image" | "empty";
 type OrientationType = "Landscape" | "Portrait";
 
 export const PlaylistComponent: React.FC = () => {
+  const [playlist, setPlaylist] = useState<PlaylistItems[]>([]);
   const [mode, setMode] = useState<PlaybackMode>("loading");
-  const [videos, setVideos] = useState<VideoEntry[]>([]);
-  const [images, setImages] = useState<ImageEntry[]>([]);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const [displayDuration, setDisplayDuration] = useState(5000);
   const [fadeDuration, setFadeDuration] = useState(400);
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
 
-  // Database-driven version check interval.
-  // Value is already expected to be milliseconds.
-  const [versionCheckIntervalMs, setVersionCheckIntervalMs] = useState(
-    DEFAULT_VERSION_CHECK_INTERVAL_MS,
-  );
-
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const isMounted = useRef(true);
-  const appStateRef = useRef(AppState.currentState);
-
-  const videosRef = useRef<VideoEntry[]>([]);
-  const imagesRef = useRef<ImageEntry[]>([]);
+  const currentIndexRef = useRef(0);
+  const playlistRef = useRef<PlaylistItems[]>([]);
 
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
 
-  const fetchConfig = useCallback(async () => {
-    try {
-      console.log("[CONFIG] Fetching:", config);
-
-      const response = await fetch(config);
-
-      console.log("[CONFIG] HTTP status:", response.status);
-
-      const data = await response.json();
-
-      console.log("[CONFIG] Full response:", JSON.stringify(data, null, 2));
-      console.log("[CONFIG] version_check:", data?.config?.version_check);
-      console.log(
-        "[CONFIG] version_check type:",
-        typeof data?.config?.version_check,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Config request failed with HTTP ${response.status}`);
-      }
-
-      setDisplayDuration(data.config.image_display_duration);
-      setFadeDuration(data.config.fade_duration);
-
-      const versionCheck = data?.config?.version_check;
-
-      if (typeof versionCheck === "number" && versionCheck > 0) {
-        setVersionCheckIntervalMs(versionCheck);
-
-        console.log(`[CONFIG] Using database version_check: ${versionCheck}ms`);
-      } else {
-        console.warn(
-          "[CONFIG] Invalid version_check. Using fallback:",
-          DEFAULT_VERSION_CHECK_INTERVAL_MS,
-        );
-
-        setVersionCheckIntervalMs(DEFAULT_VERSION_CHECK_INTERVAL_MS);
-      }
-    } catch (err) {
-      console.error("[CONFIG] Failed to fetch configuration:", err);
-      // Keep using the fallback value.
-      setVersionCheckIntervalMs(DEFAULT_VERSION_CHECK_INTERVAL_MS);
-    }
-  }, []);
-
-  const loadPlaylist = useCallback(async () => {
-    const playlist: PlaylistItems[] = await fetchPlaylist();
-    console.log(`[PLAYLIST] Loaded ${playlist.length} items`);
-
-    // Separate by type — use localUri for playback
-    const fetchedVideos = playlist
-      .filter((item) => item.type === "video")
-      .map((item) => ({ url: item.url, localUri: item.localUri }));
-
-    const fetchedImages = playlist
-      .filter((item) => item.type === "image")
-      .map((item) => ({ url: item.url, localUri: item.localUri }));
-
-    return { fetchedVideos, fetchedImages };
-  }, []);
-
-  const initialize = useCallback(async () => {
-    if (!isMounted.current) return;
-    setMode("loading");
-
-    const savedOrientation = await AsyncStorage.getItem("orientation");
-
-    if (savedOrientation === "Portrait" || savedOrientation === "Landscape") {
-      setOrientation(savedOrientation);
-    }
-
-    await fetchConfig();
-    const { fetchedVideos, fetchedImages } = await loadPlaylist();
-
-    if (!isMounted.current) return;
-
-    videosRef.current = fetchedVideos;
-    imagesRef.current = fetchedImages;
-
-    setVideos(fetchedVideos);
-    setImages(fetchedImages);
-    setCurrentVideoIndex(0);
-    setCurrentImageIndex(0);
-    fadeAnim.setValue(1);
-
-    if (fetchedVideos.length > 0) {
-      setMode("video");
-    } else if (fetchedImages.length > 0) {
-      setMode("image");
-    } else {
-      setMode("empty");
-    }
-  }, [fetchConfig, loadPlaylist, fadeAnim]);
-
-  // Mount + resume from background
+  /*
+  ─────────────────────────────────────────────────────────────────────────
+  LOAD CONFIGURATION ONCE
+  ─────────────────────────────────────────────────────────────────────────
+  */
   useEffect(() => {
-    isMounted.current = true;
-    initialize();
-
-    const subscription = AppState.addEventListener(
-      "change",
-      (nextState: AppStateStatus) => {
-        if (
-          appStateRef.current.match(/inactive|background/) &&
-          nextState === "active"
-        ) {
-          initialize();
-        }
-        appStateRef.current = nextState;
-      },
-    );
-
-    return () => {
-      isMounted.current = false;
-      subscription.remove();
-    };
-  }, [initialize]);
-
-  // Load video into player — uses localUri
-  useEffect(() => {
-    if (mode !== "video" || videosRef.current.length === 0) return;
-
-    const localUri = videosRef.current[currentVideoIndex]?.localUri;
-    if (!localUri) return;
-
-    const load = async () => {
+    const loadConfig = async () => {
       try {
-        player.loop =
-          videosRef.current.length === 1 && imagesRef.current.length === 0;
-        await player.replaceAsync(localUri);
-        player.play();
-      } catch (err) {
-        console.error("Failed to load video:", err);
+        const response = await fetch(config);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(`Config request failed: ${response.status}`);
+        }
+
+        setDisplayDuration(data.config?.image_display_duration ?? 5000);
+
+        setFadeDuration(data.config?.fade_duration ?? 400);
+      } catch (error) {
+        console.warn("[CONFIG] Using default playback settings:", error);
       }
     };
 
-    load();
-  }, [currentVideoIndex, mode]);
+    loadConfig();
+  }, []);
 
-  // Advance to next video on end
+  /*
+   ─────────────────────────────────────────────────────────────────────────
+   LOAD ORIENTATION
+   ─────────────────────────────────────────────────────────────────────────
+   */
   useEffect(() => {
-    if (mode !== "video") return;
+    const loadOrientation = async () => {
+      // Import only what we actually need here.
+      const AsyncStorage =
+        require("@react-native-async-storage/async-storage").default;
 
-    if (videosRef.current.length === 1 && imagesRef.current.length === 0) {
-      return; // Single looping video — listener not needed
+      const saved = await AsyncStorage.getItem("orientation");
+
+      if (saved === "Portrait" || saved === "Landscape") {
+        setOrientation(saved);
+      }
+    };
+
+    loadOrientation();
+  }, []);
+
+  /*
+   ─────────────────────────────────────────────────────────────────────────
+   LOAD PREPARED PLAYLIST
+   ─────────────────────────────────────────────────────────────────────────
+   */
+
+  useEffect(() => {
+    const loadPlaylist = async () => {
+      try {
+        const items = await loadPreparedPlaylist();
+
+        if (items.length === 0) {
+          console.error("[PLAYER] No prepared media found");
+
+          setMode("empty");
+          return;
+        }
+
+        console.log(`[PLAYER] Loaded ${items.length} prepared media item(s)`);
+
+        playlistRef.current = items;
+        setPlaylist(items);
+        currentIndexRef.current = 0;
+        setCurrentIndex(0);
+
+        const firstItem = items[0];
+
+        setMode(firstItem.type);
+      } catch (error) {
+        console.error("[PLAYER] Failed to load local playlist:", error);
+
+        setMode("empty");
+      }
+    };
+
+    loadPlaylist();
+  }, []);
+
+  /*
+   ─────────────────────────────────────────────────────────────────────────
+    PLAY CURRENT VIDEO
+   ─────────────────────────────────────────────────────────────────────────
+   */
+  useEffect(() => {
+    if (mode !== "video") {
+      return;
     }
 
-    const subscription = player.addListener("playToEnd", () => {
-      if (!isMounted.current) return;
+    const item = playlistRef.current[currentIndexRef.current];
 
-      const nextIndex = currentVideoIndex + 1;
-      if (nextIndex < videosRef.current.length) {
-        setCurrentVideoIndex(nextIndex);
-      } else {
-        setCurrentVideoIndex(0);
-        setMode(imagesRef.current.length > 0 ? "image" : "video");
+    if (!item || !item.localUri) {
+      return;
+    }
+
+    const play = async () => {
+      try {
+        console.log(`[PLAYER] Playing: ${item.key}`);
+
+        player.loop = false;
+
+        await player.replaceAsync(item.localUri);
+
+        player.play();
+      } catch (error) {
+        console.error("[PLAYER] Failed to play video:", item.key, error);
       }
+    };
+
+    play();
+  }, [mode, currentIndex, player]);
+
+  /*
+   ─────────────────────────────────────────────────────────────────────────
+    MOVE TO NEXT VIDEO ITEM WHEN VIDEO FINISHES
+   ─────────────────────────────────────────────────────────────────────────
+   */
+  useEffect(() => {
+    const subscription = player.addListener("playToEnd", () => {
+      const items = playlistRef.current;
+
+      if (items.length === 0) {
+        return;
+      }
+
+      const nextIndex = (currentIndexRef.current + 1) % items.length;
+
+      currentIndexRef.current = nextIndex;
+
+      setCurrentIndex(nextIndex);
+      setMode(items[nextIndex].type);
     });
 
     return () => subscription.remove();
-  }, [player, currentVideoIndex, mode]);
+  }, [player]);
 
-  // Image cycling
+  /*
+   ─────────────────────────────────────────────────────────────────────────
+    IMAGE PLAYBACK
+   ─────────────────────────────────────────────────────────────────────────
+   */
   useEffect(() => {
-    if (mode !== "image" || imagesRef.current.length === 0) return;
+    if (mode !== "image") {
+      return;
+    }
 
-    if (imagesRef.current.length === 1 && videosRef.current.length === 0) {
-      fadeAnim.setValue(1);
+    const item = playlistRef.current[currentIndexRef.current];
+
+    if (!item) {
       return;
     }
 
@@ -238,48 +199,32 @@ export const PlaylistComponent: React.FC = () => {
         easing: Easing.linear,
         useNativeDriver: true,
       }).start(() => {
-        if (!isMounted.current) return;
+        const items = playlistRef.current;
 
-        const nextIndex = currentImageIndex + 1;
-        if (nextIndex >= imagesRef.current.length) {
-          setCurrentImageIndex(0);
-          setMode(videosRef.current.length > 0 ? "video" : "image");
-        } else {
-          setCurrentImageIndex(nextIndex);
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: fadeDuration,
-            easing: Easing.linear,
-            useNativeDriver: true,
-          }).start();
+        if (items.length === 0) {
+          return;
         }
+
+        const nextIndex = (currentIndexRef.current + 1) % items.length;
+
+        currentIndexRef.current = nextIndex;
+
+        setCurrentIndex(nextIndex);
+        setMode(items[nextIndex].type);
+
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: fadeDuration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }).start();
       });
     }, displayDuration);
 
     return () => clearTimeout(timer);
-  }, [mode, currentImageIndex, displayDuration, fadeDuration]);
-
-  // Periodic version check — fetchPlaylist handles etag internally
-  useEffect(() => {
-    console.log(
-      `[VERSION CHECK] Interval configured to ${versionCheckIntervalMs}ms`,
-    );
-
-    const interval = setInterval(() => {
-      if (!isMounted.current) return;
-
-      console.log("[VERSION CHECK] Periodic refresh — checking for updates...");
-
-      initialize();
-    }, versionCheckIntervalMs);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [versionCheckIntervalMs, initialize]);
+  }, [mode, currentIndex, displayDuration, fadeDuration, fadeAnim]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
-
   const renderMedia = () => {
     if (mode === "loading") {
       return <Text style={styles.statusText}>Loading media...</Text>;
@@ -287,6 +232,12 @@ export const PlaylistComponent: React.FC = () => {
 
     if (mode === "empty") {
       return <Text style={styles.statusText}>No media available.</Text>;
+    }
+
+    const currentItem = playlist[currentIndex];
+
+    if (!currentItem) {
+      return null;
     }
 
     if (mode === "video") {
@@ -300,22 +251,25 @@ export const PlaylistComponent: React.FC = () => {
       );
     }
 
-    if (mode === "image") {
-      const localUri = images[currentImageIndex]?.localUri;
-      return (
-        <Animated.View style={[styles.media, { opacity: fadeAnim }]}>
-          <Image
-            source={{ uri: localUri }}
-            style={styles.media}
-            contentFit="contain"
-            cachePolicy="memory"
-            recyclingKey={`image-${currentImageIndex}`}
-          />
-        </Animated.View>
-      );
-    }
-
-    return null;
+    return (
+      <Animated.View
+        style={[
+          styles.media,
+          {
+            opacity: fadeAnim,
+          },
+        ]}
+      >
+        <Image
+          source={{
+            uri: currentItem.localUri,
+          }}
+          style={styles.media}
+          contentFit="contain"
+          cachePolicy="memory"
+        />
+      </Animated.View>
+    );
   };
 
   const cardStyle =

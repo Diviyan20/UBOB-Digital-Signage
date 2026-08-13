@@ -1,10 +1,5 @@
 import { api } from "@/components/api/client";
-import {
-  fetchPlaylist,
-  getSignageVersion,
-  PlaylistItems,
-  VideoItem,
-} from "@/services/MediaService";
+import { getSignageVersion, VideoItem } from "@/services/MediaService";
 import { fetchPromotions, MediaItem } from "@/services/PromotionService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -13,7 +8,6 @@ export type SchedulerPriority = 1 | 2 | 3 | 4;
 export interface SchedulerResult {
   isOnline: boolean;
   promotions: MediaItem[];
-  playlist: PlaylistItems[];
   signageVideos: VideoItem[];
   lastUpdated: number | null;
 }
@@ -30,7 +24,6 @@ class ApiScheduler {
   private state: SchedulerResult = {
     isOnline: true,
     promotions: [],
-    playlist: [],
     signageVideos: [],
     lastUpdated: null,
   };
@@ -48,7 +41,6 @@ class ApiScheduler {
   // Intervals
   private readonly HEARTBEAT_INTERVAL = 120_000; // 2 min
   private readonly PROMOTION_INTERVAL = 30 * 60_000; // 30 min
-  private readonly PLAYLIST_INTERVAL = 30 * 60_000; // 30 min
   private readonly SIGNAGE_VERSION_INTERVAL = 30 * 60_000; // 30 min
 
   // Called between tasks to add delay for each API call
@@ -66,8 +58,8 @@ class ApiScheduler {
     console.log("[SCHEDULER] Starting....");
     this.runHeartbeat(); // run immediately on start
     this.enqueuePromotion(); // run immediately on start
-    this.enqueuePlaylist();
     this.enqueueSignageVersion();
+
     this.startTimers();
   }
 
@@ -94,11 +86,6 @@ class ApiScheduler {
       console.log("[SCHEDULER] Promotion timer fired → marking due");
       this.enqueuePromotion();
     }, this.PROMOTION_INTERVAL);
-
-    this.playlistTimer = setInterval(() => {
-      console.log("[SCHEDULER] Playlist timer fired → marking due");
-      this.enqueuePlaylist();
-    }, this.PLAYLIST_INTERVAL);
 
     this.signageVersionTimer = setInterval(() => {
       console.log("[SCHEDULER] Signage version timer fired → marking due");
@@ -133,7 +120,6 @@ class ApiScheduler {
       if (wasOffline) {
         console.log("[SCHEDULER] Back online — re-enqueueing all tasks");
         this.enqueuePromotion();
-        this.enqueuePlaylist();
         this.enqueueSignageVersion();
       }
 
@@ -158,19 +144,6 @@ class ApiScheduler {
         console.log(
           `[SCHEDULER][P2] Promotions done — ${promotions.length} items`,
         );
-      },
-    });
-  }
-
-  private enqueuePlaylist() {
-    this.enqueue({
-      priority: 3,
-      name: "Playlist",
-      run: async () => {
-        console.log("[SCHEDULER][P3] Running playlist fetch...");
-        const playlist = await fetchPlaylist();
-        this.setState({ playlist });
-        console.log(`[SCHEDULER][P3] Playlist done — ${playlist.length} items`);
       },
     });
   }
