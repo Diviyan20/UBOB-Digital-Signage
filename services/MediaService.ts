@@ -96,7 +96,7 @@ const MEDIA_RETRY_BLOCK_UNTIL_KEY = "media_retry_block_until";
 
 const MAX_MEDIA_RETRIES = 5;
 
-const MEDIA_RETRY_COOLDOWN = 30 * 1000; // 5 minutes
+const MEDIA_RETRY_COOLDOWN = 5 * 60 * 1000; // 5 minutes
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Download state
