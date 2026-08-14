@@ -1,53 +1,74 @@
+import { Alert, Animated, Easing, Text, View } from "react-native";
+
 import {
   deletePlaylistFiles,
-  loadPreparedPlaylist,
+  getMediaDownloadState,
+  loadAvailablePlaylist,
   PlaylistItems,
   refreshPreparedPlaylist,
+  registerMediaRetryFailure
 } from "@/services/MediaService";
+
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
+import { router } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Text, View } from "react-native";
 import { config } from "../api/client";
 
 type PlaybackMode = "loading" | "video" | "image" | "empty";
+
 type OrientationType = "Landscape" | "Portrait";
 
-// Fallback value in case database value fails (5 hours)
+// Change this ONE constant if your login screen
+// uses a different Expo Router path.
+const LOGIN_ROUTE = "/";
+
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
 
 export const PlaylistComponent: React.FC = () => {
   const [playlist, setPlaylist] = useState<PlaylistItems[]>([]);
+
   const [mode, setMode] = useState<PlaybackMode>("loading");
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const [displayDuration, setDisplayDuration] = useState(5000);
+
   const [fadeDuration, setFadeDuration] = useState(400);
+
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
+
   const [versionCheckInterval, setVersionCheckInterval] = useState(
     DEFAULT_VERSION_CHECK_INTERVAL_MS,
   );
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
+
   const currentIndexRef = useRef(0);
+
   const playlistRef = useRef<PlaylistItems[]>([]);
+
   const pendingDeleteRef = useRef<string[]>([]);
+
+  const refreshRunningRef = useRef(false);
+
+  const downloadErrorShownRef = useRef(false);
 
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
 
-  /*
-  ─────────────────────────────────────────────────────────────────────────
-  LOAD CONFIGURATION ONCE
-  ─────────────────────────────────────────────────────────────────────────
-  */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Load configuration
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const loadConfig = async () => {
       try {
         const response = await fetch(config);
+
         const data = await response.json();
 
         if (!response.ok) {
@@ -62,6 +83,7 @@ export const PlaylistComponent: React.FC = () => {
 
         if (typeof versionCheck === "number" && versionCheck > 0) {
           setVersionCheckInterval(versionCheck);
+
           console.log(`[CONFIG] version_check = ${versionCheck}ms`);
         } else {
           console.warn(
@@ -83,17 +105,12 @@ export const PlaylistComponent: React.FC = () => {
     loadConfig();
   }, []);
 
-  /*
-   ─────────────────────────────────────────────────────────────────────────
-   LOAD ORIENTATION
-   ─────────────────────────────────────────────────────────────────────────
-   */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Load orientation
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const loadOrientation = async () => {
-      // Import only what we actually need here.
-      const AsyncStorage =
-        require("@react-native-async-storage/async-storage").default;
-
       const saved = await AsyncStorage.getItem("orientation");
 
       if (saved === "Portrait" || saved === "Landscape") {
@@ -104,34 +121,34 @@ export const PlaylistComponent: React.FC = () => {
     loadOrientation();
   }, []);
 
-  /*
-   ─────────────────────────────────────────────────────────────────────────
-   LOAD PREPARED PLAYLIST
-   ─────────────────────────────────────────────────────────────────────────
-   */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Load whatever media is already available
+  // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const loadPlaylist = async () => {
       try {
-        const items = await loadPreparedPlaylist();
+        const items = await loadAvailablePlaylist();
 
         if (items.length === 0) {
-          console.error("[PLAYER] No prepared media found");
+          console.error("[PLAYER] No media found");
 
           setMode("empty");
+
           return;
         }
 
-        console.log(`[PLAYER] Loaded ${items.length} prepared media item(s)`);
+        console.log(`[PLAYER] Loaded ${items.length} available media item(s)`);
 
         playlistRef.current = items;
+
         setPlaylist(items);
+
         currentIndexRef.current = 0;
+
         setCurrentIndex(0);
 
-        const firstItem = items[0];
-
-        setMode(firstItem.type);
+        setMode(items[0].type);
       } catch (error) {
         console.error("[PLAYER] Failed to load local playlist:", error);
 
@@ -142,11 +159,110 @@ export const PlaylistComponent: React.FC = () => {
     loadPlaylist();
   }, []);
 
-  /*
-   ─────────────────────────────────────────────────────────────────────────
-    PLAY CURRENT VIDEO
-   ─────────────────────────────────────────────────────────────────────────
-   */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Watch background downloads
+  // ─────────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const timer = setInterval(async () => {
+      try {
+        const state = await getMediaDownloadState();
+
+        // Background download failed.
+        if (state.status === "error" && !downloadErrorShownRef.current) {
+          downloadErrorShownRef.current = true;
+
+          const retry = await registerMediaRetryFailure();
+
+          const showRetry = !retry.blocked;
+
+          if (retry.blocked) {
+            const minutes = Math.max(
+              1,
+              Math.ceil((retry.blockedUntil - Date.now()) / 60000),
+            );
+
+            Alert.alert(
+              "Network Connectivity Issues",
+              `Please check your internet connection and try again in ${minutes} minutes.`,
+              [
+                {
+                  text: "OK",
+                },
+              ],
+            );
+          } else {
+            Alert.alert(
+              "Network Connectivity Issues",
+              "Network connectivity issues, please try again.",
+              [
+                {
+                  text: "Retry",
+                  onPress: () => {
+                    router.replace(LOGIN_ROUTE);
+                  },
+                },
+              ],
+            );
+          }
+
+          return;
+        }
+
+        const available = await loadAvailablePlaylist();
+
+        // Nothing new.
+        if (available.length === playlistRef.current.length) {
+          return;
+        }
+
+        if (available.length === 0) {
+          return;
+        }
+
+        console.log(
+          `[PLAYER] New media available: ${available.length} item(s)`,
+        );
+
+        playlistRef.current = available;
+
+        setPlaylist(available);
+
+        // Do NOT reset currentIndex.
+        // Do NOT replace the current video.
+        //
+        // If one video was playing and a second
+        // arrives, the existing video continues.
+      } catch (error) {
+        console.warn("[PLAYER] Failed to check download state:", error);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Adjust looping behavior
+  //
+  // One available video:
+  //     loop = true
+  //
+  // More than one:
+  //     loop = false
+  // ─────────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (mode !== "video") {
+      return;
+    }
+
+    player.loop = playlistRef.current.length === 1;
+  }, [mode, playlist.length, player]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Play current video
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (mode !== "video") {
       return;
@@ -162,7 +278,7 @@ export const PlaylistComponent: React.FC = () => {
       try {
         console.log(`[PLAYER] Playing: ${item.key}`);
 
-        player.loop = false;
+        player.loop = playlistRef.current.length === 1;
 
         await player.replaceAsync(item.localUri);
 
@@ -175,16 +291,22 @@ export const PlaylistComponent: React.FC = () => {
     play();
   }, [mode, currentIndex, player]);
 
-  /*
-   ─────────────────────────────────────────────────────────────────────────
-    MOVE TO NEXT VIDEO ITEM WHEN VIDEO FINISHES
-   ─────────────────────────────────────────────────────────────────────────
-   */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Advance video
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
-    const subscription = player.addListener("playToEnd", async () => {
+    const subscription = player.addListener("playToEnd", () => {
       const items = playlistRef.current;
 
       if (items.length === 0) {
+        return;
+      }
+
+      // One video should be handled by
+      // native loop, so this is mainly for
+      // playlists containing multiple items.
+      if (items.length === 1) {
         return;
       }
 
@@ -193,18 +315,44 @@ export const PlaylistComponent: React.FC = () => {
       currentIndexRef.current = nextIndex;
 
       setCurrentIndex(nextIndex);
+
       setMode(items[nextIndex].type);
 
-      await cleanupPendingFiles(items[nextIndex].localUri);
+      void cleanupPendingFiles(items[nextIndex].localUri);
     });
 
     return () => subscription.remove();
   }, [player]);
 
-  /*
-  CLEAN UP PLAYLIST FILES
-  */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Clean obsolete files
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const cleanupPendingFiles = async (activeLocalUri?: string) => {
+    if (pendingDeleteRef.current.length === 0) {
+      return;
+    }
+
+    const files = pendingDeleteRef.current;
+
+    await deletePlaylistFiles(files, activeLocalUri);
+
+    // Keep only files that could not be deleted
+    // because they were still active.
+    pendingDeleteRef.current = files.filter((file) => file === activeLocalUri);
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Refresh playlist from server
+  // ─────────────────────────────────────────────────────────────────────────
+
   const refreshPlaylist = async () => {
+    if (refreshRunningRef.current) {
+      return;
+    }
+
+    refreshRunningRef.current = true;
+
     try {
       console.log("[REFRESH] Checking playlist version...");
 
@@ -212,6 +360,7 @@ export const PlaylistComponent: React.FC = () => {
 
       if (!result.changed) {
         console.log("[REFRESH] Playlist unchanged");
+
         return;
       }
 
@@ -225,21 +374,25 @@ export const PlaylistComponent: React.FC = () => {
 
       const currentKey = currentItem?.key;
 
-      // Update refs first
       playlistRef.current = result.playlist;
 
-      // Try to keep the currently playing item
+      setPlaylist(result.playlist);
+
       const newIndex = result.playlist.findIndex(
         (item) => item.key === currentKey,
       );
 
       if (newIndex >= 0) {
         currentIndexRef.current = newIndex;
+
         setCurrentIndex(newIndex);
+
+        // Current media still exists.
+        // Let it finish naturally.
       } else {
-        // Current item was removed.
-        // Start from the first item in the new playlist.
+        // Current media was removed.
         currentIndexRef.current = 0;
+
         setCurrentIndex(0);
 
         if (result.playlist.length > 0) {
@@ -249,49 +402,35 @@ export const PlaylistComponent: React.FC = () => {
         }
       }
 
-      setPlaylist(result.playlist);
-
-      // Delete obsolete files but never delete the file currently being played
-      await deletePlaylistFiles(result.oldFilesToDelete, currentItem?.localUri);
+      await cleanupPendingFiles(currentItem?.localUri);
     } catch (error) {
       console.warn(
         "[REFRESH] Playlist refresh failed. Keeping current playlist.",
         error,
       );
+    } finally {
+      refreshRunningRef.current = false;
     }
   };
 
-  const cleanupPendingFiles = async (activeLocalUri?: string) => {
-    if (pendingDeleteRef.current.length === 0) {
-      return;
-    }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Version check timer
+  // ─────────────────────────────────────────────────────────────────────────
 
-    const files = pendingDeleteRef.current;
-    pendingDeleteRef.current = [];
-
-    await deletePlaylistFiles(files, activeLocalUri);
-  };
-
-  /*
-  VERSION CHECK TIMER
-  */
   useEffect(() => {
     console.log(`[VERSION CHECK] Running every ${versionCheckInterval}ms`);
 
     const interval = setInterval(() => {
-      refreshPlaylist();
+      void refreshPlaylist();
     }, versionCheckInterval);
 
-    return () => {
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [versionCheckInterval]);
 
-  /*
-   ─────────────────────────────────────────────────────────────────────────
-    IMAGE PLAYBACK
-   ─────────────────────────────────────────────────────────────────────────
-   */
+  // ─────────────────────────────────────────────────────────────────────────
+  // Image playback
+  // ─────────────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (mode !== "image") {
       return;
@@ -323,6 +462,7 @@ export const PlaylistComponent: React.FC = () => {
         currentIndexRef.current = nextIndex;
 
         setCurrentIndex(nextIndex);
+
         setMode(items[nextIndex].type);
 
         Animated.timing(fadeAnim, {
@@ -337,7 +477,10 @@ export const PlaylistComponent: React.FC = () => {
     return () => clearTimeout(timer);
   }, [mode, currentIndex, displayDuration, fadeDuration, fadeAnim]);
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+
   const renderMedia = () => {
     if (mode === "loading") {
       return <Text style={styles.statusText}>Loading media...</Text>;

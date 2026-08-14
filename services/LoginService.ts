@@ -3,7 +3,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MediaDownloadProgress, prepareMediaPlaylist } from "./MediaService";
 
 export type ScreenType = "signage" | "media";
+
 export type OrientationType = "Landscape" | "Portrait";
+
 export type TierType = "Tier A" | "Tier B";
 
 export type LoginStatus =
@@ -27,31 +29,62 @@ export interface LoginResult {
   preloadImages?: any[];
   status?: LoginStatus;
   tier?: TierType;
+  errorType?: "invalid_outlet" | "network" | "generic";
   error?: string;
   params?: Record<string, string>;
 }
 
-/*
- * Validate whether outlet ID exists in the database
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Validate outlet
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const validateOutlet = async (outletId: string) => {
-  const response = await fetch(api.validateOutlet, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      outlet_id: outletId,
-    }),
-  });
+  try {
+    const response = await fetch(api.validateOutlet, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        outlet_id: outletId,
+      }),
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (!response.ok || !data.is_valid) {
-    throw new Error("Invalid outlet");
+    if (response.status === 404) {
+      const error: any = new Error("Invalid Outlet Code");
+
+      error.code = "INVALID_OUTLET";
+
+      throw error;
+    }
+
+    if (!response.ok) {
+      throw new Error("Network connectivity issues, please try again");
+    }
+
+    if (!data.is_valid) {
+      const error: any = new Error("Invalid Outlet Code");
+
+      error.code = "INVALID_OUTLET";
+
+      throw error;
+    }
+
+    return data;
+  } catch (error: any) {
+    if (error?.code === "INVALID_OUTLET") {
+      throw error;
+    }
+
+    throw new Error("Network connectivity issues, please try again");
   }
-  return data;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sync outlet session
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const syncOutletSession = async (outletData: any) => {
   const values = await AsyncStorage.multiGet([
@@ -91,9 +124,10 @@ export const syncOutletSession = async (outletData: any) => {
   return true;
 };
 
-/*
- * Save outlet information in memory (Used for easier login on next boot)
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Save outlet session
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const saveOutletSession = async (
   outletId: string,
   outletName: string,
@@ -120,9 +154,10 @@ export const saveOutletSession = async (
   ]);
 };
 
-/*
- * Fetches outlet images and their names to display in media screen
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Fetch outlet images
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const fetchOutletImages = async (outletId: string) => {
   const response = await fetch(api.outletImages, {
     method: "POST",
@@ -135,8 +170,13 @@ export const fetchOutletImages = async (outletId: string) => {
   });
 
   const data = await response.json();
+
   return data.media || [];
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGIN
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const loginOutlet = async (
   payload: LoginPayload,
@@ -145,32 +185,44 @@ export const loginOutlet = async (
   try {
     const { outletId, screenType, batchNumber, orientation } = payload;
 
+    console.log(`[LOGIN] Validating outlet: ${outletId}`);
+
     const outletData = await validateOutlet(outletId);
 
     await syncOutletSession(outletData);
 
     const dbTier = outletData.tier as TierType;
 
-    /*
-    ───────────────────────────────────────────────────────────────────────
-      MEDIA PLAYER
-    ───────────────────────────────────────────────────────────────────────
-    */
+    // ─────────────────────────────────────────────────────────────────────
+    // MEDIA PLAYER
+    // ─────────────────────────────────────────────────────────────────────
 
     if (screenType === "media") {
       console.log("[LOGIN] Media Player selected");
-      console.log("[LOGIN] Preparing all media before navigation...");
 
-      await prepareMediaPlaylist(
-        outletId,
-        batchNumber,
-        dbTier,
-        orientation,
-        onMediaProgress,
-      );
+      try {
+        await prepareMediaPlaylist(
+          outletId,
+          batchNumber,
+          dbTier,
+          orientation,
+          onMediaProgress,
+        );
+      } catch (error: any) {
+        console.error("[LOGIN] Initial media download failed:", error);
 
-      // Only save the media-player session AFTER
-      // the entire playlist has been downloaded successfully.
+        return {
+          success: false,
+          status: "error",
+          errorType: "network",
+          error: "Network connectivity issues, please try again",
+        };
+      }
+
+      // Save session as soon as the first media is ready.
+      //
+      // The remaining files may still be
+      // downloading in the background.
       await saveOutletSession(
         outletId,
         outletData.outlet_name,
@@ -181,7 +233,7 @@ export const loginOutlet = async (
         orientation,
       );
 
-      console.log("[LOGIN] Media preparation successful. Ready for player.");
+      console.log("[LOGIN] First media ready. Opening player.");
 
       return {
         success: true,
@@ -191,11 +243,10 @@ export const loginOutlet = async (
       };
     }
 
-    /*
-    ───────────────────────────────────────────────────────────────────────
-    SIGNAGE SCREEN
-    ───────────────────────────────────────────────────────────────────────
-    */
+    // ─────────────────────────────────────────────────────────────────────
+    // SIGNAGE SCREEN
+    // ─────────────────────────────────────────────────────────────────────
+
     await saveOutletSession(
       outletId,
       outletData.outlet_name,
@@ -207,6 +258,7 @@ export const loginOutlet = async (
     );
 
     const promotions = await fetchOutletImages(outletId);
+
     if (promotions.length === 0) {
       return {
         success: true,
@@ -222,17 +274,30 @@ export const loginOutlet = async (
       status: "preloading_images",
     };
   } catch (error: any) {
+    console.error("[LOGIN] Login failed:", error);
+
+    if (error?.code === "INVALID_OUTLET") {
+      return {
+        success: false,
+        status: "error",
+        errorType: "invalid_outlet",
+        error: "Invalid Outlet Code",
+      };
+    }
+
     return {
       success: false,
       status: "error",
-      error: error?.message || "Login failed",
+      errorType: "network",
+      error: "Network connectivity issues, please try again",
     };
   }
 };
 
-/*
- * Check if all required credentials exist in AsyncStorage for offline login
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Offline credentials
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const checkOfflineCredentials = async (): Promise<boolean> => {
   try {
     const values = await AsyncStorage.multiGet([
@@ -250,24 +315,35 @@ export const checkOfflineCredentials = async (): Promise<boolean> => {
       ? JSON.parse(mapped.saved_outlet)
       : null;
 
-    if (!savedOutlet?.id || !savedOutlet?.name) return false;
-    if (!mapped.region) return false;
+    if (!savedOutlet?.id || !savedOutlet?.name) {
+      return false;
+    }
+
+    if (!mapped.region) {
+      return false;
+    }
 
     if (
       !mapped.screen_type ||
       !["signage", "media"].includes(mapped.screen_type)
-    )
+    ) {
       return false;
+    }
 
-    if (!mapped.batch_number) return false;
-    if (!mapped.tier || !["Tier A", "Tier B"].includes(mapped.tier))
+    if (!mapped.batch_number) {
       return false;
+    }
+
+    if (!mapped.tier || !["Tier A", "Tier B"].includes(mapped.tier)) {
+      return false;
+    }
 
     if (
       !mapped.orientation ||
       !["Landscape", "Portrait"].includes(mapped.orientation)
-    )
+    ) {
       return false;
+    }
 
     return true;
   } catch {
@@ -275,14 +351,20 @@ export const checkOfflineCredentials = async (): Promise<boolean> => {
   }
 };
 
-/*
- * Login using cached credentials - bypasses validate_outlet endpoint
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Offline login
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const offlineLogin = async (): Promise<LoginResult> => {
   const session = await loadOutletSession();
 
   if (!session) {
-    return { success: false, status: "error", error: "No cached session" };
+    return {
+      success: false,
+      status: "error",
+      errorType: "generic",
+      error: "No cached session",
+    };
   }
 
   if (session.screenType === "media") {
@@ -294,6 +376,7 @@ export const offlineLogin = async (): Promise<LoginResult> => {
       return {
         success: false,
         status: "error",
+        errorType: "network",
         error: "Media is not fully downloaded",
       };
     }
@@ -321,9 +404,10 @@ export const offlineLogin = async (): Promise<LoginResult> => {
   };
 };
 
-/*
- * Load saved outlet session from AsyncStorage
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// Load outlet session
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const loadOutletSession = async () => {
   try {
     const values = await AsyncStorage.multiGet([
@@ -353,6 +437,7 @@ export const loadOutletSession = async () => {
     };
   } catch (error) {
     console.error("Failed to load outlet session:", error);
+
     return null;
   }
 };
