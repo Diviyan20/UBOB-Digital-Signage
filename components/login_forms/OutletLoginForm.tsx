@@ -24,17 +24,8 @@ import {
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useWindowDimensions } from "react-native";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
-
 type ScreenType = "signage" | "media";
-
 type OrientationType = "Landscape" | "Portrait";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Toggle Button
-// ─────────────────────────────────────────────────────────────────────────────
 
 interface ToggleButtonProps {
   label: string;
@@ -81,36 +72,28 @@ const ToggleButton: React.FC<ToggleButtonProps> = ({
   );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Login Form
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const OutletLoginForm: React.FC = () => {
   const { width, height } = useWindowDimensions();
 
   const isPortrait = height > width;
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Form state
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const [outlet_id, setOutletId] = useState("");
-
   const [screenType, setScreenType] = useState<ScreenType>("signage");
-
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
-
   const [batchNumber, setBatchNumber] = useState(1);
-
   const [tier, setTier] = useState<TierType>("Tier A");
 
   const [focusedButton, setFocusedButton] = useState<string | null>(null);
 
   const [inputFocused, setInputFocused] = useState(false);
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Login state
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const [loading, setLoading] = useState(false);
 
@@ -124,9 +107,9 @@ export const OutletLoginForm: React.FC = () => {
     | undefined
   >(undefined);
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Download progress
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const [downloadProgress, setDownloadProgress] = useState({
     loaded: 0,
@@ -136,28 +119,29 @@ export const OutletLoginForm: React.FC = () => {
 
   const [imagesToPreload, setImagesToPreload] = useState<any[]>([]);
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Retry state
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const [retryCount, setRetryCount] = useState(0);
 
   const [retryBlockedUntil, setRetryBlockedUntil] = useState(0);
+
   const [remainingSeconds, setRemainingSeconds] = useState(0);
 
   const loginIdRef = useRef("");
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Initial setup
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     ScreenOrientation.unlockAsync();
   }, []);
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Load saved session
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const hydrateSavedSession = async () => {
@@ -183,9 +167,9 @@ export const OutletLoginForm: React.FC = () => {
     hydrateSavedSession();
   }, []);
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Load retry state
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const loadRetryState = async () => {
@@ -199,9 +183,9 @@ export const OutletLoginForm: React.FC = () => {
     loadRetryState();
   }, []);
 
-  // ───────────────────────────────────────────────────────────────────────
-  // Cooldown timer
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Cooldown countdown
+  // ───────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!retryBlockedUntil) {
@@ -218,13 +202,12 @@ export const OutletLoginForm: React.FC = () => {
         setRetryCount(0);
         return;
       }
+
       setRemainingSeconds(Math.ceil(remainingMs / 1000));
     };
 
-    // Run immediately
     updateCountdown();
 
-    // Update every second
     const timer = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(timer);
@@ -232,9 +215,32 @@ export const OutletLoginForm: React.FC = () => {
 
   const isRetryBlocked = remainingSeconds > 0;
 
-  // ───────────────────────────────────────────────────────────────────────
+  // Format remaining cooldown:
+  // 299 seconds → 04:59
+  // 65 seconds  → 01:05
+  // 5 seconds   → 00:05
+  const formatCooldown = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+
+    const remaining = seconds % 60;
+
+    return `${String(minutes).padStart(2, "0")}:${String(remaining).padStart(
+      2,
+      "0",
+    )}`;
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Login button text
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const loginButtonText = isRetryBlocked
+    ? `Retry in ${formatCooldown(remainingSeconds)}`
+    : "Log In";
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Outlet ID selection
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const handleOutletIdSelected = async (id: string) => {
     setOutletId(id);
@@ -250,9 +256,9 @@ export const OutletLoginForm: React.FC = () => {
     }
   };
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Reset login UI
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const resetLoginUI = () => {
     setLoading(false);
@@ -266,9 +272,39 @@ export const OutletLoginForm: React.FC = () => {
     });
   };
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Handle network failure
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const handleNetworkFailure = async () => {
+    const retry = await registerMediaRetryFailure();
+
+    setRetryCount(retry.retryCount);
+
+    setRetryBlockedUntil(retry.blockedUntil);
+
+    if (retry.blocked) {
+      Alert.alert(
+        "Network Connectivity Error",
+        "Network connectivity error. No tries left.",
+      );
+
+      return;
+    }
+
+    const triesLeft = Math.max(0, 5 - retry.retryCount);
+
+    Alert.alert(
+      "Network Connectivity Error",
+      `Network connectivity error. ${triesLeft} ${
+        triesLeft === 1 ? "try" : "tries"
+      } left.`,
+    );
+  };
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Login
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const handleLogin = async (id?: string) => {
     if (loading) {
@@ -289,7 +325,6 @@ export const OutletLoginForm: React.FC = () => {
 
     try {
       setLoading(true);
-
       setStatus("loading");
 
       const response = await loginOutlet(
@@ -315,14 +350,15 @@ export const OutletLoginForm: React.FC = () => {
         setTier(response.tier);
       }
 
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
       // Failed login
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
 
       if (!response.success) {
         resetLoginUI();
 
-        // Invalid outlet is NOT a network retry.
+        // Invalid outlet is NOT a retryable
+        // network problem.
         if (response.errorType === "invalid_outlet") {
           setErrorVisible(true);
 
@@ -331,37 +367,7 @@ export const OutletLoginForm: React.FC = () => {
 
         // Network failure.
         if (response.errorType === "network") {
-          const retry = await registerMediaRetryFailure();
-
-          setRetryCount(retry.retryCount);
-
-          setRetryBlockedUntil(retry.blockedUntil);
-
-          if (retry.blocked) {
-            const minutes = Math.max(
-              1,
-              Math.ceil((retry.blockedUntil - Date.now()) / 60000),
-            );
-
-            Alert.alert(
-              "Network Connectivity Issues",
-              `Please check your internet connection and try again in ${minutes} minutes.`,
-            );
-          } else {
-            Alert.alert(
-              "Network Connectivity Issues",
-              "Network connectivity issues, please try again.",
-              [
-                {
-                  text: "Retry",
-                  onPress: () => {
-                    void handleLogin();
-                  },
-                },
-              ],
-            );
-          }
-
+          await handleNetworkFailure();
           return;
         }
 
@@ -370,13 +376,11 @@ export const OutletLoginForm: React.FC = () => {
         return;
       }
 
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
       // Media Player
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
 
       if (response.route === "/screens/PlaylistScreen") {
-        // Successful login means at least
-        // one media item has been downloaded.
         resetLoginUI();
 
         router.replace({
@@ -392,9 +396,9 @@ export const OutletLoginForm: React.FC = () => {
         return;
       }
 
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
       // Signage image preloading
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
 
       if (response.preloadImages?.length) {
         setStatus("preloading_images");
@@ -404,9 +408,9 @@ export const OutletLoginForm: React.FC = () => {
         return;
       }
 
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
       // Generic route fallback
-      // ─────────────────────────────────────────────────────────────────
+      // ─────────────────────────────────────────────────────────────────────
 
       if (response.route) {
         setTimeout(() => {
@@ -425,42 +429,13 @@ export const OutletLoginForm: React.FC = () => {
 
       resetLoginUI();
 
-      const retry = await registerMediaRetryFailure();
-
-      setRetryCount(retry.retryCount);
-
-      setRetryBlockedUntil(retry.blockedUntil);
-
-      if (retry.blocked) {
-        const minutes = Math.max(
-          1,
-          Math.ceil((retry.blockedUntil - Date.now()) / 60000),
-        );
-
-        Alert.alert(
-          "Network Connectivity Issues",
-          `Please check your internet connection and try again in ${minutes} minutes.`,
-        );
-      } else {
-        Alert.alert(
-          "Network Connectivity Issues",
-          "Network connectivity issues, please try again.",
-          [
-            {
-              text: "Retry",
-              onPress: () => {
-                void handleLogin();
-              },
-            },
-          ],
-        );
-      }
+      await handleNetworkFailure();
     }
   };
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Signage images completed
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const handleImagesPreloaded = useCallback(() => {
     setStatus("success");
@@ -481,9 +456,9 @@ export const OutletLoginForm: React.FC = () => {
     console.warn("Image preloading error:", error);
   }, []);
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Overlay message
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   const getOverlayMessage = () => {
     switch (status) {
@@ -504,9 +479,9 @@ export const OutletLoginForm: React.FC = () => {
     }
   };
 
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
   // Render
-  // ───────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
 
   return (
     <View style={[styles.container, isPortrait && styles.containerPortrait]}>
@@ -610,9 +585,9 @@ export const OutletLoginForm: React.FC = () => {
           </>
         )}
 
-        {/* ──────────────────────────────────────────────────────────────── */}
+        {/* ────────────────────────────────────────────────────────────────── */}
         {/* Download progress */}
-        {/* ──────────────────────────────────────────────────────────────── */}
+        {/* ────────────────────────────────────────────────────────────────── */}
 
         {status === "downloading_media" && downloadProgress.total > 0 && (
           <View
@@ -677,9 +652,9 @@ export const OutletLoginForm: React.FC = () => {
           </View>
         )}
 
-        {/* ──────────────────────────────────────────────────────────────── */}
-        {/* Login button */}
-        {/* ──────────────────────────────────────────────────────────────── */}
+        {/* ────────────────────────────────────────────────────────────────── */}
+        {/* Login / Retry button */}
+        {/* ────────────────────────────────────────────────────────────────── */}
 
         <Pressable
           disabled={loading || isRetryBlocked}
@@ -695,34 +670,8 @@ export const OutletLoginForm: React.FC = () => {
             void handleLogin();
           }}
         >
-          <Text style={styles.loginButtonText}>Log In</Text>
+          <Text style={styles.loginButtonText}>{loginButtonText}</Text>
         </Pressable>
-
-        {isRetryBlocked && (
-          <Text
-            style={{
-              color: "#FF6B6B",
-              marginTop: 8,
-              textAlign: "center",
-            }}
-          >
-            Please check your internet connection and try again in{" "}
-            {Math.floor(remainingSeconds / 60)}:
-            {String(remainingSeconds % 60).padStart(2, "0")}
-          </Text>
-        )}
-
-        {retryCount > 0 && !isRetryBlocked && (
-          <Text
-            style={{
-              color: "#AAAAAA",
-              marginTop: 8,
-              textAlign: "center",
-            }}
-          >
-            Network retry {retryCount}/5
-          </Text>
-        )}
       </View>
 
       {/* Invalid outlet error */}
@@ -734,13 +683,13 @@ export const OutletLoginForm: React.FC = () => {
         />
       )}
 
-      {/* Only show this overlay when not displaying
-            the inline download progress. */}
+      {/* Login/loading overlay */}
       <LoggingInOverlayComponent
         visible={loading && status !== "downloading_media"}
         message={getOverlayMessage()}
       />
 
+      {/* Signage image preloader */}
       {imagesToPreload.length > 0 && status === "preloading_images" && (
         <ImagePreloader
           images={imagesToPreload}
