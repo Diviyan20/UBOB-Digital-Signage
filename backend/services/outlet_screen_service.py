@@ -2,6 +2,8 @@ from models.outlet_screens import (
     create_outlet_screen,
     delete_outlet_screen,
     get_all_outlet_screens,
+    get_media_player_screens,
+    get_media_player_version,
     get_outlet_screen,
     update_outlet_screen,
 )
@@ -31,3 +33,19 @@ def edit_outlet_screen(screen_id, fields):
 
 def remove_outlet_screen(screen_id):
     return delete_outlet_screen(screen_id)
+
+def fetch_media_player_screens(outlet_id, batch_number, tier, orientation):
+    return get_media_player_screens(
+        outlet_id,
+        batch_number,
+        tier,
+        orientation,
+    )
+
+def fetch_media_player_version(outlet_id, batch_number, tier, orientation):
+    return get_media_player_version(
+        outlet_id,
+        batch_number,
+        tier,
+        orientation,
+    )

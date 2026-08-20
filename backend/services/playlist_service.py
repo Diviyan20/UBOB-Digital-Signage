@@ -1,20 +1,11 @@
 import hashlib
-from urllib.parse import quote
 
 from models.active_outlets import get_outlet_info
 from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects, get_video_url
 
-CLOUDFRONT_DOMAIN = "d30au7cngoylsj.cloudfront.net"
-
 class PlaylistService:
     """
     Handles media playlist logic
-
-    Responsibilities:
-        - Find outlet information
-        - Determine outlet region
-        - Build S3 Folder path
-        - Fetch media from S3
     """
 
     # ======================
@@ -42,38 +33,32 @@ class PlaylistService:
     def normalize_region(self, region: str) -> str:
         """
         Remove any special characters from string
-
         Example: Kuala_Lumpur -> Kuala Lumpur
         """
         return region.strip().replace("_", " ")
 
     def get_playlist(self, outlet_id: str, batch_number: int, tier: str, orientation: str = "Landscape", filter_keys: list = None):
         """
-        Builds S3 path based on region, batch, tier, and orientation.
-        
-        filter_keys: optional list of S3 keys — when provided, only returns
-        those specific items. Used by the frontend diff sync to fetch only
-        new files rather than the full playlist.
+        Legacy S3-folder playlist endpoint.
 
-        Example: Selangor/Batch 2/Tier A/Landscape/
+        Keep it temporarily for any existing callers. New Media Player login
+          must not depend on this function.
         """
-        # Step 1: Get outlet region
+        
+        # Step 1: Get outlet region and build s3 folder path
         region = self.get_outlet_region(outlet_id)
         normalized_region = self.normalize_region(region)
-
-        # Step 2: Build S3 folder path
         prefix = f"{normalized_region}/Batch {batch_number}/{tier}/{orientation}/"
 
         print(f"[PLAYLIST PREFIX] {prefix}")
 
-        # Step 3: Fetch mixed media
+        # Step 2: Fetch mixed media
         media = get_s3_playlist_media(prefix)
         
         # Filter to only requested keys if provided
         if filter_keys:
-            filter_set = set(filter_keys)
-            media = [item for item in media if item.get("key") in filter_set]
-            print(f"[PLAYLIST] Filtered to {len(media)} items from filter_keys")
+            wanted = set(filter_keys)
+            media = [item for item in media if item.get("key") in wanted]
 
         return media
 
@@ -83,15 +68,12 @@ class PlaylistService:
     def get_signage_videos(self):
         """
         - Used for signage screen
-        - Always points to the Digital Signage folder
+        - Always points to the "Global/Signage/" folder
         """
-        prefix = "Digital Signage/"
-        return get_video_media(prefix)
+        return get_video_media("Global/Signage/")
 
     def has_signage_videos(self) -> bool:
-        prefix = "Digital Signage/"
-        objects = list_s3_objects(prefix)
-        return len(objects) > 0
+        return bool(list_s3_objects("Global/Signage/"))
 
     def _compute_version(self, prefix: str) -> dict:
         """
@@ -115,7 +97,7 @@ class PlaylistService:
             for obj in sorted(objects, key=lambda x: x["key"])
         )
 
-        etag = hashlib.md5(fingerprint.encode()).hexdigest()[:12]
+        etag = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:12]
 
         print("\n========== VERSION CHECK ==========")
         print(f"PREFIX      : {prefix}")
@@ -153,7 +135,6 @@ class PlaylistService:
 
     def get_signage_version(self) -> dict:
         """
-        Returns version info for the Digital Signage folder.
+        Returns version info for the "Global/Signage" folder.
         """
-        prefix = "Digital Signage/"
-        return self._compute_version(prefix)
+        return self._compute_version("Global/Signage/")

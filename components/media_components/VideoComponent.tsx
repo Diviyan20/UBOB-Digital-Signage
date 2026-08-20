@@ -1,8 +1,9 @@
 import {
   clearVideoCache,
-  fetchSignageVideos,
   getSignageVersion,
-  VideoItem,
+  loadPreparedSignageVideos,
+  PreparedSignageVideo,
+  prepareSignageVideos,
 } from "@/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -27,10 +28,10 @@ export const VideoComponent = ({
   const { width, height } = useWindowDimensions();
   const styles = VideoStyles(width, height);
 
-  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [videos, setVideos] = useState<PreparedSignageVideo[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const videosRef = useRef<VideoItem[]>([]);
+  const videosRef = useRef<PreparedSignageVideo[]>([]);
   const isMounted = useRef(true);
   const hasSignaled = useRef(false);
   const isLoading = useRef(true);
@@ -53,22 +54,42 @@ export const VideoComponent = ({
    */
   useEffect(() => {
     const loadVideos = async () => {
-      const fetchedVideos = await fetchSignageVideos();
-      console.log("Fetched signage videos:", fetchedVideos.length);
-      isLoading.current = false;
+      try {
+        console.log("[SIGNAGE] Preparing local signage videos...");
 
-      if (!isMounted.current) return;
-      if (fetchedVideos.length === 0) return;
+        // Download if necessary.
+        await prepareSignageVideos();
 
-      // Pick a random video to start the cycle
-      const randomIndex = Math.floor(Math.random() * fetchedVideos.length);
-      const selectedVideos = [fetchedVideos[randomIndex]];
+        // Load local files after preparation.
+        const preparedVideos = await loadPreparedSignageVideos();
 
-      videosRef.current = selectedVideos;
-      setVideos(selectedVideos);
+        console.log(`[SIGNAGE] Loaded ${preparedVideos.length} local video(s)`);
+
+        isLoading.current = false;
+
+        if (!isMounted.current) {
+          return;
+        }
+
+        if (preparedVideos.length === 0) {
+          console.warn("[SIGNAGE] No prepared videos available");
+
+          return;
+        }
+
+        videosRef.current = preparedVideos;
+
+        setVideos(preparedVideos);
+
+        setCurrentIndex(0);
+      } catch (error) {
+        console.error("[SIGNAGE] Failed to prepare videos:", error);
+
+        isLoading.current = false;
+      }
     };
 
-    loadVideos();
+    void loadVideos();
   }, []);
 
   /**
@@ -77,7 +98,7 @@ export const VideoComponent = ({
   useEffect(() => {
     if (videosRef.current.length === 0) return;
 
-    const uri = videosRef.current[currentIndex]?.videoURI;
+    const uri = videosRef.current[currentIndex]?.localUri;
     if (!uri) return;
 
     const load = async () => {
