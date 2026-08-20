@@ -9,7 +9,7 @@ Handles:
 
 from flask import Blueprint, jsonify, request
 from models.active_outlets import (
-    get_outlet_information,
+    get_outlet_info,
     update_heartbeat_status,
 )
 from services.outlet_service import fetch_all_outlet_data
@@ -37,7 +37,7 @@ def validate_outlet_route():
     if not outlet_id:
         return jsonify({"is_valid": False, "message": "outlet_id is required"}), 400
     
-    outlet = get_outlet_information(outlet_id) # Fetch all outlets
+    outlet = get_outlet_info(outlet_id) # Fetch all outlets
     
     if not outlet:
         return jsonify({
@@ -51,7 +51,7 @@ def validate_outlet_route():
     }), 200
     
 # ==================
-# GET ALL OUTLETS
+# GET ALL OUTLETS (From Odoo)
 # ==================
 @outlet_bp.route("/api/outlets" ,methods=["GET"])
 def get_all_outlets():
@@ -79,7 +79,7 @@ def outlet_info(outlet_id):
     Returns information for one outlet
     """
     try:
-        outlet = get_outlet_information(outlet_id)
+        outlet = get_outlet_info(outlet_id)
         
         if not outlet:
             return jsonify({
