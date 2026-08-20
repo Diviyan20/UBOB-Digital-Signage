@@ -1,7 +1,7 @@
 import hashlib
 from urllib.parse import quote
 
-from models.active_outlets import get_outlet_information
+from models.active_outlets import get_outlet_info
 from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects, get_video_url
 
 CLOUDFRONT_DOMAIN = "d30au7cngoylsj.cloudfront.net"
@@ -24,7 +24,7 @@ class PlaylistService:
         """
         Gets outlet region from database
         """
-        outlet = get_outlet_information(outlet_id)
+        outlet = get_outlet_info(outlet_id)
 
         if not outlet:
             raise Exception("Outlet Not Found")

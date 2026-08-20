@@ -1,17 +1,31 @@
-import json
-import os
-from contextlib import contextmanager
-from datetime import datetime, timezone
-
-import boto3
+import logging
 import psycopg2
+import os
+import boto3
+import json
+
+from datetime import datetime, timezone
+from dotenv import load_dotenv
+from contextlib import contextmanager
+
+load_dotenv()
 
 # ENVIRONMENT VARIABLES
-DB_NAME = os.getenv("OUTLET_DATABASE")
+OUTLET_DATABASE = os.getenv("OUTLET_DATABASE")
 DB_USERNAME = os.getenv("DB_USERNAME")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOSTNAME = os.getenv("DB_HOSTNAME")
 DB_PORT = os.getenv("DB_PORT")
+
+# ================
+# LOGGING SETUP
+# ================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 def get_db_credentials():
     secret_arn = os.getenv("DB_SECRET_ARN")
@@ -23,32 +37,31 @@ def get_db_credentials():
     
     return{
         "username":secret["username"],
-        "password":secret["password"]
+        "password:":secret["password"]
     }
 
 @contextmanager
 def get_db_connection():
-    """
-    - Context manager for database connection
-    - Automatically handles connection cleanup
-    """
+    """Connect to the database with Environment Variables using psycopg2"""
+    creds = get_db_credentials()
     conn = None
     cur = None
     try:
-
         conn = psycopg2.connect(
-            database = DB_NAME,
-            user = DB_USERNAME,
-            password = DB_PASSWORD,
+            database = OUTLET_DATABASE,
+            user = creds["username"],
+            password = creds["password"],
             host = DB_HOSTNAME,
             port = DB_PORT
         )
-
+        
         cur = conn.cursor()
+    
         yield conn, cur
-
+    
+    # Error handling for Connection Error
     except psycopg2.Error as e:
-        print(f"Database connection error: {e}")
+        log.error(f"Database connection Error: {e}")
         if conn:
             conn.rollback()
         raise
@@ -59,38 +72,68 @@ def get_db_connection():
         if conn:
             conn.close()
 
-def get_outlet_information(outlet_id: str) -> dict:
+def get_outlet_info(outlet_id: str) -> dict:
     """
-    Retrieving REGISTERED outlet information from Database.
-    """    
+    Get outlet information from the Database based on 'outlet_id'.
+    Returns None if no ID is found.
+    """
     try:
-        with get_db_connection() as (conn,cur):
-        
-            query = "SELECT * FROM active_outlets WHERE outlet_id = %s"
+        with get_db_connection() as (conn, cur):
+            query = "SELECT * FROM active_outlets WHERE outlet_id = %s"     # Query to select all fields based on outlet_id
             
-            cur.execute(query, (outlet_id,))
-        
+            cur.execute(query, [outlet_id])     # Executes query with outlet_id as the parameter
+            
             outlet = cur.fetchone()
             
+            # If outlet does not exist
             if not outlet:
                 return None
             else:
-                return {
-                    "outlet_id": outlet[0],
-                    "outlet_name": outlet[1],
-                    "outlet_status": outlet[2],
-                    "outlet_location": outlet[3],
-                    "active": outlet[4],
-                    "last_seen": outlet[5],
-                    "order_api_url": outlet[6],
-                    "order_api_key": outlet[7],
-                    "tier": outlet[8]
-                }
-            
+                return{
+                "outlet_id": outlet[0],
+                "outlet_name": outlet[1],
+                "outlet_status": outlet[2],
+                "outlet_location": outlet[3],
+                "active": outlet[4],
+                "last_seen": outlet[5],
+                "order_api_url": outlet[6],
+                "order_api_key": outlet[7],
+                "tier": outlet[8]
+            }
+    
     except Exception as e:
-        raise ValueError(f"Error fetching data from Database : {e}")
+        log.error(f"Database Error: {e}")
 
-
+def get_all_outlets() -> dict:
+    try:
+        with get_db_connection() as (conn, cur):
+            query = "SELECT * FROM active_outlets ORDER BY outlet_id ASC;"
+        
+            cur.execute(query)
+            
+            outlets = cur.fetchall()
+            
+            if not outlets:
+                return []
+            
+            return[{
+                "outlet_id": outlet[0],
+                "outlet_name": outlet[1],
+                "outlet_status": outlet[2],
+                "outlet_location": outlet[3],
+                "active": outlet[4],
+                "last_seen": outlet[5],
+                "order_api_url": outlet[6],
+                "order_api_key": outlet[7],
+                "tier": outlet[8],
+                "uuid": outlet[9]
+            }
+                   for outlet in outlets
+            ]
+        
+    except Exception as e:
+        raise ValueError(f"Error fetching outlets: {e}")
+        
 def update_heartbeat_status(outlet_id: str, status: str):
     """
     Update the heartbeat status of an active outlet.
@@ -144,7 +187,7 @@ def mark_device_offline(outlet_id):
         conn.commit()
 
 def register_outlet(outlet_id:str, outlet_name:str, region_name:str, 
-                    order_api_url:str, order_api_key:str, tier:str):
+                    order_api_url:str, order_api_key:str, tier: str):
     """
     Register a new outlet into the Database.
     
@@ -155,7 +198,7 @@ def register_outlet(outlet_id:str, outlet_name:str, region_name:str,
             now = datetime.now(timezone.utc)
             
             # Check if outlet exists (use the 'get_outlet_info()' function)
-            existing = get_outlet_information(outlet_id)
+            existing = get_outlet_info(outlet_id)
             
             if existing:
                 return{
@@ -188,4 +231,5 @@ def register_outlet(outlet_id:str, outlet_name:str, region_name:str,
             }
     
     except Exception as e:
+        log.error(f"Failed to register outlet: {e}")
         return {"success": False, "error":str(e)}
