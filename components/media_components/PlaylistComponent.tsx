@@ -4,7 +4,7 @@ import {
   loadAvailablePlaylist,
   PlaylistItems,
   refreshMediaPlayerPlaylist,
-  registerMediaRetryFailure
+  registerMediaRetryFailure,
 } from "@/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -26,22 +26,160 @@ const SCHEDULE_CHECK_INTERVAL_MS = 30 * 1000;
 // Schedule evaluation
 // =============================================================================
 
-const isWithinDailyWindow = (start: Date, end: Date, now: Date): boolean => {
-  const startMinutes = start.getHours() * 60 + start.getMinutes();
-  const endMinutes = end.getHours() * 60 + end.getMinutes();
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+/*
+ * Extract a UTC clock time from a Daily schedule.
+ *
+ * Daily schedules are stored by the backend using a placeholder date
+ * (1970-01-01) and a UTC time.
+ *
+ * Example:
+ *
+ *   1970-01-01T10:26:00+00:00
+ *
+ * We only care about: 10:26 UTC
+ *
+ * We deliberately use UTC here instead of Date.getHours(), because
+ * Date.getHours() converts the value into the TV's local timezone.
+ */
 
-  if (startMinutes === endMinutes) {
-    return true;
+const getDailyTimeMinutes = (value: string): number | null => {
+  if (!value) return null;
+
+  /*
+   * First try to extract HH:mm directly from the ISO string.
+   *
+   * This avoids timezone conversion entirely.
+   *
+   * Examples:
+   *
+   * 1970-01-01T10:26:00+00:00
+   *                   ^^ ^^
+   *
+   * 1970-01-01T15:15:00Z
+   *                   ^^ ^^
+   */
+  const match = value.match(
+    /T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/,
+  );
+
+  if (match) {
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return hours * 60 + minutes;
+    }
   }
 
-  // Normal window: e.g. 10:00 -> 14:00.
+  /*
+   * Fallback for formats that aren't ISO timestamps.
+   */
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return null;
+
+  return date.getUTCHours() * 60 + date.getUTCMinutes();
+};
+
+/**
+ * Check whether a Daily schedule is currently active.
+ *
+ * Daily schedules repeat every day.
+ *
+ * Example:
+ *
+ *   15:15 -> 15:20
+ *
+ * means:
+ *
+ *   15:15-15:20 every day.
+ *
+ * The comparison is performed using UTC because the backend's
+ * time-only values are serialized as UTC.
+ */
+const isWithinDailyWindow = (
+  startMinutes: number,
+  endMinutes: number,
+  now = new Date(),
+): boolean => {
+  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+
+  /*
+   * Same start/end means the configured
+   * schedule occupies the whole day.
+   */
+  if (startMinutes === endMinutes) return true;
+
+  /*
+   * Normal window.
+   *
+   * Example:
+   *
+   * 15:15 -> 15:20
+   */
   if (startMinutes < endMinutes) {
     return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
   }
 
-  // Cross-midnight window: e.g. 22:00 -> 02:00.
+  /*
+   * Cross-midnight window.
+   *
+   * Example:
+   *
+   * 23:00 -> 02:00
+   */
   return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
+};
+
+/**
+ * Check whether an LTO schedule is currently active.
+ *
+ * LTO is NOT a repeating clock window.
+ *
+ * Example:
+ *
+ *   2026-08-20 15:15 -> 2026-08-25 20:00
+ *
+ * Therefore we compare the complete timestamp.
+ */
+const isWithinLtoWindow = (
+  startValue: string,
+  endValue: string,
+  now = new Date(),
+): boolean => {
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    console.warn("[SCHEDULE] Invalid LTO datetime:", {
+      startValue,
+      endValue,
+    });
+
+    return false;
+  }
+
+  /*
+   * LTO should contain a real calendar date.
+   *
+   * If the backend accidentally sends 1970,
+   * that is a backend serialization problem rather
+   * than a valid LTO schedule.
+   */
+  if (start.getUTCFullYear() === 1970 || end.getUTCFullYear() === 1970) {
+    console.warn(
+      "[SCHEDULE] LTO received a 1970 placeholder date. " +
+        "LTO requires real calendar dates.",
+      {
+        startValue,
+        endValue,
+      },
+    );
+
+    return false;
+  }
+
+  return now.getTime() >= start.getTime() && now.getTime() <= end.getTime();
 };
 
 const isMediaScheduledNow = (
@@ -49,52 +187,87 @@ const isMediaScheduledNow = (
   now = new Date(),
 ): boolean => {
   switch (item.frequency) {
+    // -------------------------------------------------------------------------
+    // Evergreen
+    // -------------------------------------------------------------------------
+
     case "Evergreen":
       return true;
+
+    // -------------------------------------------------------------------------
+    // Daily
+    // -------------------------------------------------------------------------
 
     case "Daily": {
       if (!item.startDatetime || !item.endDatetime) {
         console.warn(
-          `[SCHEDULE] ${item.fileName} has Daily frequency but missing start/end datetime. Treating as inactive.`,
+          `[SCHEDULE] ${item.fileName} has Daily frequency but missing start/end time.`,
         );
+
         return false;
       }
 
-      const start = new Date(item.startDatetime);
-      const end = new Date(item.endDatetime);
+      const startMinutes = getDailyTimeMinutes(item.startDatetime);
 
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        console.warn(
-          `[SCHEDULE] ${item.fileName} has invalid Daily schedule. Treating as inactive.`,
-        );
+      const endMinutes = getDailyTimeMinutes(item.endDatetime);
+
+      if (startMinutes === null || endMinutes === null) {
+        console.warn(`[SCHEDULE] ${item.fileName} has invalid Daily time.`, {
+          start: item.startDatetime,
+          end: item.endDatetime,
+        });
+
         return false;
       }
 
-      return isWithinDailyWindow(start, end, now);
+      const active = isWithinDailyWindow(startMinutes, endMinutes, now);
+
+      console.log(
+        `[SCHEDULE] Daily ${item.fileName} | ` +
+          `start=${item.startDatetime} | ` +
+          `end=${item.endDatetime} | ` +
+          `currentUTC=${now.toISOString()} | ` +
+          `active=${active}`,
+      );
+
+      return active;
     }
+
+    // -------------------------------------------------------------------------
+    // LTO
+    // -------------------------------------------------------------------------
 
     case "LTO": {
       if (!item.startDatetime || !item.endDatetime) {
         console.warn(
-          `[SCHEDULE] ${item.fileName} has LTO frequency but missing start/end datetime. Treating as inactive.`,
+          `[SCHEDULE] ${item.fileName} has LTO frequency but missing start/end datetime.`,
         );
+
         return false;
       }
 
-      const start = new Date(item.startDatetime);
-      const end = new Date(item.endDatetime);
+      const active = isWithinLtoWindow(
+        item.startDatetime,
+        item.endDatetime,
+        now,
+      );
 
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        console.warn(
-          `[SCHEDULE] ${item.fileName} has invalid LTO schedule. Treating as inactive.`,
-        );
-        return false;
-      }
+      console.log(
+        `[SCHEDULE] LTO ${item.fileName} | ` +
+          `start=${item.startDatetime} | ` +
+          `end=${item.endDatetime} | ` +
+          `current=${now.toISOString()} | ` +
+          `active=${active}`,
+      );
 
-      return now >= start && now <= end;
+      return active;
     }
 
     default:
+      console.warn(
+        `[SCHEDULE] Unknown frequency for ${item.fileName}: ${item.frequency}`,
+      );
+
       return false;
   }
 };
@@ -102,15 +275,11 @@ const isMediaScheduledNow = (
 const buildPlayablePlaylist = (allMedia: PlaylistItems[]): PlaylistItems[] => {
   const now = new Date();
 
-  const playable = allMedia.filter((item) => {
-    const active = isMediaScheduledNow(item, now);
+  console.log(
+    `[SCHEDULE] Evaluating ${allMedia.length} media item(s) at ${now.toISOString()}`,
+  );
 
-    console.log(
-      `[SCHEDULE] ${item.fileName} | frequency=${item.frequency} | start=${item.startDatetime ?? "-"} | end=${item.endDatetime ?? "-"} | active=${active}`,
-    );
-
-    return active;
-  });
+  const playable = allMedia.filter((item) => isMediaScheduledNow(item, now));
 
   console.log(
     `[SCHEDULE] ${playable.length}/${allMedia.length} media item(s) currently active`,

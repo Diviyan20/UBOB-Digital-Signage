@@ -66,6 +66,48 @@ def _row_to_dict(row) -> dict:
         "frequency": row[14],
     }
 
+def _normalize_outlet_datetime(value: str | None) -> datetime | None:
+    """
+    Convert an incoming Admin Form datetime into an aware UTC datetime.
+
+    The Admin Form represents Malaysian outlet time (+08:00).
+
+    Examples:
+
+        1970-01-01T10:53:00
+        -> 1970-01-01T02:53:00+00:00
+
+        2026-08-21T15:15:00+08:00
+        -> 2026-08-21T07:15:00+00:00
+    """
+
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        parsed = datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
+
+    # No timezone supplied.
+    #
+    # Treat it as Malaysia time because the outlet system
+    # is operating on Asia/Kuala_Lumpur time.
+    if parsed.tzinfo is None:
+        from datetime import timedelta
+
+        malaysia_offset = timezone(
+            timedelta(hours=8)
+        )
+
+        parsed = parsed.replace(
+            tzinfo=malaysia_offset
+        )
+
+    return parsed.astimezone(timezone.utc)
+
 def get_all_outlet_screens() -> list:
     try:
         with get_db_connection() as (conn, cur):
@@ -129,6 +171,9 @@ def create_outlet_screen(
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING screen_id;
             """
+            start_datetime = _normalize_outlet_datetime(start_datetime)
+            end_datetime = _normalize_outlet_datetime(end_datetime)
+            
             cur.execute(query, (outlet_uid, screen_type, batch_num, tier, orientation,
                                  video_uuid, start_datetime, end_datetime, frequency))
             screen_id = cur.fetchone()[0]
@@ -174,6 +219,9 @@ def update_outlet_screen(screen_id: str, fields: dict) -> dict:
                 WHERE screen_id = %s
                 RETURNING screen_id;
             """
+            start_datetime = _normalize_outlet_datetime(start_datetime)
+            end_datetime = _normalize_outlet_datetime(end_datetime)
+            
             cur.execute(query, values)
             result = cur.fetchone()
             conn.commit()
