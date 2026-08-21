@@ -2,35 +2,77 @@ import { api } from "@/components/api/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Directory, File, Paths } from "expo-file-system/next";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Interfaces
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Types
+// =============================================================================
 
-export interface VideoItem {
-  videoURI: string;
-  cloudFrontURI: string;
-  rotate?: boolean;
-  sizeMb?: number;
-  optimized?: boolean;
-}
+export type MediaFrequency = "Evergreen" | "Daily" | "LTO";
+export type MediaType = "video" | "image";
 
 export interface PlaylistItems {
-  key: string;
-  type: "video" | "image";
+  mediaUuid: string;
+  key: string; // S3 object key
+  type: MediaType;
   url: string;
   localUri: string;
-  rotate?: boolean;
+  fileName: string;
+  frequency: MediaFrequency;
+  startDatetime: string | null;
+  endDatetime: string | null;
 }
 
-export interface ManifestItem {
-  key: string;
+export interface MediaPlayerConfigItem {
+  video_uuid: string;
+  video_name: string;
+  object_key: string;
+  type: MediaType;
+  screen_type: "Media Player";
+  batch_num: number;
+  tier: string;
+  orientation: "Landscape" | "Portrait";
+  start_datetime: string | null;
+  end_datetime: string | null;
+  frequency: MediaFrequency;
   url: string;
 }
 
-export interface PlaylistVersionResult {
-  etag: string | null;
+export interface MediaPlayerConfigResponse {
+  success: boolean;
+  outlet: {
+    outlet_id: string;
+    outlet_name: string;
+    tier: string;
+  };
+  etag: string;
+  screens: MediaPlayerConfigItem[];
+}
+
+export interface MediaPlayerLoginPayload {
+  outletId: string;
+  batchNumber: number;
+  tier: string;
+  orientation: "Landscape" | "Portrait";
+}
+
+export interface MediaPlayerVersionResult {
+  etag: string;
   itemCount: number;
-  manifest: ManifestItem[];
+}
+
+export interface MediaDownloadProgress {
+  completed: number;
+  total: number;
+  currentFile: string;
+}
+
+export type MediaDownloadStatus = "downloading" | "ready" | "error";
+
+export interface MediaDownloadState {
+  status: MediaDownloadStatus;
+  completed: number;
+  total: number;
+  currentFile: string;
+  error?: string;
 }
 
 export interface PlaylistRefreshResult {
@@ -45,390 +87,223 @@ export interface SignageVersion {
   itemCount: number;
 }
 
-interface SignageMeta {
-  etag: string;
-  outletId: string;
-  items: SignageMetaItem[];
-  cachedAt: number;
-}
-
-interface SignageMetaItem {
-  key: string;
+export interface PreparedSignageVideo {
   videoURI: string;
-  cloudFrontURI: string;
+  localUri: string;
+  key: string;
   rotate?: boolean;
   sizeMb?: number;
   optimized?: boolean;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Playlist metadata
-// ─────────────────────────────────────────────────────────────────────────────
-
 interface PlaylistMeta {
   outletId: string;
-  batchNumber: string;
+  batchNumber: number;
   tier: string;
-  orientation: string;
+  orientation: "Landscape" | "Portrait";
   etag: string;
   items: PlaylistItems[];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Storage keys
-// ─────────────────────────────────────────────────────────────────────────────
-
-const VIDEO_CACHE_KEY = "signage_videos_cache";
-const SIGNAGE_META_KEY = "signage_videos_meta";
+// =============================================================================
+// Storage
+// =============================================================================
 
 const PLAYLIST_META_KEY = "playlist_meta";
 const MEDIA_READY_KEY = "media_ready";
-
 const MEDIA_DOWNLOAD_STATE_KEY = "media_download_state";
 
 const MEDIA_RETRY_COUNT_KEY = "media_retry_count";
-
 const MEDIA_RETRY_BLOCK_UNTIL_KEY = "media_retry_block_until";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Retry configuration
-// ─────────────────────────────────────────────────────────────────────────────
-
 const MAX_MEDIA_RETRIES = 5;
+const MEDIA_RETRY_COOLDOWN = 5 * 60 * 1000;
 
-const MEDIA_RETRY_COOLDOWN = 5 * 60 * 1000; // 5 minutes
+// =============================================================================
+// Generic helpers
+// =============================================================================
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Download state
-// ─────────────────────────────────────────────────────────────────────────────
+export const sanitizeVideoUrl = (url?: string): string =>
+  (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
 
-export type MediaDownloadStatus = "downloading" | "ready" | "error";
-
-export interface MediaDownloadState {
-  status: MediaDownloadStatus;
-  completed: number;
-  total: number;
-  currentFile: string;
-  error?: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Progress
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface MediaDownloadProgress {
-  completed: number;
-  total: number;
-  currentFile: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// URL helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const sanitizeVideoUrl = (url?: string): string => {
-  return (url || "").trim().replace(/\\+$/g, "").replace(/\s+$/g, "");
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// File system helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-const keyToFilename = (key: string): string => {
-  const parts = key.split("/");
-
-  return (parts[parts.length - 1] || "media").replace(/\s+/g, "-");
-};
-
-const getSafeFilename = (key: string, etag?: string): string => {
-  const filename = keyToFilename(key);
-
-  if (!etag) {
-    return filename;
-  }
-
-  const safeEtag = etag.replace(/[^a-zA-Z0-9_-]/g, "");
-
-  return `${filename}_${safeEtag}`;
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Playlist directory
-// ─────────────────────────────────────────────────────────────────────────────
-
-const getPlaylistDir = (): Directory => {
-  return new Directory(Paths.document, "playlist");
-};
+const getPlaylistDir = (): Directory =>
+  new Directory(Paths.document, "playlist");
 
 const ensurePlaylistDir = (): Directory => {
   const dir = getPlaylistDir();
 
   if (!dir.exists) {
     dir.create();
-
-    console.log("[FS] Created playlist directory");
   }
 
   return dir;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Signage video directory
-// ─────────────────────────────────────────────────────────────────────────────
-
-const getSignageVideoDir = (): Directory => {
-  return new Directory(Paths.document, "signage-videos");
+const keyToFilename = (key: string): string => {
+  const fileName = key.split("/").pop() || "media";
+  return fileName.replace(/\s+/g, "-");
 };
 
-const ensureSignageVideoDir = (): void => {
-  const dir = getSignageVideoDir();
+// Tiny deterministic hash so a changed object key cannot collide with an old
+// local file while the old file is still being played.
+const hashString = (value: string): string => {
+  let hash = 0;
 
-  if (!dir.exists) {
-    dir.create();
-
-    console.log("[FS] Created signage-videos directory");
-  }
-};
-
-const clearSignageVideoFiles = (): void => {
-  const dir = getSignageVideoDir();
-
-  if (dir.exists) {
-    dir.delete();
-
-    console.log("[FS] Signage video directory cleared");
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
   }
 
-  dir.create();
+  return Math.abs(hash).toString(16);
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Signage downloads
-// ─────────────────────────────────────────────────────────────────────────────
-
-const downloadSignageVideo = async (
-  key: string,
-  url: string,
-): Promise<string> => {
-  const dir = getSignageVideoDir();
-
-  const filename = keyToFilename(key);
-
-  const existing = new File(dir, filename);
-
-  if (existing.exists) {
-    console.log(`[FS] Already exists, skipping: ${filename}`);
-
-    return existing.uri;
-  }
-
-  console.log(`[FS] Downloading signage video: ${filename}`);
-
-  const downloaded = await File.downloadFileAsync(url, dir);
-
-  console.log(`[FS] Downloaded: ${filename}`);
-
-  return downloaded.uri;
+const getLocalFilename = (mediaUuid: string, objectKey: string): string => {
+  return `${mediaUuid}_${hashString(objectKey)}_${keyToFilename(objectKey)}`;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Delete playlist files
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Media Player API
+// =============================================================================
 
-export const deletePlaylistFiles = async (
-  files: string[],
-  activeLocalUri?: string,
-): Promise<void> => {
-  for (const uri of files) {
-    if (!uri) {
-      continue;
-    }
-
-    if (uri === activeLocalUri) {
-      console.log(`[CLEANUP] Keeping active file: ${uri}`);
-
-      continue;
-    }
-
-    try {
-      const file = new File(uri);
-
-      if (file.exists) {
-        file.delete();
-
-        console.log(`[CLEANUP] Deleted obsolete file: ${uri}`);
-      }
-    } catch (error) {
-      console.warn(`[CLEANUP] Failed to delete: ${uri}`, error);
-    }
-  }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Playlist API
-// ─────────────────────────────────────────────────────────────────────────────
-
-export const getPlaylistVersion = async (
-  outletId: string,
-  batchNumber: string,
-  tier: string,
-  orientation: string,
-): Promise<PlaylistVersionResult> => {
-  const response = await fetch(api.playlistVersion, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      outlet_id: outletId,
-      batch_number: batchNumber,
-      tier,
-      orientation,
-    }),
+export const fetchMediaPlayerConfig = async (
+  payload: MediaPlayerLoginPayload,
+): Promise<MediaPlayerConfigResponse> => {
+  console.log("[MEDIA API] Requesting Media Player config:", {
+    url: api.mediaPlayerConfig,
+    payload,
   });
 
-  const data = await response.json();
+  let response: Response;
 
-  if (!response.ok) {
-    throw new Error(data?.message || "Failed to fetch playlist manifest");
-  }
-
-  return {
-    etag: data.etag ?? null,
-    itemCount: data.itemCount ?? 0,
-    manifest: data.manifest ?? [],
-  };
-};
-
-const fetchPlaylistTypes = async (
-  outletId: string,
-  batchNumber: string,
-  tier: string,
-  orientation: string,
-): Promise<
-  Record<
-    string,
-    {
-      type: "video" | "image";
-      rotate?: boolean;
-    }
-  >
-> => {
-  const response = await fetch(api.playlist, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      outlet_id: outletId,
-      batch_number: Number(batchNumber),
-      tier,
-      orientation,
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data?.message || "Failed to fetch playlist metadata");
-  }
-
-  const items: PlaylistItems[] = data.playlist ?? [];
-
-  return Object.fromEntries(
-    items.map((item) => [
-      item.key,
-      {
-        type: item.type,
-        rotate: item.rotate,
+  try {
+    response = await fetch(api.mediaPlayerConfig, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    ]),
-  );
+      body: JSON.stringify({
+        outlet_id: payload.outletId,
+        batch_number: payload.batchNumber,
+        tier: payload.tier,
+        orientation: payload.orientation,
+      }),
+    });
+  } catch (error) {
+    console.error("[MEDIA API] Network request failed:", error);
+
+    const networkError: any = new Error("Network request failed");
+
+    networkError.code = "NETWORK_ERROR";
+
+    throw networkError;
+  }
+
+  console.log("[MEDIA API] HTTP status:", response.status);
+
+  let data: any;
+
+  try {
+    data = await response.json();
+  } catch (error) {
+    console.error("[MEDIA API] Failed to parse response:", error);
+
+    const responseError: any = new Error(
+      "Invalid response from Media Player API",
+    );
+
+    responseError.code = "INVALID_RESPONSE";
+
+    throw responseError;
+  }
+
+  console.log("[MEDIA API] Response:", JSON.stringify(data, null, 2));
+
+  if (response.status === 404) {
+    const configurationError: any = new Error(
+      data?.error || "No Media Player configuration found",
+    );
+
+    configurationError.code = "MEDIA_CONFIGURATION_NOT_FOUND";
+
+    throw configurationError;
+  }
+
+  if (!response.ok) {
+    const backendError: any = new Error(
+      data?.error || `Media Player API failed with HTTP ${response.status}`,
+    );
+
+    backendError.code = "BACKEND_ERROR";
+
+    throw backendError;
+  }
+
+  if (!data.success) {
+    const backendError: any = new Error(
+      data?.error || "Media Player configuration request failed",
+    );
+
+    backendError.code = "BACKEND_ERROR";
+
+    throw backendError;
+  }
+
+  if (!Array.isArray(data.screens) || data.screens.length === 0) {
+    const configurationError: any = new Error(
+      "No Media Player media is configured",
+    );
+
+    configurationError.code = "MEDIA_CONFIGURATION_NOT_FOUND";
+
+    throw configurationError;
+  }
+
+  return data;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Local playlist context
-// ─────────────────────────────────────────────────────────────────────────────
+export const fetchMediaPlayerVersion = async (
+  payload: MediaPlayerLoginPayload,
+): Promise<MediaPlayerVersionResult> => {
+  const response = await fetch(api.mediaPlayerVersion, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      outlet_id: payload.outletId,
+      batch_number: payload.batchNumber,
+      tier: payload.tier,
+      orientation: payload.orientation,
+    }),
+  });
 
-const getLocalPlaylistContext = async (): Promise<{
-  outletId: string;
-  batchNumber: string;
-  tier: string;
-  orientation: string;
-}> => {
-  const outletId = await AsyncStorage.getItem("outlet_id");
+  const data = await response.json();
 
-  const batchNumber = (await AsyncStorage.getItem("batch_number")) || "1";
-
-  const tier = (await AsyncStorage.getItem("tier")) || "Tier A";
-
-  const orientation =
-    (await AsyncStorage.getItem("orientation")) || "Landscape";
-
-  if (!outletId) {
-    throw new Error("No Outlet ID found.");
+  if (!response.ok || !data.success) {
+    throw new Error(data?.error || "Failed to check Media Player version");
   }
 
   return {
-    outletId,
-    batchNumber,
-    tier,
-    orientation,
+    etag: data.etag,
+    itemCount: data.itemCount ?? 0,
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Download one playlist media file
-// ─────────────────────────────────────────────────────────────────────────────
-
-const downloadMediaFile = async (
-  key: string,
-  url: string,
-  etag?: string,
-): Promise<string> => {
-  const dir = ensurePlaylistDir();
-
-  const filename = getSafeFilename(key, etag);
-
-  const destination = new File(dir, filename);
-
-  if (destination.exists) {
-    console.log(`[DOWNLOAD] Already exists: ${filename}`);
-
-    return destination.uri;
-  }
-
-  console.log(`[DOWNLOAD] Starting: ${filename}`);
-
-  const downloaded = await File.downloadFileAsync(url, destination);
-
-  if (!downloaded.exists) {
-    throw new Error(`Download completed but file does not exist: ${filename}`);
-  }
-
-  console.log(`[DOWNLOAD] Completed: ${filename}`);
-
-  return downloaded.uri;
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Save playlist metadata
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Local metadata
+// =============================================================================
 
 const savePreparedPlaylist = async (
-  outletId: string,
-  batchNumber: string,
-  tier: string,
-  orientation: string,
+  payload: MediaPlayerLoginPayload,
   etag: string,
   items: PlaylistItems[],
   ready: boolean,
 ): Promise<void> => {
   const meta: PlaylistMeta = {
-    outletId,
-    batchNumber,
-    tier,
-    orientation,
+    outletId: payload.outletId,
+    batchNumber: payload.batchNumber,
+    tier: payload.tier,
+    orientation: payload.orientation,
     etag,
     items,
   };
@@ -437,87 +312,48 @@ const savePreparedPlaylist = async (
     [PLAYLIST_META_KEY, JSON.stringify(meta)],
     [MEDIA_READY_KEY, ready ? "true" : "false"],
   ]);
-
-  console.log(
-    `[MEDIA] Saved playlist — ${items.length} item(s), ready=${ready}`,
-  );
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Load any locally available media
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// IMPORTANT:
-//
-// During initial download, not every file exists yet.
-// Therefore the player needs this function rather than
-// loadPreparedPlaylist().
-//
-// ─────────────────────────────────────────────────────────────────────────────
+const loadPlaylistMeta = async (): Promise<PlaylistMeta | null> => {
+  try {
+    const raw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw);
+  } catch (error) {
+    console.warn("[MEDIA] Failed to parse playlist metadata", error);
+    return null;
+  }
+};
 
 export const loadAvailablePlaylist = async (): Promise<PlaylistItems[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
+  const meta = await loadPlaylistMeta();
 
-    if (!raw) {
-      return [];
-    }
-
-    const meta: PlaylistMeta = JSON.parse(raw);
-
-    if (!Array.isArray(meta.items)) {
-      return [];
-    }
-
-    return meta.items.filter((item) => new File(item.localUri).exists);
-  } catch (error) {
-    console.error("[MEDIA] Failed to load available playlist:", error);
-
+  if (!meta || !Array.isArray(meta.items)) {
     return [];
   }
-};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Load complete prepared playlist
-// ─────────────────────────────────────────────────────────────────────────────
+  return meta.items.filter((item) => new File(item.localUri).exists);
+};
 
 export const loadPreparedPlaylist = async (): Promise<PlaylistItems[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
+  const meta = await loadPlaylistMeta();
 
-    if (!raw) {
-      return [];
-    }
-
-    const meta: PlaylistMeta = JSON.parse(raw);
-
-    if (!Array.isArray(meta.items) || meta.items.length === 0) {
-      return [];
-    }
-
-    const allFilesExist = meta.items.every(
-      (item) => new File(item.localUri).exists,
-    );
-
-    if (!allFilesExist) {
-      console.warn(
-        "[MEDIA] Playlist metadata exists, but one or more files are missing",
-      );
-
-      return [];
-    }
-
-    return meta.items;
-  } catch (error) {
-    console.error("[MEDIA] Failed to load prepared playlist:", error);
-
+  if (!meta || !Array.isArray(meta.items) || meta.items.length === 0) {
     return [];
   }
+
+  const ready = meta.items.every((item) => new File(item.localUri).exists);
+
+  return ready ? meta.items : [];
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
 // Download state
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
 
 const setMediaDownloadState = async (
   state: MediaDownloadState,
@@ -549,23 +385,18 @@ export const getMediaDownloadState = async (): Promise<MediaDownloadState> => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Media retry state
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Retry state
+// =============================================================================
 
 export const getMediaRetryState = async (): Promise<{
   retryCount: number;
   blockedUntil: number;
 }> => {
-  const retryCount =
-    Number(await AsyncStorage.getItem(MEDIA_RETRY_COUNT_KEY)) || 0;
-
-  const blockedUntil =
-    Number(await AsyncStorage.getItem(MEDIA_RETRY_BLOCK_UNTIL_KEY)) || 0;
-
   return {
-    retryCount,
-    blockedUntil,
+    retryCount: Number(await AsyncStorage.getItem(MEDIA_RETRY_COUNT_KEY)) || 0,
+    blockedUntil:
+      Number(await AsyncStorage.getItem(MEDIA_RETRY_BLOCK_UNTIL_KEY)) || 0,
   };
 };
 
@@ -574,18 +405,17 @@ export const registerMediaRetryFailure = async (): Promise<{
   blockedUntil: number;
   blocked: boolean;
 }> => {
-  const current = await getMediaRetryState();
-
+  const state = await getMediaRetryState();
   const now = Date.now();
 
-  if (current.blockedUntil > now) {
+  if (state.blockedUntil > now) {
     return {
-      ...current,
+      ...state,
       blocked: true,
     };
   }
 
-  const retryCount = current.retryCount + 1;
+  const retryCount = state.retryCount + 1;
 
   if (retryCount >= MAX_MEDIA_RETRIES) {
     const blockedUntil = now + MEDIA_RETRY_COOLDOWN;
@@ -618,27 +448,366 @@ export const resetMediaRetryState = async (): Promise<void> => {
   ]);
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Media ready
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// File download
+// =============================================================================
 
-export const isMediaReady = async (): Promise<boolean> => {
-  const ready = await AsyncStorage.getItem(MEDIA_READY_KEY);
+const downloadMediaFile = async (
+  item: MediaPlayerConfigItem,
+): Promise<string> => {
+  const dir = ensurePlaylistDir();
+  const filename = getLocalFilename(item.video_uuid, item.object_key);
+  const destination = new File(dir, filename);
 
-  if (ready !== "true") {
-    return false;
+  if (destination.exists) {
+    console.log(`[DOWNLOAD] Already exists: ${filename}`);
+
+    return destination.uri;
   }
 
-  const playlist = await loadPreparedPlaylist();
+  console.log("[DOWNLOAD] Starting:", {
+    name: item.video_name,
+    objectKey: item.object_key,
+    url: item.url,
+  });
 
-  return playlist.length > 0;
+  const downloaded = await File.downloadFileAsync(
+    sanitizeVideoUrl(item.url),
+    destination,
+  );
+
+  if (!downloaded.exists) {
+    throw new Error(`Download completed but file does not exist: ${filename}`);
+  }
+
+  console.log(`[DOWNLOAD] Completed: ${item.video_name}`);
+
+  return downloaded.uri;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Clear playlist
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Convert backend config into local item metadata
+// =============================================================================
 
-export const clearPlaylistCache = async (): Promise<void> => {
+const configToLocalItem = (
+  config: MediaPlayerConfigItem,
+  localUri: string,
+): PlaylistItems => ({
+  mediaUuid: config.video_uuid,
+  key: config.object_key,
+  type: config.type,
+  url: config.url,
+  localUri,
+  fileName: config.video_name,
+  frequency: config.frequency,
+  startDatetime: config.start_datetime,
+  endDatetime: config.end_datetime,
+});
+
+const dedupeConfig = (
+  items: MediaPlayerConfigItem[],
+): MediaPlayerConfigItem[] => {
+  const seen = new Set<string>();
+  const result: MediaPlayerConfigItem[] = [];
+
+  for (const item of items) {
+    if (seen.has(item.video_uuid)) {
+      console.warn(
+        `[MEDIA] Duplicate media ${item.video_uuid} removed from client config`,
+      );
+      continue;
+    }
+
+    seen.add(item.video_uuid);
+    result.push(item);
+  }
+
+  return result;
+};
+
+// =============================================================================
+// Initial Media Player preparation
+// =============================================================================
+
+export const prepareMediaPlayerPlaylist = async (
+  payload: MediaPlayerLoginPayload,
+  onProgress?: (progress: MediaDownloadProgress) => void,
+): Promise<PlaylistItems[]> => {
+  await clearMediaPlayerCache();
+
+  const response = await fetchMediaPlayerConfig(payload);
+
+  // Persist the backend-resolved outlet name. The Media Player login flow
+  // intentionally does not use region as a lookup/display parameter.
+  await AsyncStorage.setItem("outlet_name", response.outlet.outlet_name);
+
+  const configItems = dedupeConfig(response.screens);
+
+  if (configItems.length === 0) {
+    throw new Error("No Media Player media is configured");
+  }
+
+  const total = configItems.length;
+  const downloadedItems: PlaylistItems[] = [];
+
+  let firstResolve: ((items: PlaylistItems[]) => void) | null = null;
+
+  let firstReject: ((error: Error) => void) | null = null;
+
+  let firstReady = false;
+
+  const firstMedia = new Promise<PlaylistItems[]>((resolve, reject) => {
+    firstResolve = resolve;
+    firstReject = reject;
+  });
+
+  const downloadRemaining = async () => {
+    try {
+      await setMediaDownloadState({
+        status: "downloading",
+        completed: 0,
+        total,
+        currentFile: "",
+      });
+
+      for (let index = 0; index < configItems.length; index++) {
+        const item = configItems[index];
+
+        onProgress?.({
+          completed: index,
+          total,
+          currentFile: item.video_name,
+        });
+
+        await setMediaDownloadState({
+          status: "downloading",
+          completed: index,
+          total,
+          currentFile: item.video_name,
+        });
+
+        const localUri = await downloadMediaFile(item);
+
+        downloadedItems.push(configToLocalItem(item, localUri));
+
+        await savePreparedPlaylist(
+          payload,
+          response.etag,
+          [...downloadedItems],
+          false,
+        );
+
+        await setMediaDownloadState({
+          status: "downloading",
+          completed: index + 1,
+          total,
+          currentFile: item.video_name,
+        });
+
+        onProgress?.({
+          completed: index + 1,
+          total,
+          currentFile: item.video_name,
+        });
+
+        if (!firstReady) {
+          firstReady = true;
+
+          console.log(`[MEDIA] First media ready: ${item.video_name}`);
+
+          firstResolve?.([...downloadedItems]);
+        }
+      }
+
+      await savePreparedPlaylist(payload, response.etag, downloadedItems, true);
+
+      await setMediaDownloadState({
+        status: "ready",
+        completed: total,
+        total,
+        currentFile: "",
+      });
+
+      await resetMediaRetryState();
+
+      console.log(`[MEDIA] Download complete: ${total}/${total}`);
+    } catch (error) {
+      console.error("[MEDIA] Background download failed:", error);
+
+      await setMediaDownloadState({
+        status: "error",
+        completed: downloadedItems.length,
+        total,
+        currentFile: "",
+        error: "Network connectivity issues, please try again",
+      });
+
+      if (!firstReady) {
+        firstReject?.(
+          new Error("Network connectivity issues, please try again"),
+        );
+      }
+    }
+  };
+
+  void downloadRemaining();
+
+  return firstMedia;
+};
+
+// =============================================================================
+// Incremental refresh
+// =============================================================================
+
+const getStoredPlayerPayload = async (): Promise<MediaPlayerLoginPayload> => {
+  const outletId = await AsyncStorage.getItem("outlet_id");
+  const batchNumber = Number(await AsyncStorage.getItem("batch_number")) || 1;
+  const tier = (await AsyncStorage.getItem("tier")) || "Tier A";
+  const orientation =
+    (await AsyncStorage.getItem("orientation")) || "Landscape";
+
+  if (!outletId) {
+    throw new Error("No outlet_id available");
+  }
+
+  return {
+    outletId,
+    batchNumber,
+    tier,
+    orientation: orientation as "Landscape" | "Portrait",
+  };
+};
+
+export const refreshMediaPlayerPlaylist =
+  async (): Promise<PlaylistRefreshResult> => {
+    const payload = await getStoredPlayerPayload();
+    const state = await getMediaDownloadState();
+
+    // Never race the initial downloader.
+    if (state.status === "downloading") {
+      return {
+        changed: false,
+        playlist: await loadAvailablePlaylist(),
+        oldFilesToDelete: [],
+        etag: null,
+      };
+    }
+
+    const currentMeta = await loadPlaylistMeta();
+
+    if (!currentMeta) {
+      return {
+        changed: false,
+        playlist: [],
+        oldFilesToDelete: [],
+        etag: null,
+      };
+    }
+
+    const version = await fetchMediaPlayerVersion(payload);
+
+    if (version.etag === currentMeta.etag) {
+      console.log(
+        `[REFRESH] Media Player configuration unchanged — ${version.etag}`,
+      );
+
+      return {
+        changed: false,
+        playlist: await loadAvailablePlaylist(),
+        oldFilesToDelete: [],
+        etag: version.etag,
+      };
+    }
+
+    console.log(
+      `[REFRESH] Configuration changed: ${currentMeta.etag} → ${version.etag}`,
+    );
+
+    const configResponse = await fetchMediaPlayerConfig(payload);
+    const configItems = dedupeConfig(configResponse.screens);
+
+    const currentByMediaUuid = new Map(
+      currentMeta.items.map((item) => [item.mediaUuid, item]),
+    );
+
+    const nextPlaylist: PlaylistItems[] = [];
+    const oldFilesToDelete: string[] = [];
+
+    for (const configItem of configItems) {
+      const existing = currentByMediaUuid.get(configItem.video_uuid);
+
+      // Same media + same object key + local file exists.
+      // This means only schedule/config metadata changed.
+      if (
+        existing &&
+        existing.key === configItem.object_key &&
+        new File(existing.localUri).exists
+      ) {
+        nextPlaylist.push(configToLocalItem(configItem, existing.localUri));
+
+        currentByMediaUuid.delete(configItem.video_uuid);
+
+        continue;
+      }
+
+      // New media or replaced object key.
+      console.log(
+        `[REFRESH] Downloading changed media: ${configItem.video_name}`,
+      );
+
+      const localUri = await downloadMediaFile(configItem);
+
+      nextPlaylist.push(configToLocalItem(configItem, localUri));
+
+      if (existing) {
+        oldFilesToDelete.push(existing.localUri);
+      }
+
+      currentByMediaUuid.delete(configItem.video_uuid);
+    }
+
+    // Anything left no longer exists in the Admin configuration.
+    for (const oldItem of currentByMediaUuid.values()) {
+      oldFilesToDelete.push(oldItem.localUri);
+    }
+
+    await savePreparedPlaylist(payload, version.etag, nextPlaylist, true);
+
+    return {
+      changed: true,
+      playlist: nextPlaylist,
+      oldFilesToDelete,
+      etag: version.etag,
+    };
+  };
+
+// =============================================================================
+// Playlist deletion / cache
+// =============================================================================
+
+export const deletePlaylistFiles = async (
+  files: string[],
+  activeLocalUri?: string,
+): Promise<void> => {
+  for (const uri of files) {
+    if (!uri || uri === activeLocalUri) {
+      continue;
+    }
+
+    try {
+      const file = new File(uri);
+
+      if (file.exists) {
+        file.delete();
+        console.log(`[CLEANUP] Deleted obsolete file: ${uri}`);
+      }
+    } catch (error) {
+      console.warn(`[CLEANUP] Failed to delete: ${uri}`, error);
+    }
+  }
+};
+
+export const clearMediaPlayerCache = async (): Promise<void> => {
   await AsyncStorage.multiRemove([
     PLAYLIST_META_KEY,
     MEDIA_READY_KEY,
@@ -651,391 +820,77 @@ export const clearPlaylistCache = async (): Promise<void> => {
     dir.delete();
   }
 
-  console.log("[MEDIA] Playlist cache cleared");
+  console.log("[MEDIA] Media Player cache cleared");
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// INITIAL MEDIA PREPARATION
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// Downloads sequentially.
-//
-// The function resolves as soon as ONE media file is ready.
-// The remaining files continue downloading in the background.
-//
-// ─────────────────────────────────────────────────────────────────────────────
+export const isMediaReady = async (): Promise<boolean> => {
+  const ready = await AsyncStorage.getItem(MEDIA_READY_KEY);
 
-export const prepareMediaPlaylist = async (
-  outletId: string,
-  batchNumber: number,
-  tier: string,
-  orientation: string,
-  onProgress?: (progress: MediaDownloadProgress) => void,
-): Promise<PlaylistItems[]> => {
-  console.log(
-    `[MEDIA] Preparing playlist: outlet=${outletId}, batch=${batchNumber}, tier=${tier}, orientation=${orientation}`,
-  );
-
-  await clearPlaylistCache();
-
-  ensurePlaylistDir();
-
-  const version = await getPlaylistVersion(
-    outletId,
-    batchNumber.toString(),
-    tier,
-    orientation,
-  );
-
-  if (!version.etag) {
-    throw new Error("Could not get playlist version");
+  if (ready !== "true") {
+    return false;
   }
 
-  const etag = version.etag;
-
-  if (version.manifest.length === 0) {
-    throw new Error("Playlist contains no media");
-  }
-
-  const typeMap = await fetchPlaylistTypes(
-    outletId,
-    batchNumber.toString(),
-    tier,
-    orientation,
-  );
-
-  const total = version.manifest.length;
-
-  const downloadedItems: PlaylistItems[] = [];
-
-  let firstMediaResolve: ((items: PlaylistItems[]) => void) | null = null;
-
-  let firstMediaReject: ((error: Error) => void) | null = null;
-
-  let firstMediaReady = false;
-
-  const firstMediaPromise = new Promise<PlaylistItems[]>((resolve, reject) => {
-    firstMediaResolve = resolve;
-
-    firstMediaReject = reject;
-  });
-
-  const downloadRemaining = async (): Promise<void> => {
-    try {
-      await setMediaDownloadState({
-        status: "downloading",
-        completed: 0,
-        total,
-        currentFile: "",
-      });
-
-      for (let i = 0; i < version.manifest.length; i++) {
-        const manifestItem = version.manifest[i];
-
-        const url = sanitizeVideoUrl(manifestItem.url);
-
-        if (!url.startsWith("https://")) {
-          throw new Error(`Invalid media URL: ${manifestItem.key}`);
-        }
-
-        const metadata = typeMap[manifestItem.key];
-
-        if (!metadata) {
-          throw new Error(`Missing media type: ${manifestItem.key}`);
-        }
-
-        const filename = getSafeFilename(manifestItem.key);
-
-        await setMediaDownloadState({
-          status: "downloading",
-          completed: i,
-          total,
-          currentFile: filename,
-        });
-
-        if (!firstMediaReady) {
-          onProgress?.({
-            completed: i,
-            total,
-            currentFile: filename,
-          });
-        }
-
-        console.log(`[DOWNLOAD] ${i + 1}/${total}: ${filename}`);
-
-        const localUri = await downloadMediaFile(manifestItem.key, url, etag);
-
-        const item: PlaylistItems = {
-          key: manifestItem.key,
-          type: metadata.type,
-          url,
-          localUri,
-          rotate: metadata.rotate,
-        };
-
-        downloadedItems.push(item);
-
-        // Persist every successful file.
-        await savePreparedPlaylist(
-          outletId,
-          batchNumber.toString(),
-          tier,
-          orientation,
-          etag,
-          [...downloadedItems],
-          false,
-        );
-
-        if (!firstMediaReady) {
-          firstMediaReady = true;
-
-          onProgress?.({
-            completed: 1,
-            total,
-            currentFile: filename,
-          });
-
-          firstMediaResolve?.([...downloadedItems]);
-        } else {
-          console.log(`[MEDIA] Additional media ready: ${manifestItem.key}`);
-        }
-
-        await setMediaDownloadState({
-          status: "downloading",
-          completed: i + 1,
-          total,
-          currentFile: filename,
-        });
-      }
-
-      // ALL media is now complete.
-      await savePreparedPlaylist(
-        outletId,
-        batchNumber.toString(),
-        tier,
-        orientation,
-        etag,
-        downloadedItems,
-        true,
-      );
-
-      await setMediaDownloadState({
-        status: "ready",
-        completed: total,
-        total,
-        currentFile: "",
-      });
-
-      await resetMediaRetryState();
-
-      console.log(`[MEDIA] All ${total} media item(s) downloaded`);
-    } catch (error: any) {
-      const message = error?.message || "Media download failed";
-
-      console.error("[MEDIA] Download failed:", message);
-
-      await setMediaDownloadState({
-        status: "error",
-        completed: downloadedItems.length,
-        total,
-        currentFile: "",
-        error: "Network connectivity issues, please try again",
-      });
-
-      // If nothing downloaded,
-      // login must fail.
-      if (!firstMediaReady) {
-        firstMediaReject?.(
-          new Error("Network connectivity issues, please try again"),
-        );
-      }
-    }
-  };
-
-  // Start downloading.
-  void downloadRemaining();
-
-  // Wait only for the first successful file.
-  return firstMediaPromise;
+  return (await loadPreparedPlaylist()).length > 0;
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Incremental playlist refresh
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
+// Signage compatibility
+// =============================================================================
 
-export const refreshPreparedPlaylist =
-  async (): Promise<PlaylistRefreshResult> => {
-    const { outletId, batchNumber, tier, orientation } =
-      await getLocalPlaylistContext();
+const SIGNAGE_META_KEY = "signage_videos_meta";
+const SIGNAGE_DIR = "signage-videos";
 
-    const downloadState = await getMediaDownloadState();
+interface SignageItem {
+  videoURI: string;
+  key?: string;
+  rotate?: boolean;
+  sizeMb?: number;
+  optimized?: boolean;
+}
 
-    // Never run an update while initial media
-    // is still downloading.
-    if (downloadState.status === "downloading") {
-      return {
-        changed: false,
-        playlist: await loadAvailablePlaylist(),
-        oldFilesToDelete: [],
-        etag: null,
-      };
-    }
+interface SignageMeta {
+  etag: string;
+  outletId: string;
+  items: PreparedSignageVideo[];
+}
 
-    const currentPlaylist = await loadPreparedPlaylist();
+const getSignageDir = (): Directory =>
+  new Directory(Paths.document, SIGNAGE_DIR);
 
-    if (currentPlaylist.length === 0) {
-      return {
-        changed: false,
-        playlist: [],
-        oldFilesToDelete: [],
-        etag: null,
-      };
-    }
+const ensureSignageDir = (): Directory => {
+  const dir = getSignageDir();
+  if (!dir.exists) {
+    dir.create();
+  }
+  return dir;
+};
 
-    const currentMetaRaw = await AsyncStorage.getItem(PLAYLIST_META_KEY);
+const downloadSignageFile = async (
+  url: string,
+  key: string,
+): Promise<string> => {
+  const dir = ensureSignageDir();
+  const destination = new File(dir, keyToFilename(key));
 
-    if (!currentMetaRaw) {
-      return {
-        changed: false,
-        playlist: currentPlaylist,
-        oldFilesToDelete: [],
-        etag: null,
-      };
-    }
+  if (destination.exists) {
+    return destination.uri;
+  }
 
-    const currentMeta: PlaylistMeta = JSON.parse(currentMetaRaw);
+  const downloaded = await File.downloadFileAsync(
+    sanitizeVideoUrl(url),
+    destination,
+  );
 
-    const version = await getPlaylistVersion(
-      outletId,
-      batchNumber,
-      tier,
-      orientation,
-    );
+  if (!downloaded.exists) {
+    throw new Error(`Signage media download failed: ${key}`);
+  }
 
-    if (!version.etag) {
-      return {
-        changed: false,
-        playlist: currentPlaylist,
-        oldFilesToDelete: [],
-        etag: currentMeta.etag,
-      };
-    }
-
-    // Nothing changed.
-    if (version.etag === currentMeta.etag) {
-      console.log(`[REFRESH] No changes — ETag ${version.etag}`);
-
-      return {
-        changed: false,
-        playlist: currentPlaylist,
-        oldFilesToDelete: [],
-        etag: version.etag,
-      };
-    }
-
-    console.log(
-      `[REFRESH] Playlist changed: ${currentMeta.etag} → ${version.etag}`,
-    );
-
-    const typeMap = await fetchPlaylistTypes(
-      outletId,
-      batchNumber,
-      tier,
-      orientation,
-    );
-
-    const currentByKey = new Map(
-      currentPlaylist.map((item) => [item.key, item]),
-    );
-
-    const newPlaylist: PlaylistItems[] = [];
-
-    for (const manifestItem of version.manifest) {
-      const url = sanitizeVideoUrl(manifestItem.url);
-
-      if (!url.startsWith("https://")) {
-        throw new Error(`Invalid media URL: ${manifestItem.key}`);
-      }
-
-      const metadata = typeMap[manifestItem.key];
-
-      if (!metadata) {
-        throw new Error(`Missing media type: ${manifestItem.key}`);
-      }
-
-      const existing = currentByKey.get(manifestItem.key);
-
-      // Existing item has not changed.
-      if (
-        existing &&
-        existing.url === url &&
-        new File(existing.localUri).exists
-      ) {
-        newPlaylist.push({
-          ...existing,
-          type: metadata.type,
-          rotate: metadata.rotate,
-        });
-
-        currentByKey.delete(manifestItem.key);
-
-        continue;
-      }
-
-      // New item or changed URL.
-      console.log(`[REFRESH] Downloading: ${manifestItem.key}`);
-
-      const localUri = await downloadMediaFile(
-        manifestItem.key,
-        url,
-        version.etag,
-      );
-
-      newPlaylist.push({
-        key: manifestItem.key,
-        type: metadata.type,
-        url,
-        localUri,
-        rotate: metadata.rotate,
-      });
-
-      currentByKey.delete(manifestItem.key);
-    }
-
-    // Anything left is no longer in the new playlist.
-    const oldFilesToDelete = Array.from(currentByKey.values()).map(
-      (item) => item.localUri,
-    );
-
-    // New playlist is complete.
-    await savePreparedPlaylist(
-      outletId,
-      batchNumber,
-      tier,
-      orientation,
-      version.etag,
-      newPlaylist,
-      true,
-    );
-
-    console.log(`[REFRESH] New playlist ready — ${newPlaylist.length} item(s)`);
-
-    return {
-      changed: true,
-      playlist: newPlaylist,
-      oldFilesToDelete,
-      etag: version.etag,
-    };
-  };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Signage version
-// ─────────────────────────────────────────────────────────────────────────────
+  return downloaded.uri;
+};
 
 export const getSignageVersion = async (): Promise<SignageVersion> => {
   try {
     const response = await fetch(api.signageVersion);
-
     const data = await response.json();
 
     if (!response.ok) {
@@ -1057,195 +912,169 @@ export const getSignageVersion = async (): Promise<SignageVersion> => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Clear signage cache
-// ─────────────────────────────────────────────────────────────────────────────
+export const fetchSignageVideos = async (): Promise<SignageItem[]> => {
+  const response = await fetch(api.signageVideos);
+  const data = await response.json();
 
-export const clearVideoCache = async (): Promise<void> => {
-  await AsyncStorage.multiRemove([VIDEO_CACHE_KEY, SIGNAGE_META_KEY]);
+  if (!response.ok) {
+    throw new Error(data?.message || "Failed to fetch signage videos");
+  }
 
-  clearSignageVideoFiles();
-
-  console.log("[CACHE] Signage video cache cleared");
+  return data.videos ?? [];
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Signage videos
-// ─────────────────────────────────────────────────────────────────────────────
+export const clearVideoCache = async (): Promise<void> => {
+  await AsyncStorage.removeItem(SIGNAGE_META_KEY);
 
-export const fetchSignageVideos = async (): Promise<VideoItem[]> => {
-  const outletId = await AsyncStorage.getItem("outlet_id");
+  const dir = getSignageDir();
+  if (dir.exists) {
+    dir.delete();
+  }
+};
 
+export const prepareSignageVideos = async (
+  outletId: string,
+): Promise<PreparedSignageVideo[]> => {
   if (!outletId) {
-    console.warn("[FETCH] No outlet_id in AsyncStorage");
+    throw new Error("No outlet_id");
+  }
+
+  console.log("[SIGNAGE] Preparing signage videos...");
+
+  // ---------------------------------------------------------------------------
+  // 1. Get current server version
+  // ---------------------------------------------------------------------------
+
+  const version = await getSignageVersion();
+
+  if (!version.etag) {
+    throw new Error("Could not get signage version");
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Fetch signage media URLs
+  // ---------------------------------------------------------------------------
+
+  const videos = await fetchSignageVideos();
+
+  if (videos.length === 0) {
+    console.warn("[SIGNAGE] No signage videos found");
 
     return [];
   }
 
-  ensureSignageVideoDir();
+  console.log(`[SIGNAGE] Found ${videos.length} signage video(s)`);
 
-  let cachedMeta: SignageMeta | null = null;
+  // ---------------------------------------------------------------------------
+  // 3. Check existing local cache
+  // ---------------------------------------------------------------------------
 
-  try {
-    const raw = await AsyncStorage.getItem(SIGNAGE_META_KEY);
+  const currentRaw = await AsyncStorage.getItem(SIGNAGE_META_KEY);
 
-    if (raw) {
-      const parsed: SignageMeta = JSON.parse(raw);
+  const current: SignageMeta | null = currentRaw
+    ? JSON.parse(currentRaw)
+    : null;
 
-      if (parsed.outletId === outletId) {
-        cachedMeta = parsed;
-      }
+  // ---------------------------------------------------------------------------
+  // 4. Cache hit
+  // ---------------------------------------------------------------------------
+
+  if (current && current.etag === version.etag && current.items.length > 0) {
+    const allFilesExist = current.items.every(
+      (item) => new File(item.localUri).exists,
+    );
+
+    if (allFilesExist) {
+      console.log(
+        `[SIGNAGE] Cache hit — ${current.items.length} local video(s)`,
+      );
+
+      return current.items;
     }
-  } catch {
-    console.warn("[CACHE] Failed to read signage meta");
+
+    console.warn(
+      "[SIGNAGE] Metadata exists but one or more local files are missing",
+    );
   }
 
-  const hasValidCache =
-    cachedMeta !== null &&
-    cachedMeta.items.length > 0 &&
-    new File(cachedMeta.items[0].videoURI).exists;
+  // ---------------------------------------------------------------------------
+  // 5. Version changed or first download
+  // ---------------------------------------------------------------------------
 
-  let serverEtag: string | null = null;
-
-  let serverItemCount = 0;
-
-  try {
-    const version = await getSignageVersion();
-
-    serverEtag = version.etag;
-
-    serverItemCount = version.itemCount;
-  } catch {
-    console.warn("[SIGNAGE] Version check failed");
+  if (current) {
+    console.log(`[SIGNAGE] Version changed: ${current.etag} → ${version.etag}`);
+  } else {
+    console.log("[SIGNAGE] No local signage cache — downloading");
   }
 
-  if (!serverEtag) {
-    if (hasValidCache) {
-      return cachedMeta!.items.map((item) => ({
-        videoURI: item.videoURI,
-        cloudFrontURI: item.cloudFrontURI,
-        rotate: item.rotate,
-        sizeMb: item.sizeMb,
-        optimized: item.optimized,
-      }));
-    }
+  const items: PreparedSignageVideo[] = [];
 
-    return [];
-  }
+  // ---------------------------------------------------------------------------
+  // 6. Download sequentially
+  // ---------------------------------------------------------------------------
 
-  if (serverEtag === cachedMeta?.etag && hasValidCache) {
-    return cachedMeta!.items.map((item) => ({
-      videoURI: item.videoURI,
-      cloudFrontURI: item.cloudFrontURI,
-      rotate: item.rotate,
-      sizeMb: item.sizeMb,
-      optimized: item.optimized,
-    }));
-  }
+  for (const video of videos) {
+    const key = video.key || video.videoURI.split("/").pop() || video.videoURI;
 
-  if (cachedMeta && cachedMeta.etag !== serverEtag) {
-    clearSignageVideoFiles();
-  }
-
-  if (serverItemCount === 0) {
-    return [];
-  }
-
-  let rawVideos: Array<{
-    key?: string;
-    videoURI: string;
-    rotate?: boolean;
-    sizeMb?: number;
-    optimized?: boolean;
-  }> = [];
-
-  try {
-    const response = await fetch(api.signageVideos, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    console.log("[SIGNAGE] Preparing:", {
+      key,
+      url: video.videoURI,
     });
 
-    const data = await response.json();
+    const localUri = await downloadSignageFile(video.videoURI, key);
 
-    if (!response.ok) {
-      throw new Error(data?.message || "Failed to fetch videos");
-    }
-
-    rawVideos = data?.videos || [];
-  } catch (err) {
-    console.error("[FETCH ERROR] Signage videos:", err);
-
-    if (hasValidCache) {
-      return cachedMeta!.items.map((item) => ({
-        videoURI: item.videoURI,
-        cloudFrontURI: item.cloudFrontURI,
-        rotate: item.rotate,
-        sizeMb: item.sizeMb,
-        optimized: item.optimized,
-      }));
-    }
-
-    return [];
+    items.push({
+      videoURI: video.videoURI,
+      localUri,
+      key,
+      rotate: video.rotate,
+      sizeMb: video.sizeMb,
+      optimized: video.optimized,
+    });
   }
 
-  const downloadResults = await Promise.allSettled(
-    rawVideos.map(async (video) => {
-      const cloudFrontURI = sanitizeVideoUrl(video.videoURI);
+  // ---------------------------------------------------------------------------
+  // 7. Save cache metadata
+  // ---------------------------------------------------------------------------
 
-      if (!cloudFrontURI.startsWith("https://")) {
-        return null;
-      }
-
-      const key = video.key || cloudFrontURI.split("/").pop() || cloudFrontURI;
-
-      const localUri = await downloadSignageVideo(key, cloudFrontURI);
-
-      return {
-        key,
-        videoURI: localUri,
-        cloudFrontURI,
-        rotate: video.rotate,
-        sizeMb: video.sizeMb,
-        optimized: video.optimized,
-      } as SignageMetaItem;
+  await AsyncStorage.setItem(
+    SIGNAGE_META_KEY,
+    JSON.stringify({
+      etag: version.etag,
+      outletId,
+      items,
     }),
   );
 
-  const successful = downloadResults
-    .filter(
-      (result): result is PromiseFulfilledResult<SignageMetaItem> =>
-        result.status === "fulfilled" && result.value !== null,
-    )
-    .map((result) => result.value);
+  console.log(`[SIGNAGE] Download complete — ${items.length}/${videos.length}`);
 
-  if (successful.length === 0) {
-    return hasValidCache
-      ? cachedMeta!.items.map((item) => ({
-          videoURI: item.videoURI,
-          cloudFrontURI: item.cloudFrontURI,
-          rotate: item.rotate,
-          sizeMb: item.sizeMb,
-          optimized: item.optimized,
-        }))
-      : [];
+  return items;
+};
+
+export const loadPreparedSignageVideos = async (): Promise<
+  PreparedSignageVideo[]
+> => {
+  try {
+    const raw = await AsyncStorage.getItem(SIGNAGE_META_KEY);
+
+    if (!raw) {
+      return [];
+    }
+
+    const meta = JSON.parse(raw);
+
+    if (!Array.isArray(meta.items)) {
+      return [];
+    }
+
+    const items = meta.items.filter(
+      (item: PreparedSignageVideo) => new File(item.localUri).exists,
+    );
+
+    return items;
+  } catch (error) {
+    console.error("[SIGNAGE] Failed to load prepared videos:", error);
+
+    return [];
   }
-
-  const newMeta: SignageMeta = {
-    etag: serverEtag,
-    outletId,
-    items: successful,
-    cachedAt: Date.now(),
-  };
-
-  await AsyncStorage.setItem(SIGNAGE_META_KEY, JSON.stringify(newMeta));
-
-  return successful.map((item) => ({
-    videoURI: item.videoURI,
-    cloudFrontURI: item.cloudFrontURI,
-    rotate: item.rotate,
-    sizeMb: item.sizeMb,
-    optimized: item.optimized,
-  }));
 };
