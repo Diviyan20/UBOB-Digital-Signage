@@ -1,243 +1,230 @@
 import {
-  clearVideoCache,
-  getSignageVersion,
   loadPreparedSignageVideos,
   PreparedSignageVideo,
-  prepareSignageVideos,
 } from "@/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
 
 interface Props {
-  onAllVideosFinished: () => void;
+  videoIndex: number;
+  onVideoFinished: () => void;
   onPlaybackStarted: () => void;
 }
 
 const DEV_BLOCK_PLAYBACK = false;
-// NOTE: ALWAYS SET TO 'FALSE' FOR PRODUCTION
-
-const VERSION_CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 export const VideoComponent = ({
-  onAllVideosFinished,
+  videoIndex,
+  onVideoFinished,
   onPlaybackStarted,
 }: Props) => {
   const { width, height } = useWindowDimensions();
   const styles = VideoStyles(width, height);
 
-  const [videos, setVideos] = useState<PreparedSignageVideo[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [video, setVideo] = useState<PreparedSignageVideo | null>(null);
 
-  const videosRef = useRef<PreparedSignageVideo[]>([]);
   const isMounted = useRef(true);
-  const hasSignaled = useRef(false);
-  const isLoading = useRef(true);
-
-  const currentVideo = videos[currentIndex];
+  const hasSignaledPlayback = useRef(false);
+  const finishedRef = useRef(false);
 
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
 
+  // ---------------------------------------------------------------------------
+  // Mount / unmount
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
     isMounted.current = true;
+
     return () => {
       isMounted.current = false;
     };
   }, []);
 
-  /**
-   * Fetch videos on mount — videoURI is now a local file:// path
-   */
+  // ---------------------------------------------------------------------------
+  // Load ONLY the requested video
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
-    const loadVideos = async () => {
+    const loadVideo = async () => {
       try {
-        console.log("[SIGNAGE] Preparing local signage videos...");
+        console.log(`[VIDEO] Loading signage video at index ${videoIndex}`);
 
-        // Download if necessary.
-        await prepareSignageVideos();
-
-        // Load local files after preparation.
         const preparedVideos = await loadPreparedSignageVideos();
-
-        console.log(`[SIGNAGE] Loaded ${preparedVideos.length} local video(s)`);
-
-        isLoading.current = false;
 
         if (!isMounted.current) {
           return;
         }
 
         if (preparedVideos.length === 0) {
-          console.warn("[SIGNAGE] No prepared videos available");
+          console.warn("[VIDEO] No prepared signage videos found");
 
+          onVideoFinished();
           return;
         }
 
-        videosRef.current = preparedVideos;
+        /*
+         * Protect against an index that is larger than the
+         * currently available playlist.
+         */
+        const safeIndex = videoIndex % preparedVideos.length;
 
-        setVideos(preparedVideos);
+        const selectedVideo = preparedVideos[safeIndex];
 
-        setCurrentIndex(0);
+        if (!selectedVideo) {
+          console.warn(`[VIDEO] No video found at index ${safeIndex}`);
+
+          onVideoFinished();
+          return;
+        }
+
+        console.log(
+          `[VIDEO] Selected ${safeIndex + 1}/${preparedVideos.length}: ${selectedVideo.key}`,
+        );
+
+        console.log(`[VIDEO] Local URI: ${selectedVideo.localUri}`);
+
+        setVideo(selectedVideo);
       } catch (error) {
-        console.error("[SIGNAGE] Failed to prepare videos:", error);
+        console.error("[VIDEO] Failed to load signage videos:", error);
 
-        isLoading.current = false;
+        onVideoFinished();
       }
     };
 
-    void loadVideos();
-  }, []);
+    void loadVideo();
+  }, [videoIndex, onVideoFinished]);
 
-  /**
-   * Load current video — videoURI points to local storage
-   */
+  // ---------------------------------------------------------------------------
+  // Play selected video
+  // ---------------------------------------------------------------------------
+
   useEffect(() => {
-    if (videosRef.current.length === 0) return;
+    if (!video?.localUri) {
+      return;
+    }
 
-    const uri = videosRef.current[currentIndex]?.localUri;
-    if (!uri) return;
-
-    const load = async () => {
+    const playVideo = async () => {
       try {
         if (DEV_BLOCK_PLAYBACK) {
-          console.warn("[DEV] Playback blocked — watchdog test active");
+          console.warn("[DEV] Playback blocked");
           return;
         }
 
-        console.log(
-          `[VIDEO] Loading video ${currentIndex + 1}/${videosRef.current.length}`,
-        );
-        console.log(`[VIDEO] URI: ${uri}`);
+        if (!isMounted.current) {
+          return;
+        }
 
-        const start = Date.now();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Load timeout")), 8000),
-        );
+        console.log(`[VIDEO] Playing: ${video.key}`);
 
-        await Promise.race([player.replaceAsync(uri), timeoutPromise]);
-        console.log(
-          `[VIDEO] replaceAsync finished in ${Date.now() - start} ms`,
-        );
+        await player.replaceAsync(video.localUri);
 
+        if (!isMounted.current) {
+          return;
+        }
+
+        player.loop = false;
         player.play();
+
         console.log("[VIDEO] play() called");
-      } catch (err) {
-        console.error("Failed to load video:", err);
-        playNextVideo();
+      } catch (error) {
+        console.error(`[VIDEO] Failed to play ${video.key}:`, error);
+
+        if (isMounted.current && !finishedRef.current) {
+          finishedRef.current = true;
+          onVideoFinished();
+        }
       }
     };
 
-    load();
-  }, [currentIndex, videos]);
+    void playVideo();
+  }, [video, player, onVideoFinished]);
 
-  const playNextVideo = () => {
-    if (!isMounted.current) return;
-
-    setCurrentIndex((prev) => {
-      const next = prev + 1;
-      if (next >= videosRef.current.length) {
-        console.log("[VIDEO] Playlist finished");
-        onAllVideosFinished();
-        return prev;
-      }
-      console.log(`[VIDEO] Moving to video ${next}`);
-      return next;
-    });
-  };
+  // ---------------------------------------------------------------------------
+  // Playback started
+  // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    if (!player) return;
-    const subscription = player.addListener("playToEnd", playNextVideo);
-    return () => subscription.remove();
-  }, [player, playNextVideo]);
+    if (!video) {
+      return;
+    }
 
-  useEffect(() => {
     const subscription = player.addListener("statusChange", (status) => {
-      console.log("[VIDEO STATUS]", status.status);
-      if (status.status === "readyToPlay" && !hasSignaled.current) {
-        hasSignaled.current = true;
+      if (status.status === "readyToPlay" && !hasSignaledPlayback.current) {
+        hasSignaledPlayback.current = true;
+
+        console.log(`[VIDEO] Playback ready: ${video.key}`);
+
         onPlaybackStarted();
       }
     });
-    return () => subscription.remove();
-  }, [player]);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player, video, onPlaybackStarted]);
+
+  // ---------------------------------------------------------------------------
+  // Video finished
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    const subscription = player.addListener("playToEnd", () => {
+      if (!isMounted.current || finishedRef.current) {
+        return;
+      }
+
+      finishedRef.current = true;
+
+      console.log(`[VIDEO] Finished: ${video?.key ?? "unknown"}`);
+
+      onVideoFinished();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player, video, onVideoFinished]);
+
+  // ---------------------------------------------------------------------------
+  // Cleanup
+  // ---------------------------------------------------------------------------
 
   useEffect(() => {
     return () => {
       console.log("[VIDEO] Releasing player");
+
       try {
         player.release();
-      } catch (e) {
-        console.warn("Player cleanup failed:", e);
+      } catch (error) {
+        console.warn("[VIDEO] Failed to release player:", error);
       }
     };
   }, [player]);
 
-  useEffect(() => {
-    const emergencyTimer = setTimeout(() => {
-      console.warn("[VIDEO] Component stuck. Returning to images.");
-      onAllVideosFinished();
-    }, 45000);
-    return () => clearTimeout(emergencyTimer);
-  }, []);
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Periodic version check — clears cache if content changed.
-   * VideoComponent remounts after onAllVideosFinished and fetches fresh.
-   */
-  useEffect(() => {
-    const checkForUpdates = async () => {
-      console.log("[VERSION CHECK] Checking signage videos for new content...");
-
-      try {
-        const { etag: serverEtag } = await getSignageVersion();
-
-        if (!serverEtag) {
-          console.warn("[VERSION CHECK] Could not reach server — skipping");
-          return;
-        }
-
-        const metaRaw = await AsyncStorage.getItem("signage_videos_meta");
-        if (!metaRaw) return;
-
-        const meta = JSON.parse(metaRaw);
-
-        if (meta.etag !== serverEtag) {
-          console.log(`[VERSION CHECK] Changed: ${meta.etag} → ${serverEtag}`);
-          console.log(
-            "[VERSION CHECK] Cache cleared — new videos load on next cycle",
-          );
-          await clearVideoCache();
-          // Don't interrupt current playback —
-          // cache cleared, VideoComponent fetches fresh on next remount
-        } else {
-          console.log(`[VERSION CHECK] Unchanged — etag: ${serverEtag}`);
-        }
-      } catch (err) {
-        console.warn("[VERSION CHECK] Error:", err);
-      }
-    };
-
-    const interval = setInterval(checkForUpdates, VERSION_CHECK_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (!videos.length) {
-    // Still loading from cache - show nothing rather than flashing "No videos"
-    if (isLoading.current) return null;
-
+  if (!video) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text>No videos available</Text>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text>Loading video...</Text>
       </View>
     );
   }
 
-  if (currentVideo?.rotate) {
+  if (video.rotate) {
     return (
       <View style={styles.portraitCard}>
         <View style={styles.videoContainer}>

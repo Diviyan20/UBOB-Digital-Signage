@@ -932,11 +932,9 @@ export const clearVideoCache = async (): Promise<void> => {
   }
 };
 
-export const prepareSignageVideos = async (): Promise<
-  PreparedSignageVideo[]
-> => {
-  const outletId = await AsyncStorage.getItem("outlet_id");
-
+export const prepareSignageVideos = async (
+  outletId: string,
+): Promise<PreparedSignageVideo[]> => {
   if (!outletId) {
     throw new Error("No outlet_id");
   }
