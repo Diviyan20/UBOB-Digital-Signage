@@ -1,10 +1,9 @@
-import { scheduler, SchedulerResult } from "@/services/ApiScheduler";
+import { scheduler, SchedulerResult } from "@/frontend/services/ApiScheduler";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 const defaultState: SchedulerResult = {
   isOnline: true,
   promotions: [],
-  playlist: [],
   signageVideos: [],
   lastUpdated: null,
 };

@@ -5,7 +5,7 @@ import {
   PlaylistItems,
   refreshMediaPlayerPlaylist,
   registerMediaRetryFailure,
-} from "@/services/MediaService";
+} from "@/frontend/services/MediaService";
 import { PlaylistStyles as styles } from "@/styling/MediaStyles";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";

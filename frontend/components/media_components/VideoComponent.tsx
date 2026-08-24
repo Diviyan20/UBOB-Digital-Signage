@@ -1,7 +1,7 @@
 import {
   loadPreparedSignageVideos,
   PreparedSignageVideo,
-} from "@/services/MediaService";
+} from "@/frontend/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";

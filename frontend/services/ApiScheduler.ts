@@ -1,6 +1,12 @@
-import { api } from "@/components/api/client";
-import { getSignageVersion, VideoItem } from "@/services/MediaService";
-import { fetchPromotions, MediaItem } from "@/services/PromotionService";
+import { api } from "@/frontend/components/api/client";
+import {
+  getSignageVersion,
+  PreparedSignageVideo,
+} from "@/frontend/services/MediaService";
+import {
+  fetchPromotions,
+  MediaItem,
+} from "@/frontend/services/PromotionService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type SchedulerPriority = 1 | 2 | 3 | 4;
@@ -8,7 +14,7 @@ export type SchedulerPriority = 1 | 2 | 3 | 4;
 export interface SchedulerResult {
   isOnline: boolean;
   promotions: MediaItem[];
-  signageVideos: VideoItem[];
+  signageVideos: PreparedSignageVideo[];
   lastUpdated: number | null;
 }
 

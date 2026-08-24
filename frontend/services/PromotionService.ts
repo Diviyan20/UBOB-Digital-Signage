@@ -1,4 +1,4 @@
-import { api } from "@/components/api/client";
+import { api } from "@/frontend/components/api/client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const MEDIA_CACHE_KEY = "promotion_media_cache";

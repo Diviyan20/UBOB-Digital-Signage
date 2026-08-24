@@ -2,7 +2,7 @@ import {
   OutletImageItem,
   fetchAndCacheOutletImages,
   getCachedOutletImages,
-} from "@/services/OutletImageService";
+} from "@/frontend/services/OutletImageService";
 import { OutletImageStyle } from "@/styling/OutletImageStyle";
 import { Image } from "expo-image";
 import React, {
@@ -13,7 +13,7 @@ import React, {
   useState,
 } from "react";
 import { Animated, Text, View, useWindowDimensions } from "react-native";
-import { config } from "../api/client";
+import { api } from "../api/client";
 
 const ITEMS_PER_PAGE = 7;
 
@@ -77,7 +77,7 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> =
     useEffect(() => {
       const fetchConfig = async () => {
         try {
-          const response = await fetch(config);
+          const response = await fetch(api.config);
           const data = await response.json();
           setFlipInterval(data.config.outlet_image_flip_interval);
           setFadeDuration(data.config.fade_duration);

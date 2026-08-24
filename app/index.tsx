@@ -1,5 +1,8 @@
-import { OutletLoginForm } from "@/components/login_forms/OutletLoginForm";
-import { checkOfflineCredentials, offlineLogin } from "@/services/LoginService";
+import { OutletLoginForm } from "@/frontend/components/login_forms/OutletLoginForm";
+import {
+  checkOfflineCredentials,
+  offlineLogin,
+} from "@/frontend/services/LoginService";
 import { router } from "expo-router";
 import * as Updates from "expo-updates";
 import React, { useEffect, useState } from "react";
