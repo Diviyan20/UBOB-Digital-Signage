@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../api/client";
 
-import { loadPreparedSignageVideos } from "@/services/MediaService";
+import { loadPreparedSignageVideos } from "@/frontend/services/MediaService";
 
 import { watchDogOverlayStyle as styles } from "@/styling/OverlayStyles";
 

@@ -1,4 +1,7 @@
-import { fetchPromotions, MediaItem } from "@/services/PromotionService";
+import {
+  fetchPromotions,
+  MediaItem,
+} from "@/frontend/services/PromotionService";
 import { ImageStyles } from "@/styling/MediaStyles";
 import { Image } from "expo-image";
 import React, {
@@ -9,7 +12,7 @@ import React, {
   useState,
 } from "react";
 import { Text, useWindowDimensions, View } from "react-native";
-import { config } from "../api/client";
+import { api } from "../api/client";
 
 const DEV_BLOCK_PROMOTIONS = false;
 const FALLBACK_IMAGE = require("../images/Logo.png");
@@ -44,7 +47,7 @@ export const ImageComponent: React.FC = React.memo(() => {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch(config);
+        const response = await fetch(api.config);
         const data = await response.json();
 
         setDisplayDuration(data.config.image_display_duration);

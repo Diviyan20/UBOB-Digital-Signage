@@ -1,9 +1,9 @@
-import { api } from "@/components/api/client";
-import { MediaController } from "@/components/media_components/MediaController";
-import { OutletDisplayComponent } from "@/components/media_components/OutletImageComponent";
-import { OrderPreparation } from "@/components/OrderPreparation";
 import { NetworkStatusContext } from "@/context/NetworkStatusContext";
 import { SchedulerProvider, useScheduler } from "@/context/SchedulerContext";
+import { api } from "@/frontend/components/api/client";
+import { MediaController } from "@/frontend/components/media_components/MediaController";
+import { OutletDisplayComponent } from "@/frontend/components/media_components/OutletImageComponent";
+import { OrderPreparation } from "@/frontend/components/OrderPreparation";
 import { MediaScreenStyle as styles } from "@/styling/MediaStyles";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
@@ -50,7 +50,10 @@ const MediaScreenInner: React.FC<{ outlet_id: string }> = ({ outlet_id }) => {
           throw new Error(data.error || "Failed to fetch outlet info");
         setOutletInfo(data.outlet);
       } catch (err: any) {
-        console.warn("Outlet info unavailable, running without order tracking:", err.message);
+        console.warn(
+          "Outlet info unavailable, running without order tracking:",
+          err.message,
+        );
       }
     };
     if (outlet_id) fetchOutletInfo();
