@@ -12,7 +12,7 @@
 // =====================
 
 export type MediaFrequency = "Evergreen" | "Daily" | "LTO";
-export type MediaType = "video" | "images";
+export type MediaType = "video" | "image";
 
 // ====================================
 // MEDIA PLAYER LOCAL PLAYLIST ITEM
