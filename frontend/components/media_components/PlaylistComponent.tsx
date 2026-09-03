@@ -6,480 +6,251 @@ import {
   refreshMediaPlayerPlaylist,
   registerMediaRetryFailure,
 } from "@/frontend/services/MediaService";
-import { PlaylistStyles as styles } from "@/styling/MediaStyles";
+
+import { getPlayableMedia } from "@/frontend/services/media/MediaSchedule";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Image } from "expo-image";
+
 import { router } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { useVideoPlayer } from "expo-video";
+
 import React, { useEffect, useRef, useState } from "react";
+
+import { VideoView } from "expo-video";
 import { Alert, Animated, AppState, Easing, Text, View } from "react-native";
+
+import { Image } from "expo-image";
+
 import { api } from "../api/client";
 
+import { PlaylistStyles as styles } from "@/styling/MediaStyles";
+
+// =============================================================================
+// Constants
+// =============================================================================
+
 type PlaybackMode = "loading" | "video" | "image" | "empty";
+
 type OrientationType = "Landscape" | "Portrait";
 
 const LOGIN_ROUTE = "/";
+
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
+
 const SCHEDULE_CHECK_INTERVAL_MS = 30 * 1000;
-
-// =============================================================================
-// Schedule evaluation
-// =============================================================================
-
-/*
- * Extract a UTC clock time from a Daily schedule.
- *
- * Daily schedules are stored by the backend using a placeholder date
- * (1970-01-01) and a UTC time.
- *
- * Example:
- *
- *   1970-01-01T10:26:00+00:00
- *
- * We only care about: 10:26 UTC
- *
- * We deliberately use UTC here instead of Date.getHours(), because
- * Date.getHours() converts the value into the TV's local timezone.
- */
-
-const getDailyTimeMinutes = (value: string): number | null => {
-  if (!value) return null;
-
-  /*
-   * First try to extract HH:mm directly from the ISO string.
-   *
-   * This avoids timezone conversion entirely.
-   *
-   * Examples:
-   *
-   * 1970-01-01T10:26:00+00:00
-   *                   ^^ ^^
-   *
-   * 1970-01-01T15:15:00Z
-   *                   ^^ ^^
-   */
-  const match = value.match(
-    /T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?$/,
-  );
-
-  if (match) {
-    const hours = Number(match[1]);
-    const minutes = Number(match[2]);
-
-    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
-      return hours * 60 + minutes;
-    }
-  }
-
-  /*
-   * Fallback for formats that aren't ISO timestamps.
-   */
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return null;
-
-  return date.getUTCHours() * 60 + date.getUTCMinutes();
-};
-
-/**
- * Check whether a Daily schedule is currently active.
- *
- * Daily schedules repeat every day.
- *
- * Example:
- *
- *   15:15 -> 15:20
- *
- * means:
- *
- *   15:15-15:20 every day.
- *
- * The comparison is performed using UTC because the backend's
- * time-only values are serialized as UTC.
- */
-const isWithinDailyWindow = (
-  startMinutes: number,
-  endMinutes: number,
-  now = new Date(),
-): boolean => {
-  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-
-  /*
-   * Same start/end means the configured
-   * schedule occupies the whole day.
-   */
-  if (startMinutes === endMinutes) return true;
-
-  /*
-   * Normal window.
-   *
-   * Example:
-   *
-   * 15:15 -> 15:20
-   */
-  if (startMinutes < endMinutes) {
-    return nowMinutes >= startMinutes && nowMinutes <= endMinutes;
-  }
-
-  /*
-   * Cross-midnight window.
-   *
-   * Example:
-   *
-   * 23:00 -> 02:00
-   */
-  return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
-};
-
-/**
- * Check whether an LTO schedule is currently active.
- *
- * LTO is NOT a repeating clock window.
- *
- * Example:
- *
- *   2026-08-20 15:15 -> 2026-08-25 20:00
- *
- * Therefore we compare the complete timestamp.
- */
-const isWithinLtoWindow = (
-  startValue: string,
-  endValue: string,
-  now = new Date(),
-): boolean => {
-  const start = new Date(startValue);
-  const end = new Date(endValue);
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    console.warn("[SCHEDULE] Invalid LTO datetime:", {
-      startValue,
-      endValue,
-    });
-
-    return false;
-  }
-
-  /*
-   * LTO should contain a real calendar date.
-   *
-   * If the backend accidentally sends 1970,
-   * that is a backend serialization problem rather
-   * than a valid LTO schedule.
-   */
-  if (start.getUTCFullYear() === 1970 || end.getUTCFullYear() === 1970) {
-    console.warn(
-      "[SCHEDULE] LTO received a 1970 placeholder date. " +
-        "LTO requires real calendar dates.",
-      {
-        startValue,
-        endValue,
-      },
-    );
-
-    return false;
-  }
-
-  return now.getTime() >= start.getTime() && now.getTime() <= end.getTime();
-};
-
-const isMediaScheduledNow = (
-  item: PlaylistItems,
-  now = new Date(),
-): boolean => {
-  switch (item.frequency) {
-    // -------------------------------------------------------------------------
-    // Evergreen
-    // -------------------------------------------------------------------------
-
-    case "Evergreen":
-      return true;
-
-    // -------------------------------------------------------------------------
-    // Daily
-    // -------------------------------------------------------------------------
-
-    case "Daily": {
-      if (!item.startDatetime || !item.endDatetime) {
-        console.warn(
-          `[SCHEDULE] ${item.fileName} has Daily frequency but missing start/end time.`,
-        );
-
-        return false;
-      }
-
-      const startMinutes = getDailyTimeMinutes(item.startDatetime);
-
-      const endMinutes = getDailyTimeMinutes(item.endDatetime);
-
-      if (startMinutes === null || endMinutes === null) {
-        console.warn(`[SCHEDULE] ${item.fileName} has invalid Daily time.`, {
-          start: item.startDatetime,
-          end: item.endDatetime,
-        });
-
-        return false;
-      }
-
-      const active = isWithinDailyWindow(startMinutes, endMinutes, now);
-
-      console.log(
-        `[SCHEDULE] Daily ${item.fileName} | ` +
-          `start=${item.startDatetime} | ` +
-          `end=${item.endDatetime} | ` +
-          `currentUTC=${now.toISOString()} | ` +
-          `active=${active}`,
-      );
-
-      return active;
-    }
-
-    // -------------------------------------------------------------------------
-    // LTO
-    // -------------------------------------------------------------------------
-
-    case "LTO": {
-      if (!item.startDatetime || !item.endDatetime) {
-        console.warn(
-          `[SCHEDULE] ${item.fileName} has LTO frequency but missing start/end datetime.`,
-        );
-
-        return false;
-      }
-
-      const active = isWithinLtoWindow(
-        item.startDatetime,
-        item.endDatetime,
-        now,
-      );
-
-      console.log(
-        `[SCHEDULE] LTO ${item.fileName} | ` +
-          `start=${item.startDatetime} | ` +
-          `end=${item.endDatetime} | ` +
-          `current=${now.toISOString()} | ` +
-          `active=${active}`,
-      );
-
-      return active;
-    }
-
-    default:
-      console.warn(
-        `[SCHEDULE] Unknown frequency for ${item.fileName}: ${item.frequency}`,
-      );
-
-      return false;
-  }
-};
-
-const buildPlayablePlaylist = (allMedia: PlaylistItems[]): PlaylistItems[] => {
-  const now = new Date();
-
-  console.log(
-    `[SCHEDULE] Evaluating ${allMedia.length} media item(s) at ${now.toISOString()}`,
-  );
-
-  const playable = allMedia.filter((item) => isMediaScheduledNow(item, now));
-
-  console.log(
-    `[SCHEDULE] ${playable.length}/${allMedia.length} media item(s) currently active`,
-  );
-
-  return playable;
-};
 
 // =============================================================================
 // Component
 // =============================================================================
 
 export const PlaylistComponent: React.FC = () => {
-  const [allMedia, setAllMedia] = useState<PlaylistItems[]>([]);
+  // =============
+  // UI STATE
+  // =============
   const [playlist, setPlaylist] = useState<PlaylistItems[]>([]);
-  const [mode, setMode] = useState<PlaybackMode>("loading");
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [displayDuration, setDisplayDuration] = useState(5000);
-  const [fadeDuration, setFadeDuration] = useState(400);
+  const [mode, setMode] = useState<PlaybackMode>("loading");
+
   const [orientation, setOrientation] = useState<OrientationType>("Landscape");
+
+  // ========================
+  // DISPLAY CONFIGURATION
+  // ========================
+  const [imageDisplayDuration, setImageDisplayDuration] = useState(5000);
+  const [fadeDuration, setFadeDuration] = useState(400);
   const [versionCheckInterval, setVersionCheckInterval] = useState(
     DEFAULT_VERSION_CHECK_INTERVAL_MS,
   );
 
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const currentIndexRef = useRef(0);
+  // ---------------------------------------------------------------------------
+  // Internal state
+  //
+  // Refs hold values that must survive renders without
+  // causing additional renders.
+  // ---------------------------------------------------------------------------
+
   const playlistRef = useRef<PlaylistItems[]>([]);
+
+  const currentIndexRef = useRef(0);
+
   const allMediaRef = useRef<PlaylistItems[]>([]);
-  const pendingDeleteRef = useRef<string[]>([]);
+
   const refreshRunningRef = useRef(false);
+
+  const pendingDeleteRef = useRef<string[]>([]);
+
   const downloadErrorShownRef = useRef(false);
 
+  // ================
+  // ANIMATION
+  // ================
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  // ================
+  // VIDEO PLAYER
+  // ================
   const player = useVideoPlayer(null, (p) => {
     p.loop = false;
   });
 
-  // ---------------------------------------------------------------------------
-  // Config
-  // ---------------------------------------------------------------------------
+  const getPlaybackMode = (type: PlaylistItems["type"]): PlaybackMode => {
+    return type === "video" ? "video" : "image";
+  };
 
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const response = await fetch(api.config);
-        const data = await response.json();
+  // ===========================================================================
+  // Helper: update playable playlist
+  // ===========================================================================
 
-        if (!response.ok) {
-          throw new Error(`Config request failed: ${response.status}`);
-        }
+  /**
+   * Rebuilds the playable playlist from all downloaded media.
+   *
+   * The important rule:
+   *
+   * - Keep the current media when it is still playable.
+   * - Otherwise start from the first playable item.
+   * - If nothing is playable, enter "empty" mode.
+   */
 
-        setDisplayDuration(data.config?.image_display_duration ?? 5000);
+  const syncPlaylist = (allMedia: PlaylistItems[]): void => {
+    allMediaRef.current = allMedia;
 
-        setFadeDuration(data.config?.fade_duration ?? 400);
-
-        const versionCheck = data.config?.version_check;
-
-        if (typeof versionCheck === "number" && versionCheck > 0) {
-          setVersionCheckInterval(versionCheck);
-
-          console.log(`[CONFIG] version_check = ${versionCheck}ms`);
-        } else {
-          console.warn(
-            `[CONFIG] Invalid version_check. Using fallback ${DEFAULT_VERSION_CHECK_INTERVAL_MS}ms`,
-          );
-        }
-      } catch (error) {
-        console.warn(
-          "[CONFIG] Failed to load configuration. Using defaults.",
-          error,
-        );
-      }
-    };
-
-    void loadConfig();
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Orientation
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    const loadOrientation = async () => {
-      const saved = await AsyncStorage.getItem("orientation");
-
-      if (saved === "Portrait" || saved === "Landscape") {
-        setOrientation(saved);
-      }
-    };
-
-    void loadOrientation();
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Update local active playlist without unnecessarily restarting media.
-  // ---------------------------------------------------------------------------
-
-  const applyAllMedia = (
-    nextAllMedia: PlaylistItems[],
-    forceImmediateSwitch = false,
-  ) => {
-    allMediaRef.current = nextAllMedia;
-    setAllMedia(nextAllMedia);
-
-    const nextPlayable = buildPlayablePlaylist(nextAllMedia);
+    const playable = getPlayableMedia(allMedia);
 
     const currentItem = playlistRef.current[currentIndexRef.current];
 
-    playlistRef.current = nextPlayable;
-    setPlaylist(nextPlayable);
-
-    if (nextPlayable.length === 0) {
+    // ==================
+    // Nothing can play
+    // ==================
+    if (playable.length === 0) {
+      playlistRef.current = [];
+      setPlaylist([]);
       currentIndexRef.current = 0;
       setCurrentIndex(0);
       setMode("empty");
       return;
     }
 
-    const currentIndexInNext = currentItem
-      ? nextPlayable.findIndex(
-          (item) => item.mediaUuid === currentItem.mediaUuid,
-        )
+    // =========================================
+    // Keep currently playing media if possible
+    // =========================================
+    const currentIndex = currentItem
+      ? playable.findIndex((item) => item.mediaUuid === currentItem.mediaUuid)
       : -1;
 
-    if (currentIndexInNext >= 0) {
-      currentIndexRef.current = currentIndexInNext;
-      setCurrentIndex(currentIndexInNext);
-
-      // Keep the currently playing item if it is still eligible.
+    if (currentIndex >= 0) {
+      playlistRef.current = playable;
+      setPlaylist(playable);
+      currentIndexRef.current = currentIndex;
+      setCurrentIndex(currentIndex);
       return;
     }
 
-    // Current item is no longer eligible or this is first load.
-    const nextIndex = 0;
+    // =====================================
+    // Current media is no longer valid.
+    // Start from the first playable media.
+    // =====================================
 
-    currentIndexRef.current = nextIndex;
-    setCurrentIndex(nextIndex);
-
-    // The current media is no longer valid, so the player must switch to the
-    // new item's actual type immediately. Otherwise an image can be treated
-    // as a video (or vice versa) for one render cycle.
-    if (forceImmediateSwitch || currentItem != null) {
-      setMode(nextPlayable[nextIndex].type);
-    }
+    playlistRef.current = playable;
+    setPlaylist(playable);
+    currentIndexRef.current = 0;
+    setCurrentIndex(0);
+    setMode(playable[0].type);
   };
 
-  // ---------------------------------------------------------------------------
-  // Initial local playlist
-  // ---------------------------------------------------------------------------
-
+  // ================================
+  // LOAD APPLICATION CONFIGURATION
+  // ================================
   useEffect(() => {
-    const loadPlaylist = async () => {
+    const loadConfig = async () => {
       try {
-        const items = await loadAvailablePlaylist();
+        const response = await fetch(api.config);
 
-        if (items.length === 0) {
-          console.warn("[PLAYER] No locally available media found");
-          setMode("empty");
-          return;
+        if (!response.ok) {
+          throw new Error(`Config request failed: ${response.status}`);
         }
 
-        console.log(
-          `[PLAYER] Loaded ${items.length} locally available media item(s)`,
-        );
+        const data = await response.json();
 
-        allMediaRef.current = items;
-        setAllMedia(items);
+        const imageDuration = data.config?.image_display_duration;
+        const fade = data.config?.fade_duration;
+        const versionCheck = data.config?.version_check;
 
-        const playable = buildPlayablePlaylist(items);
+        if (typeof imageDuration === "number" && imageDuration > 0) {
+          console.log(`[CONFIG] image_display_duration = ${imageDuration}ms`);
+        }
 
-        playlistRef.current = playable;
-        setPlaylist(playable);
-        currentIndexRef.current = 0;
-        setCurrentIndex(0);
+        if (typeof fade === "number" && fade >= 0) {
+          setFadeDuration(fade);
+          console.log(`[CONFIG] fade_duration = ${fade}ms`);
+        }
 
-        if (playable.length > 0) {
-          setMode(playable[0].type);
-        } else {
-          setMode("empty");
+        if (typeof versionCheck == "number" && versionCheck > 0) {
+          setVersionCheckInterval(versionCheck);
+          console.log(`[CONFIG] version_check = ${versionCheck}ms`);
         }
       } catch (error) {
-        console.error("[PLAYER] Failed to load local playlist:", error);
-        setMode("empty");
+        console.warn("[CONFIG] Failed to load config. Using defaults.", error);
       }
     };
 
-    void loadPlaylist();
+    void loadConfig();
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Watch background downloads
-  // ---------------------------------------------------------------------------
+  // ===================
+  // LOAD ORIENTATION
+  // ===================
+  useEffect(() => {
+    const loadOrientation = async () => {
+      const value = await AsyncStorage.getItem("orientation");
 
+      if (value === "Portrait" || value === "Landscape") {
+        setOrientation(value);
+      }
+    };
+
+    void loadOrientation();
+  }, []);
+
+  // =====================
+  // INITIAL MEDIA LOAD
+  // =====================
+  useEffect(() => {
+    const loadMedia = async () => {
+      try {
+        const media = await loadAvailablePlaylist();
+
+        if (media.length === 0) {
+          console.warn("[PLAYER] No locally available media");
+          syncPlaylist([]);
+          return;
+        }
+
+        console.log(`[PLAYER] Loaded ${media.length} local media item(s)`);
+
+        syncPlaylist(media);
+      } catch (error) {
+        console.error("[PLAYER] Failed to load local media:", error);
+
+        syncPlaylist([]);
+      }
+    };
+
+    void loadMedia();
+  }, []);
+
+  // ============================
+  // WATCH BACKGROUND DOWNLOADS
+  // ============================
   useEffect(() => {
     const timer = setInterval(async () => {
       try {
         const state = await getMediaDownloadState();
 
+        // ============================
+        // Background download failed
+        // ============================
         if (state.status === "error" && !downloadErrorShownRef.current) {
           downloadErrorShownRef.current = true;
-
           const retry = await registerMediaRetryFailure();
 
           if (retry.blocked) {
@@ -492,7 +263,9 @@ export const PlaylistComponent: React.FC = () => {
 
             Alert.alert(
               "Network Connectivity Error",
-              `Network connectivity error. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.`,
+              `Network connectivity error. ${triesLeft} ${
+                triesLeft === 1 ? "try" : "tries"
+              } left.`,
               [
                 {
                   text: "Retry",
@@ -501,53 +274,47 @@ export const PlaylistComponent: React.FC = () => {
               ],
             );
           }
-
           return;
         }
-
+        // ==================================================
+        // Check whether more downloaded media is available.
+        // ==================================================
         const available = await loadAvailablePlaylist();
 
-        if (available.length === allMediaRef.current.length) {
-          return;
+        if (available.length === 0) return;
+
+        if (available.length !== allMediaRef.current.length) {
+          console.log(
+            `[PLAYER] Local media changed: ${available.length} item(s)`,
+          );
+
+          syncPlaylist(available);
         }
-
-        if (available.length === 0) {
-          return;
-        }
-
-        console.log(
-          `[PLAYER] New local media available: ${available.length} item(s)`,
-        );
-
-        applyAllMedia(available);
       } catch (error) {
-        console.warn("[PLAYER] Failed to watch background downloads:", error);
+        console.warn("[PLAYER] Failed to check background downloads:", error);
       }
     }, 1000);
 
     return () => clearInterval(timer);
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Schedule refresh
-  // ---------------------------------------------------------------------------
-
+  // =======================
+  // RE-EVALUATE SCHEDULES
+  // =======================
   useEffect(() => {
-    const refreshSchedule = () => {
-      if (allMediaRef.current.length === 0) {
-        return;
-      }
+    const reevaluateSchedule = () => {
+      if (allMediaRef.current.length === 0) return;
 
-      console.log("[SCHEDULE] Re-evaluating active media");
+      console.log("[SCHEDULE] Re-evaluating schedule");
 
-      applyAllMedia(allMediaRef.current, false);
+      syncPlaylist(allMediaRef.current);
     };
 
-    const timer = setInterval(refreshSchedule, SCHEDULE_CHECK_INTERVAL_MS);
+    const timer = setInterval(reevaluateSchedule, SCHEDULE_CHECK_INTERVAL_MS);
 
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        refreshSchedule();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        reevaluateSchedule();
       }
     });
 
@@ -557,36 +324,87 @@ export const PlaylistComponent: React.FC = () => {
     };
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Single item loops. Multiple items use playToEnd.
-  // ---------------------------------------------------------------------------
+  // ====================================
+  // REFRESH MEDIA PLAYER CONFIGURATION
+  // ====================================
+  const refreshPlaylist = async () => {
+    if (refreshRunningRef.current) return;
 
+    refreshRunningRef.current = true;
+
+    try {
+      console.log("[REFRESH] Checking Media Player configuration...");
+
+      const result = await refreshMediaPlayerPlaylist();
+
+      if (!result.changed) return;
+
+      console.log(`[REFRESH] Received ${result.playlist.length} media item(s)`);
+
+      pendingDeleteRef.current = result.oldFilesToDelete;
+
+      const currentItem = playlistRef.current[currentIndexRef.current];
+
+      syncPlaylist(result.playlist);
+
+      await deletePlaylistFiles(
+        pendingDeleteRef.current,
+        currentItem?.localUri,
+      );
+
+      pendingDeleteRef.current = [];
+    } catch (error) {
+      console.warn(
+        "[REFRESH] Failed to refresh Media Player configuration. Keeping current playback.",
+        error,
+      );
+    } finally {
+      refreshRunningRef.current = false;
+    }
+  };
+
+  // ===============================
+  // Periodic server version check
+  // ===============================
   useEffect(() => {
-    player.loop = mode === "video" && playlistRef.current.length === 1;
+    console.log(`[VERSION CHECK] Running every ${versionCheckInterval}ms`);
+
+    const timer = setInterval(() => {
+      void refreshPlaylist();
+    }, versionCheckInterval);
+
+    return () => clearInterval(timer);
+  }, [versionCheckInterval]);
+
+  // ===========================================================================
+  // Configure video looping
+  //
+  // One active video:
+  //     loop forever.
+  //
+  // Multiple active media:
+  //     stop when the video ends so we can move
+  //     to the next media item.
+  // ===========================================================================
+  useEffect(() => {
+    player.loop = mode === "video" && playlist.length === 1;
   }, [mode, playlist.length, player]);
 
-  // ---------------------------------------------------------------------------
-  // Play current item
-  // ---------------------------------------------------------------------------
-
+  // ===============
+  // Play video
+  // ===============
   useEffect(() => {
-    if (mode !== "video") {
-      return;
-    }
+    if (mode !== "video") return;
 
     const item = playlistRef.current[currentIndexRef.current];
 
-    if (!item?.localUri) {
-      return;
-    }
+    if (!item?.localUri) return;
 
     const play = async () => {
       try {
-        console.log(
-          `[PLAYER] Playing: ${item.fileName} | frequency=${item.frequency} | start=${item.startDatetime ?? "-"} | end=${item.endDatetime ?? "-"}`,
-        );
-
-        player.loop = playlistRef.current.length === 1;
+        console.log(`[PLAYER] Playing ${item.fileName}`);
+        console.log(`[PLAYER] Type: ${item.type}`);
+        console.log(`[PLAYER] Frequency: ${item.frequency}`);
 
         await player.replaceAsync(item.localUri);
 
@@ -599,150 +417,34 @@ export const PlaylistComponent: React.FC = () => {
     void play();
   }, [mode, currentIndex, player]);
 
-  // ---------------------------------------------------------------------------
-  // Advance on video end
-  // ---------------------------------------------------------------------------
-
+  // =============================
+  // Advance when video finishes
+  // =============================
   useEffect(() => {
     const subscription = player.addListener("playToEnd", () => {
       const items = playlistRef.current;
 
-      if (items.length <= 1) {
-        return;
-      }
+      if (items.length <= 1) return;
 
       const nextIndex = (currentIndexRef.current + 1) % items.length;
 
       currentIndexRef.current = nextIndex;
-
       setCurrentIndex(nextIndex);
-
       setMode(items[nextIndex].type);
-
-      void cleanupPendingFiles(items[nextIndex].localUri);
     });
 
     return () => subscription.remove();
   }, [player]);
 
-  // ---------------------------------------------------------------------------
-  // Cleanup obsolete files
-  // ---------------------------------------------------------------------------
-
-  const cleanupPendingFiles = async (activeLocalUri?: string) => {
-    if (pendingDeleteRef.current.length === 0) {
-      return;
-    }
-
-    const files = pendingDeleteRef.current;
-
-    await deletePlaylistFiles(files, activeLocalUri);
-
-    pendingDeleteRef.current = files.filter((file) => file === activeLocalUri);
-  };
-
-  // ---------------------------------------------------------------------------
-  // Incremental server refresh
-  // ---------------------------------------------------------------------------
-
-  const refreshPlaylist = async () => {
-    if (refreshRunningRef.current) {
-      return;
-    }
-
-    refreshRunningRef.current = true;
-
-    try {
-      console.log("[REFRESH] Checking Media Player configuration version...");
-
-      const result = await refreshMediaPlayerPlaylist();
-
-      if (!result.changed) {
-        return;
-      }
-
-      const currentItem = playlistRef.current[currentIndexRef.current];
-
-      pendingDeleteRef.current = result.oldFilesToDelete;
-
-      console.log(
-        `[REFRESH] New configuration contains ${result.playlist.length} item(s)`,
-      );
-
-      allMediaRef.current = result.playlist;
-      setAllMedia(result.playlist);
-
-      // Rebuild the active schedule from the new config.
-      const activePlaylist = buildPlayablePlaylist(result.playlist);
-
-      playlistRef.current = activePlaylist;
-      setPlaylist(activePlaylist);
-
-      if (activePlaylist.length === 0) {
-        currentIndexRef.current = 0;
-        setCurrentIndex(0);
-        setMode("empty");
-      } else if (currentItem) {
-        const newIndex = activePlaylist.findIndex(
-          (item) => item.mediaUuid === currentItem.mediaUuid,
-        );
-
-        if (newIndex >= 0) {
-          // Continue the current media.
-          currentIndexRef.current = newIndex;
-          setCurrentIndex(newIndex);
-        } else {
-          // Current media was removed or became inactive.
-          currentIndexRef.current = 0;
-          setCurrentIndex(0);
-          setMode(activePlaylist[0].type);
-        }
-      } else {
-        currentIndexRef.current = 0;
-        setCurrentIndex(0);
-        setMode(activePlaylist[0].type);
-      }
-
-      await cleanupPendingFiles(currentItem?.localUri);
-    } catch (error) {
-      // Server refresh failure must not interrupt local playback.
-      console.warn(
-        "[REFRESH] Failed to refresh Media Player configuration. Keeping current media.",
-        error,
-      );
-    } finally {
-      refreshRunningRef.current = false;
-    }
-  };
-
-  // ---------------------------------------------------------------------------
-  // DB-driven version check
-  // ---------------------------------------------------------------------------
-
+  // =====================
+  // Play Image
+  // =====================
   useEffect(() => {
-    console.log(`[VERSION CHECK] Running every ${versionCheckInterval}ms`);
-
-    const timer = setInterval(() => {
-      void refreshPlaylist();
-    }, versionCheckInterval);
-
-    return () => clearInterval(timer);
-  }, [versionCheckInterval]);
-
-  // ---------------------------------------------------------------------------
-  // Image playback
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (mode !== "image") {
-      return;
-    }
+    if (mode !== "image") return;
 
     const item = playlistRef.current[currentIndexRef.current];
 
-    if (!item) {
-      return;
-    }
+    if (!item) return;
 
     fadeAnim.setValue(1);
 
@@ -760,6 +462,7 @@ export const PlaylistComponent: React.FC = () => {
           return;
         }
 
+        // One image stays on screen.
         if (items.length === 1) {
           fadeAnim.setValue(1);
           return;
@@ -779,14 +482,14 @@ export const PlaylistComponent: React.FC = () => {
           useNativeDriver: true,
         }).start();
       });
-    }, displayDuration);
+    }, imageDisplayDuration);
 
     return () => clearTimeout(timer);
-  }, [mode, currentIndex, displayDuration, fadeDuration, fadeAnim]);
+  }, [mode, currentIndex, imageDisplayDuration, fadeDuration, fadeAnim]);
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // Render current media
+  // ===========================================================================
 
   const renderMedia = () => {
     if (mode === "loading") {
@@ -803,6 +506,10 @@ export const PlaylistComponent: React.FC = () => {
       return null;
     }
 
+    // -------------------------------------------------------------------------
+    // Video
+    // -------------------------------------------------------------------------
+
     if (mode === "video") {
       return (
         <VideoView
@@ -813,6 +520,10 @@ export const PlaylistComponent: React.FC = () => {
         />
       );
     }
+
+    // -------------------------------------------------------------------------
+    // Image
+    // -------------------------------------------------------------------------
 
     return (
       <Animated.View
@@ -834,6 +545,10 @@ export const PlaylistComponent: React.FC = () => {
       </Animated.View>
     );
   };
+
+  // ===========================================================================
+  // Layout
+  // ===========================================================================
 
   const cardStyle =
     orientation === "Portrait" ? styles.portraitCard : styles.landscapeCard;
