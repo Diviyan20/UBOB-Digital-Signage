@@ -81,6 +81,8 @@ export const PlaylistComponent: React.FC = () => {
 
   const downloadErrorShownRef = useRef(false);
 
+  const modeRef = useRef<PlaybackMode>("loading");
+
   // ================
   // ANIMATION
   // ================
@@ -95,6 +97,11 @@ export const PlaylistComponent: React.FC = () => {
 
   const getPlaybackMode = (type: PlaylistItems["type"]): PlaybackMode => {
     return type === "video" ? "video" : "image";
+  };
+
+  const changeMode = (nextMode: PlaybackMode) => {
+    modeRef.current = nextMode;
+    setMode(nextMode);
   };
 
   // ===========================================================================
@@ -126,7 +133,7 @@ export const PlaylistComponent: React.FC = () => {
       setPlaylist([]);
       currentIndexRef.current = 0;
       setCurrentIndex(0);
-      setMode("empty");
+      changeMode("empty");
       return;
     }
 
@@ -154,7 +161,7 @@ export const PlaylistComponent: React.FC = () => {
     setPlaylist(playable);
     currentIndexRef.current = 0;
     setCurrentIndex(0);
-    setMode(playable[0].type);
+    changeMode(getPlaybackMode(playable[0].type));
   };
 
   // ================================
@@ -302,21 +309,46 @@ export const PlaylistComponent: React.FC = () => {
   // RE-EVALUATE SCHEDULES
   // =======================
   useEffect(() => {
-    const reevaluateSchedule = () => {
+    const handleAppState = (state: string) => {
+      // App is leaving the foreground.
+      if (state !== "active") {
+        if (modeRef.current === "video") {
+          console.log("[APP] Leaving foreground. Pausing video.");
+          player.pause();
+        }
+
+        return;
+      }
+
+      // App has returned to the foreground.
+      console.log("[APP] Became active");
+
+      const recover = async () => {
+        // Check server for playlist changes first.
+        await refreshPlaylist();
+
+        // Re-evaluate Daily / LTO scheduling.
+        if (allMediaRef.current.length > 0) {
+          console.log("[SCHEDULE] Re-evaluating schedule");
+          syncPlaylist(allMediaRef.current);
+        }
+
+        // Rebuild the native video player if we were playing video.
+        await recoverVideoPlayer();
+      };
+
+      void recover();
+    };
+
+    const timer = setInterval(() => {
       if (allMediaRef.current.length === 0) return;
 
       console.log("[SCHEDULE] Re-evaluating schedule");
 
       syncPlaylist(allMediaRef.current);
-    };
+    }, SCHEDULE_CHECK_INTERVAL_MS);
 
-    const timer = setInterval(reevaluateSchedule, SCHEDULE_CHECK_INTERVAL_MS);
-
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        reevaluateSchedule();
-      }
-    });
+    const subscription = AppState.addEventListener("change", handleAppState);
 
     return () => {
       clearInterval(timer);
@@ -362,6 +394,44 @@ export const PlaylistComponent: React.FC = () => {
       refreshRunningRef.current = false;
     }
   };
+
+  const recoverVideoPlayer = async () => {
+    const currentMode = modeRef.current;
+
+    if (currentMode !== "video") return;
+
+    const currentItem = playlistRef.current[currentIndexRef.current];
+
+    if (!currentItem?.localUri) return;
+
+    try {
+      console.log(
+        `[PLAYER] Recovering video playback for ${currentItem.fileName}`,
+      );
+
+      await player.replaceAsync(currentItem.localUri);
+      player.replay();
+      player.play();
+
+      console.log(
+        `[PLAYER] Video playback recovered for ${currentItem.fileName}`,
+      );
+    } catch (error) {
+      console.error(
+        `[PLAYER] Failed to recover video playback for ${currentItem.fileName}:`,
+        error,
+      );
+    }
+  };
+
+  // ============================
+  // Refresh when player mounts
+  // ============================
+  useEffect(() => {
+    console.log("[REFRESH] PlaylistComponent mounted. Refreshing media...");
+
+    void refreshPlaylist();
+  }, []);
 
   // ===============================
   // Periodic server version check
@@ -430,7 +500,7 @@ export const PlaylistComponent: React.FC = () => {
 
       currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
-      setMode(items[nextIndex].type);
+      changeMode(getPlaybackMode(items[nextIndex].type));
     });
 
     return () => subscription.remove();
@@ -458,7 +528,7 @@ export const PlaylistComponent: React.FC = () => {
         const items = playlistRef.current;
 
         if (items.length === 0) {
-          setMode("empty");
+          changeMode("empty");
           return;
         }
 
@@ -473,7 +543,7 @@ export const PlaylistComponent: React.FC = () => {
         currentIndexRef.current = nextIndex;
 
         setCurrentIndex(nextIndex);
-        setMode(items[nextIndex].type);
+        changeMode(getPlaybackMode(items[nextIndex].type));
 
         Animated.timing(fadeAnim, {
           toValue: 1,
