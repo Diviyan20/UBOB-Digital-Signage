@@ -37,7 +37,7 @@ const LOGIN_ROUTE = "/";
 
 const DEFAULT_VERSION_CHECK_INTERVAL_MS = 5 * 60 * 60 * 1000;
 
-const SCHEDULE_CHECK_INTERVAL_MS = 30 * 1000;
+const SCHEDULE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 
 // =============================================================================
 // Component
