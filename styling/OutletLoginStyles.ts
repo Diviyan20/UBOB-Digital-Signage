@@ -328,11 +328,12 @@ export const OutletLoginStyles = StyleSheet.create({
   },
 
   readOnlyField: {
-    width: "100%",
+    alignSelf: "flex-start",
+    minWidth: 100,
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 14,
     backgroundColor: "#f5f5f5",
     marginBottom: 6,
