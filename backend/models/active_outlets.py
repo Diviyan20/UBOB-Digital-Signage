@@ -50,7 +50,7 @@ def get_db_connection():
         conn = psycopg2.connect(
             database = OUTLET_DATABASE,
             user = creds["username"],
-            password = creds["password"],
+            password = DB_PASSWORD,
             host = DB_HOSTNAME,
             port = DB_PORT
         )
@@ -72,7 +72,7 @@ def get_db_connection():
         if conn:
             conn.close()
 
-def get_outlet_info(outlet_id: str) -> dict:
+def get_outlet_information(outlet_id: str) -> dict:
     """
     Get outlet information from the Database based on 'outlet_id'.
     Returns None if no ID is found.
@@ -114,7 +114,7 @@ def get_all_outlets() -> dict:
             outlets = cur.fetchall()
             
             if not outlets:
-                return []
+                return None
             
             return[{
                 "outlet_id": outlet[0],
@@ -198,7 +198,7 @@ def register_outlet(outlet_id:str, outlet_name:str, region_name:str,
             now = datetime.now(timezone.utc)
             
             # Check if outlet exists (use the 'get_outlet_info()' function)
-            existing = get_outlet_info(outlet_id)
+            existing = get_outlet_information(outlet_id)
             
             if existing:
                 return{

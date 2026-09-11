@@ -22,6 +22,8 @@ import { useLoginRetry } from "@/frontend/hooks/useLoginRetry";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useWindowDimensions } from "react-native";
 
+import Logo from "../images/Logo.png";
+
 // ===============
 // TYPES
 // ===============
@@ -407,7 +409,7 @@ export const OutletLoginForm: React.FC = () => {
           styles.imageContainer,
           isPortrait && styles.imageContainerPortrait,
         ]}
-        source={require("../images/Logo.png")}
+        source={Logo}
       />
 
       <View style={[styles.card, isPortrait && styles.cardPortrait]}>

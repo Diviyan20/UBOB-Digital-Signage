@@ -49,7 +49,7 @@ def fetch_all_outlet_data() -> List:
         data = response.json()
         
         if not data.get("status"):
-            return jsonify({"error": "Odoo API Error"}), []
+            return jsonify({"erro": "Odoo API Error"}), []
         
         else:
             # Extract all outlet data

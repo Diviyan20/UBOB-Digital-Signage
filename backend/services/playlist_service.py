@@ -1,6 +1,6 @@
 import hashlib
 
-from models.active_outlets import get_outlet_info
+from models.active_outlets import get_outlet_information
 from utils.s3_helper import get_s3_playlist_media, get_video_media, list_s3_objects, get_video_url
 
 class PlaylistService:
@@ -15,7 +15,7 @@ class PlaylistService:
         """
         Gets outlet region from database
         """
-        outlet = get_outlet_info(outlet_id)
+        outlet = get_outlet_information(outlet_id)
 
         if not outlet:
             raise Exception("Outlet Not Found")
