@@ -86,6 +86,7 @@ def _normalize_outlet_datetime(value: str | None) -> datetime | None:
 
     if isinstance(value, datetime):
         parsed = value
+    
     else:
         parsed = datetime.fromisoformat(
             str(value).replace("Z", "+00:00")
@@ -206,9 +207,16 @@ def update_outlet_screen(screen_id: str, fields: dict) -> dict:
 
     if "frequency" in fields and fields["frequency"] not in VALID_FREQUENCIES:
         return {"success": False, "error": f"frequency must be one of {VALID_FREQUENCIES}"}
+    
+    if "start_datetime" in fields:
+        fields["start_datetime"] = _normalize_outlet_datetime(fields["start_datetime"])
+
+    if "end_datetime" in fields:
+        fields["end_datetime"] = _normalize_outlet_datetime(fields["end_datetime"])
 
     set_clauses = [f"{col} = %s" for col in fields.keys()]
     set_clauses.append("updated_at = %s")
+    
     values = list(fields.values()) + [datetime.now(timezone.utc), screen_id]
 
     try:
@@ -219,15 +227,14 @@ def update_outlet_screen(screen_id: str, fields: dict) -> dict:
                 WHERE screen_id = %s
                 RETURNING screen_id;
             """
-            start_datetime = _normalize_outlet_datetime(start_datetime)
-            end_datetime = _normalize_outlet_datetime(end_datetime)
             
             cur.execute(query, values)
             result = cur.fetchone()
-            conn.commit()
 
             if not result:
                 return {"success": False, "error": "Screen not found"}
+            
+            conn.commit()
 
         return {"success": True, **get_outlet_screen(screen_id)}
 

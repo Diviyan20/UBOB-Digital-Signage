@@ -45,17 +45,5 @@ def get_system_config():
 
             cur.execute(query)
             result = cur.fetchone()
-            
-            print("[CONFIG] Database result:", result)
-            print(
-                "[CONFIG] version_check:",
-                result["version_check"] if result else None
-            )
-            print(
-                "[CONFIG] version_check type:",
-                type(result["version_check"]).__name__
-                if result
-                else None
-            )
 
             return result
