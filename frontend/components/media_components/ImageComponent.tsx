@@ -23,8 +23,6 @@ const DEV_BLOCK_PROMOTIONS = false;
 
 const FALLBACK_IMAGE = require("../images/Logo.png");
 
-const PROMOTION_CHECK_INTERVAL_MS = 30 * 1000;
-
 export const ImageComponent: React.FC = React.memo(() => {
   const { width, height } = useWindowDimensions();
 
@@ -40,6 +38,8 @@ export const ImageComponent: React.FC = React.memo(() => {
 
   const [displayDuration, setDisplayDuration] = useState(5000);
 
+  const [promotionRefresh, setPromotionRefresh] = useState(30000);
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -53,6 +53,7 @@ export const ImageComponent: React.FC = React.memo(() => {
   useEffect(() => {
     const loadConfig = async () => {
       try {
+        console.log("[CONFIG] Fetching application configuration...");
         const response = await fetch(api.config);
 
         if (!response.ok) {
@@ -61,13 +62,44 @@ export const ImageComponent: React.FC = React.memo(() => {
 
         const data = await response.json();
 
-        const duration = data.config?.image_display_duration;
+        console.log("[CONFIG] Full response:", data);
+        console.log("[CONFIG] Config object:", data.config);
 
-        if (typeof duration === "number" && duration > 0) {
-          setDisplayDuration(duration);
+        const imageDuration = Number(data.data?.image_display_duration);
+
+        const promotionRefresh = Number(data.data?.refresh_status);
+
+        console.log(`[CONFIG] image_display_duration = ${imageDuration}ms`);
+
+        console.log(`[CONFIG] refresh_status = ${promotionRefresh}ms`);
+
+        if (Number.isFinite(imageDuration) && imageDuration > 0) {
+          setDisplayDuration(imageDuration);
+          console.log(
+            `[CONFIG] Applied image display duration: ${imageDuration}ms`,
+          );
+        } else {
+          console.warn(
+            "[CONFIG] Invalid image_display_duration. Using default 5000ms.",
+          );
+        }
+
+        if (Number.isFinite(promotionRefresh) && promotionRefresh > 0) {
+          setPromotionRefresh(promotionRefresh);
+
+          console.log(
+            `[CONFIG] Applied promotion refresh interval: ${promotionRefresh}ms`,
+          );
+        } else {
+          console.warn(
+            "[CONFIG] Invalid refresh_status. Using default 30000ms.",
+          );
         }
       } catch (error) {
-        console.warn("[PROMOTION] Failed to load display config.", error);
+        console.warn(
+          "[CONFIG] Failed to load display configuration. Using defaults.",
+          error,
+        );
       }
     };
 
@@ -134,15 +166,17 @@ export const ImageComponent: React.FC = React.memo(() => {
   // ============================================================
 
   useEffect(() => {
+    console.log(
+      `[PROMOTION] Starting Odoo refresh timer: ${promotionRefresh}ms`,
+    );
+
     const checkPromotions = async () => {
       try {
         console.log("[PROMOTION] Running periodic Odoo check...");
 
         const media = await syncPromotions();
 
-        if (!isMounted.current) {
-          return;
-        }
+        if (!isMounted.current) return;
 
         setMediaList(media);
 
@@ -162,10 +196,16 @@ export const ImageComponent: React.FC = React.memo(() => {
 
     const timer = setInterval(() => {
       void checkPromotions();
-    }, PROMOTION_CHECK_INTERVAL_MS);
+    }, promotionRefresh);
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      console.log(
+        `[PROMOTION] Clearing Odoo refresh timer: ${promotionRefresh}ms`,
+      );
+
+      clearInterval(timer);
+    };
+  }, [promotionRefresh]);
 
   // ============================================================
   // IMAGE CYCLING
