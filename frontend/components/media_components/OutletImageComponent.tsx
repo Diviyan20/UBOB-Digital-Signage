@@ -79,8 +79,8 @@ export const OutletDisplayComponent: React.FC<{ endpoint?: string }> =
         try {
           const response = await fetch(api.config);
           const data = await response.json();
-          setFlipInterval(data.config.outlet_image_flip_interval);
-          setFadeDuration(data.config.fade_duration);
+          setFlipInterval(data.data.outlet_image_flip_interval);
+          setFadeDuration(data.data.fade_duration);
         } catch (e) {
           console.error("CONFIG ERROR:", e);
         }
