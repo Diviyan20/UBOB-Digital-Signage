@@ -83,6 +83,9 @@ export const PlaylistComponent: React.FC = () => {
 
   const modeRef = useRef<PlaybackMode>("loading");
 
+  const isMounted = useRef(true);
+  const [loadedImageUri, setLoadedImageUri] = useState<string | null>(null);
+
   // ================
   // ANIMATION
   // ================
@@ -167,39 +170,80 @@ export const PlaylistComponent: React.FC = () => {
   // ================================
   // LOAD APPLICATION CONFIGURATION
   // ================================
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const response = await fetch(api.config);
+  const loadConfig = async () => {
+    try {
+      console.log("[CONFIG] Fetching application configuration...");
 
-        if (!response.ok) {
-          throw new Error(`Config request failed: ${response.status}`);
-        }
+      const response = await fetch(api.config);
 
-        const data = await response.json();
-
-        const imageDuration = data.config?.image_display_duration;
-        const fade = data.config?.fade_duration;
-        const versionCheck = data.config?.version_check;
-
-        if (typeof imageDuration === "number" && imageDuration > 0) {
-          console.log(`[CONFIG] image_display_duration = ${imageDuration}ms`);
-        }
-
-        if (typeof fade === "number" && fade >= 0) {
-          setFadeDuration(fade);
-          console.log(`[CONFIG] fade_duration = ${fade}ms`);
-        }
-
-        if (typeof versionCheck == "number" && versionCheck > 0) {
-          setVersionCheckInterval(versionCheck);
-          console.log(`[CONFIG] version_check = ${versionCheck}ms`);
-        }
-      } catch (error) {
-        console.warn("[CONFIG] Failed to load config. Using defaults.", error);
+      if (!response.ok) {
+        throw new Error(`Config request failed: ${response.status}`);
       }
-    };
 
+      const responseData = await response.json();
+
+      console.log("[CONFIG] Full response:", responseData);
+
+      // Your current API returns the configuration under `data`.
+      // The fallback keeps this code tolerant if the backend shape changes.
+      const config = responseData?.data ?? responseData?.config ?? responseData;
+
+      console.log("[CONFIG] Resolved config:", config);
+
+      const imageDuration = Number(config?.image_display_duration);
+
+      const fade = Number(config?.fade_duration);
+
+      const versionCheck = Number(config?.version_check);
+
+      console.log(
+        `[CONFIG] image_display_duration raw:`,
+        config?.image_display_duration,
+      );
+
+      console.log(`[CONFIG] fade_duration raw:`, config?.fade_duration);
+
+      console.log(`[CONFIG] version_check raw:`, config?.version_check);
+
+      console.log(`[CONFIG] Parsed image_display_duration: ${imageDuration}ms`);
+
+      console.log(`[CONFIG] Parsed fade_duration: ${fade}ms`);
+
+      console.log(`[CONFIG] Parsed version_check: ${versionCheck}ms`);
+
+      if (Number.isFinite(imageDuration) && imageDuration > 0) {
+        setImageDisplayDuration(imageDuration);
+
+        console.log(
+          `[CONFIG] Applied image_display_duration: ${imageDuration}ms`,
+        );
+      } else {
+        console.warn(
+          "[CONFIG] Invalid image_display_duration. Using default 5000ms.",
+        );
+      }
+
+      if (Number.isFinite(fade) && fade >= 0) {
+        setFadeDuration(fade);
+
+        console.log(`[CONFIG] Applied fade_duration: ${fade}ms`);
+      } else {
+        console.warn("[CONFIG] Invalid fade_duration. Using default 400ms.");
+      }
+
+      if (Number.isFinite(versionCheck) && versionCheck > 0) {
+        setVersionCheckInterval(versionCheck);
+
+        console.log(`[CONFIG] Applied version_check: ${versionCheck}ms`);
+      } else {
+        console.warn("[CONFIG] Invalid version_check. Using default interval.");
+      }
+    } catch (error) {
+      console.warn("[CONFIG] Failed to load config. Using defaults.", error);
+    }
+  };
+
+  useEffect(() => {
     void loadConfig();
   }, []);
 
@@ -314,6 +358,7 @@ export const PlaylistComponent: React.FC = () => {
       if (state !== "active") {
         if (modeRef.current === "video") {
           console.log("[APP] Leaving foreground. Pausing video.");
+
           player.pause();
         }
 
@@ -323,17 +368,17 @@ export const PlaylistComponent: React.FC = () => {
       // App has returned to the foreground.
       console.log("[APP] Became active");
 
+      // Refresh application configuration.
+      void loadConfig();
+
       const recover = async () => {
-        // Check server for playlist changes first.
         await refreshPlaylist();
 
-        // Re-evaluate Daily / LTO scheduling.
         if (allMediaRef.current.length > 0) {
           console.log("[SCHEDULE] Re-evaluating schedule");
           syncPlaylist(allMediaRef.current);
         }
 
-        // Rebuild the native video player if we were playing video.
         await recoverVideoPlayer();
       };
 
@@ -516,6 +561,9 @@ export const PlaylistComponent: React.FC = () => {
 
     if (!item) return;
 
+    // Wait until the image has completely loaded.
+    if (loadedImageUri !== item.localUri) return;
+
     fadeAnim.setValue(1);
 
     const timer = setTimeout(() => {
@@ -555,12 +603,54 @@ export const PlaylistComponent: React.FC = () => {
     }, imageDisplayDuration);
 
     return () => clearTimeout(timer);
-  }, [mode, currentIndex, imageDisplayDuration, fadeDuration, fadeAnim]);
+  }, [
+    mode,
+    currentIndex,
+    loadedImageUri,
+    imageDisplayDuration,
+    fadeDuration,
+    fadeAnim,
+  ]);
+
+  // =====================
+  // FADE IMAGE IN
+  // =====================
+  useEffect(() => {
+    if (mode !== "image") {
+      return;
+    }
+
+    const item = playlistRef.current[currentIndexRef.current];
+
+    if (!item) {
+      return;
+    }
+
+    if (loadedImageUri !== item.localUri) {
+      return;
+    }
+
+    fadeAnim.setValue(0);
+
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: fadeDuration,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+
+    return () => {
+      fadeAnim.stopAnimation();
+    };
+  }, [mode, currentIndex, loadedImageUri, fadeDuration, fadeAnim]);
 
   // ===========================================================================
   // Render current media
   // ===========================================================================
+  const currentItem = playlist[currentIndex];
 
+  const imageReady =
+    mode !== "image" || loadedImageUri === currentItem?.localUri;
   const renderMedia = () => {
     if (mode === "loading") {
       return <Text style={styles.statusText}>Loading media...</Text>;
@@ -569,8 +659,6 @@ export const PlaylistComponent: React.FC = () => {
     if (mode === "empty") {
       return <Text style={styles.statusText}>No media scheduled.</Text>;
     }
-
-    const currentItem = playlist[currentIndex];
 
     if (!currentItem) {
       return null;
@@ -605,12 +693,29 @@ export const PlaylistComponent: React.FC = () => {
         ]}
       >
         <Image
+          key={currentItem.localUri}
           source={{
             uri: currentItem.localUri,
           }}
-          style={styles.media}
+          style={[
+            styles.media,
+            {
+              opacity: imageReady ? 1 : 0,
+            },
+          ]}
           contentFit="contain"
-          cachePolicy="memory"
+          cachePolicy="none"
+          onLoad={() => {
+            console.log(`[PLAYER] Image loaded: ${currentItem.fileName}`);
+
+            setLoadedImageUri(currentItem.localUri);
+          }}
+          onError={(error) => {
+            console.warn(
+              `[PLAYER] Failed to load image: ${currentItem.fileName}`,
+              error,
+            );
+          }}
         />
       </Animated.View>
     );
