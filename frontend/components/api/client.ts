@@ -5,26 +5,25 @@ const DEVELOPMENT_URL =
   "https://kcs4utnpog.execute-api.ap-southeast-5.amazonaws.com";
 
 export const api = {
-  validateOutlet: `${DEVELOPMENT_URL}/validate_outlet`,
-  outletInfo: (outletId: string) =>
-    `${DEVELOPMENT_URL}/outlet_info/${outletId}`,
-  outletData: `${DEVELOPMENT_URL}/api/outlets`,
-  heartbeat: `${DEVELOPMENT_URL}/heartbeat`,
-  promotions: `${DEVELOPMENT_URL}/promotions`,
-  outletImages: `${DEVELOPMENT_URL}/outlet_image_combined`,
+  validateOutlet: `${PRODUCTION_URL}/validate_outlet`,
+  outletInfo: (outletId: string) => `${PRODUCTION_URL}/outlet_info/${outletId}`,
+  outletData: `${PRODUCTION_URL}/api/outlets`,
+  heartbeat: `${PRODUCTION_URL}/heartbeat`,
+  promotions: `${PRODUCTION_URL}/promotions`,
+  outletImages: `${PRODUCTION_URL}/outlet_image_combined`,
 
   // Signage
-  signageVideos: `${DEVELOPMENT_URL}/signage_videos`,
-  signageVersion: `${DEVELOPMENT_URL}/signage_version`,
+  signageVideos: `${PRODUCTION_URL}/signage_videos`,
+  signageVersion: `${PRODUCTION_URL}/signage_version`,
 
   // Legacy generic playlist endpoints.
   // Do not use these for the new Media Player runtime.
-  playlist: `${DEVELOPMENT_URL}/playlist`,
-  playlistVersion: `${DEVELOPMENT_URL}/playlist_version`,
+  playlist: `${PRODUCTION_URL}/playlist`,
+  playlistVersion: `${PRODUCTION_URL}/playlist_version`,
 
   // New Media Player endpoints.
-  mediaPlayerConfig: `${DEVELOPMENT_URL}/outlet-screens/media-player/config`,
-  mediaPlayerVersion: `${DEVELOPMENT_URL}/outlet-screens/media-player/version`,
+  mediaPlayerConfig: `${PRODUCTION_URL}/outlet-screens/media-player/config`,
+  mediaPlayerVersion: `${PRODUCTION_URL}/outlet-screens/media-player/version`,
 
-  config: `${DEVELOPMENT_URL}/config`,
+  config: `${PRODUCTION_URL}/config`,
 };
