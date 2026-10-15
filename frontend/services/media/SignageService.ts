@@ -1,199 +1,133 @@
 import { api } from "@/frontend/components/api/client";
-import { File } from "expo-file-system/next";
-
-import {
-    clearSignageCache,
-    loadPreparedSignageVideos,
-    loadSignageMeta,
-    saveSignageMeta,
-} from "./MediaStorage";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { downloadSignageFile } from "./MediaDownload";
+import { ensureSignageDir } from "./MediaStorage";
 
-import type {
-    PreparedSignageVideo,
-    SignageItem,
-    SignageVersion,
-} from "./MediaTypes";
+const SIGNAGE_META_KEY = "signage_meta";
 
-// ===============
-// SIGNAGE API
-// ===============
+// What we store in AsyncStorage — just the list of files currently on disk
+export interface SignageMeta {
+  items: SignageItem[];
+  fetchedAt: number;
+}
 
-/*
- * Retrieve the current Signage S3 folder version.
- * This does NOT download media.
- * It only determines whether the cached content is still valid.
- */
+export interface SignageItem {
+  key: string; // S3 key — stable identifier
+  url: string; // CloudFront URL
+  rotate: boolean; // whether to rotate 90° for portrait
+  localUri: string; // local file:// path — what the player uses
+}
 
-export const getSignageVersion = async (): Promise<SignageVersion> => {
+// ─── Cache helpers ─────────────────────────────────────────────────────────────
+
+const loadMeta = async (): Promise<SignageMeta | null> => {
   try {
-    const response = await fetch(api.signageVersion);
+    const raw = await AsyncStorage.getItem(SIGNAGE_META_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
 
+const saveMeta = async (items: SignageItem[]): Promise<void> => {
+  const meta: SignageMeta = { items, fetchedAt: Date.now() };
+  await AsyncStorage.setItem(SIGNAGE_META_KEY, JSON.stringify(meta));
+};
+
+// ─── Main fetch ───────────────────────────────────────────────────────────────
+
+/**
+ * Fetch signage media from Odoo (via backend), download to device, return local URIs.
+ *
+ * Every call fetches the latest list from the server.
+ * Files already on disk are skipped (no re-download).
+ * Files no longer in the latest list are deleted from disk.
+ * No etag or version check — caller controls how often this runs.
+ */
+export const fetchSignageMedia = async (): Promise<SignageItem[]> => {
+  console.log("[SIGNAGE] Fetching latest media from server...");
+
+  // Step 1: Get latest list from backend (which fetches from Odoo)
+  let serverItems: { key: string; url: string }[] = [];
+
+  try {
+    const response = await fetch(api.signageVideos);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    serverItems = data.videos || [];
+  } catch (err) {
+    console.error("[SIGNAGE] Server fetch failed:", err);
 
-    if (!response.ok) {
-      return {
-        etag: null,
-        itemCount: 0,
-      };
+    // Offline — return whatever is cached on disk
+    const meta = await loadMeta();
+    if (meta && meta.items.length > 0) {
+      console.log(
+        `[SIGNAGE] Offline — serving ${meta.items.length} cached items`,
+      );
+      return meta.items;
     }
-
-    return {
-      etag: data.etag ?? null,
-      itemCount: data.itemCount ?? 0,
-    };
-  } catch {
-    return {
-      etag: null,
-      itemCount: 0,
-    };
-  }
-};
-
-/**
- * Retrieve the Signage media list.
- *
- * The backend is expected to return CloudFront URLs.
- */
-export const fetchSignageVideos = async (): Promise<SignageItem[]> => {
-  const response = await fetch(api.signageVideos);
-
-  let data: any;
-
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error("Invalid signage media response");
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      data?.message || data?.error || "Failed to fetch signage videos",
-    );
-  }
-
-  return data.videos ?? [];
-};
-
-// ==============================
-// INITIAL SIGNAGE PREPARATION
-// ==============================
-/**
- * Prepare ALL Signage videos locally.
- *
- * Flow:
- *
- * 1. Get current S3 folder version.
- * 2. Get CloudFront URLs.
- * 3. Check local metadata.
- * 4. If ETag matches and files exist → return cache.
- * 5. Otherwise download every video sequentially.
- * 6. Save local metadata.
- *
- * Unlike Media Player, Signage does not have a user-selected playlist.
- * Every media object under Global/Signage is prepared.
- */
-export const prepareSignageVideos = async (
-  outletId: string,
-): Promise<PreparedSignageVideo[]> => {
-  if (!outletId) throw new Error("No Outlet ID");
-
-  console.log("[SIGNAGE] Preparing signage videos...");
-
-  // 1. Get current version
-  const version = await getSignageVersion();
-
-  if (!version.etag) throw new Error("Could not get signage version");
-
-  // 2. Get current media list
-  const videos = await fetchSignageVideos();
-
-  if (videos.length === 0) {
-    console.warn("[SIGNAGE] No signage videos found");
     return [];
   }
 
-  console.log(`[SIGNAGE] Found ${videos.length} signage video(s)`);
-
-  // 3. Check local cache
-  const current = await loadSignageMeta();
-
-  // 4. Cache hit
-  if (
-    current &&
-    current.outletId === outletId &&
-    current.etag === version.etag &&
-    current.items.length > 0
-  ) {
-    const allFilesExist = current.items.every(
-      (item) => new File(item.localUri).exists,
-    );
-
-    if (allFilesExist) {
-      console.log(
-        `[SIGNAGE] Cache hit — ${current.items.length} local video(s)`,
-      );
-      return current.items;
-    }
-
-    console.warn("[SIGNAGE] Metadata exists but local files are missing");
+  if (serverItems.length === 0) {
+    console.warn("[SIGNAGE] Server returned no media");
+    return [];
   }
 
-  // 5. Cache miss
-  if (current) {
-    console.log(`[SIGNAGE] Version changed: ${current.etag} → ${version.etag}`);
-  } else {
-    console.log("[SIGNAGE] No local cache — downloading");
-  }
+  ensureSignageDir();
 
-  const prepared: PreparedSignageVideo[] = [];
-
-  // 6. Download sequentially
-  for (const video of videos) {
-    const key = video.key || video.videoURI.split("/").pop() || video.videoURI;
-
-    console.log("[SIGNAGE] Preparing:", {
-      key,
-      url: video.videoURI,
-    });
-
-    const localUri = await downloadSignageFile(video.videoURI, key);
-
-    prepared.push({
-      videoUri: video.videoURI,
-      localUri,
-      key,
-      rotate: video.rotate,
-      sizeMb: video.sizeMb,
-      optimized: video.optimized,
-    });
-  }
-
-  // 7. Save cache metadata
-  await saveSignageMeta({
-    etag: version.etag,
-    outletId,
-    items: prepared,
-  });
-
-  console.log(
-    `[SIGNAGE] Download complete — ${prepared.length}/${videos.length}`,
+  // Step 2: Download any new files (skip existing)
+  const results = await Promise.allSettled(
+    serverItems.map(async (item) => {
+      const localUri = await downloadSignageFile(item.url, item.key);
+      return { key: item.key, url: item.url, localUri } as SignageItem;
+    }),
   );
 
-  return prepared;
+  const successful = results
+    .filter(
+      (r): r is PromiseFulfilledResult<SignageItem> => r.status === "fulfilled",
+    )
+    .map((r) => r.value);
+
+  // Step 3: Delete files that are no longer in the server list
+  const currentKeys = new Set(serverItems.map((i) => i.key));
+  const meta = await loadMeta();
+
+  if (meta) {
+    for (const old of meta.items) {
+      if (!currentKeys.has(old.key)) {
+        try {
+          const { File } = await import("expo-file-system/next");
+          const file = new File(old.localUri);
+          if (file.exists) {
+            file.delete();
+            console.log(`[SIGNAGE] Deleted stale file: ${old.key}`);
+          }
+        } catch (err) {
+          console.warn(
+            `[SIGNAGE] Failed to delete stale file: ${old.key}`,
+            err,
+          );
+        }
+      }
+    }
+  }
+
+  // Step 4: Save updated meta
+  await saveMeta(successful);
+  console.log(`[SIGNAGE] Ready — ${successful.length} items on disk`);
+
+  return successful;
 };
 
-// =====================
-// CLEAR SIGNAGE CACHE
-// =====================
-export { clearSignageCache };
-
-// ==========================
-// LOAD LOCAL SIGNAGE MEDIA
-// ==========================
-export const getPreparedSignageVideos = async (): Promise<
-  PreparedSignageVideo[]
-> => {
-  return loadPreparedSignageVideos();
+/**
+ * Load cached signage items without hitting the server.
+ * Used on app boot before the first refresh fires.
+ */
+export const getCachedSignageMedia = async (): Promise<SignageItem[]> => {
+  const meta = await loadMeta();
+  if (!meta || meta.items.length === 0) return [];
+  console.log(`[SIGNAGE] Loaded ${meta.items.length} cached items from disk`);
+  return meta.items;
 };

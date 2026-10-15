@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-
-import { api } from "../api/client";
-
-import { loadPreparedSignageVideos } from "@/frontend/services/MediaService";
-
-import { watchDogOverlayStyle as styles } from "@/styling/OverlayStyles";
-
 import { Text, View } from "react-native";
 
+import {
+  fetchSignageMedia,
+  getCachedSignageMedia,
+} from "@/frontend/services/media/SignageService";
+import { watchDogOverlayStyle as styles } from "@/styling/OverlayStyles";
+import { api } from "../api/client";
 import { ImageComponent } from "./ImageComponent";
 import { VideoComponent } from "./VideoComponent";
 
@@ -16,293 +15,179 @@ type MediaState = "IMAGES" | "VIDEOS";
 const WATCHDOG_TIMEOUT_MS = 12000;
 const MAX_RETRIES = 3;
 const ERROR_DISPLAY_DURATION = 8000;
+const DEFAULT_REFRESH_INTERVAL_MS = 1800000; // 30 min fallback
 
 export const MediaController = () => {
   const [mediaState, setMediaState] = useState<MediaState>("IMAGES");
-
-  const [hasSignageVideos, setHasSignageVideos] = useState(false);
-
   const [stateInterval, setStateInterval] = useState(60000);
-
+  const [refreshInterval, setRefreshInterval] = useState(
+    DEFAULT_REFRESH_INTERVAL_MS,
+  );
+  const [hasSignageMedia, setHasSignageMedia] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-
   const [showError, setShowError] = useState(false);
-
-  /*
-   * This is the important part:
-   *
-   * 0 → first video
-   * 1 → second video
-   * 2 → third video
-   * ...
-   *
-   * It survives the VideoComponent unmount/remount.
-   */
-  const nextVideoIndexRef = useRef(0);
-
-  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [videoIndex, setVideoIndex] = useState(0);
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(true);
 
-  // ---------------------------------------------------------------------------
-  // Watchdog cleanup
-  // ---------------------------------------------------------------------------
-
-  const clearWatchdog = useCallback(() => {
-    if (watchdogRef.current) {
-      clearTimeout(watchdogRef.current);
-      watchdogRef.current = null;
-    }
-  }, []);
-
-  // ---------------------------------------------------------------------------
-  // Load configuration
-  // ---------------------------------------------------------------------------
+  // ── Config ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    const fetchConfig = async () => {
+    const loadConfig = async () => {
       try {
-        const response = await fetch(api.config);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        const interval = data.config?.state_interval;
-
-        if (typeof interval === "number" && interval > 0) {
-          setStateInterval(interval);
-
-          console.log(`[CONFIG] state_interval = ${interval}ms`);
-        }
-      } catch (error) {
-        console.error("[CONFIG] Failed to load config:", error);
+        const res = await fetch(api.config);
+        const data = await res.json();
+        setStateInterval(data.config.state_interval ?? 60000);
+        // Pull refresh interval from DB — falls back to 30 min if not set
+        setRefreshInterval(
+          data.config.signage_refresh_interval ?? DEFAULT_REFRESH_INTERVAL_MS,
+        );
+      } catch (err) {
+        console.error("[CONFIG ERROR]", err);
       }
     };
-
-    void fetchConfig();
+    void loadConfig();
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Check locally prepared signage videos
-  // ---------------------------------------------------------------------------
+  // ── Signage media fetch ─────────────────────────────────────────────────────
 
-  const checkSignageVideos = useCallback(async () => {
+  /**
+   * Fetches latest signage media from Odoo via backend.
+   * Downloads new files, deletes stale ones.
+   * Sets hasSignageMedia so the transition timer knows whether to switch.
+   */
+  const refreshSignageMedia = useCallback(async () => {
+    console.log("[SIGNAGE] Refreshing from Odoo...");
     try {
-      const preparedVideos = await loadPreparedSignageVideos();
-
-      console.log(
-        `[SIGNAGE CHECK] Local prepared videos: ${preparedVideos.length}`,
-      );
-
-      setHasSignageVideos(preparedVideos.length > 0);
-
-      /*
-       * If the number of available videos
-       * changed and our next index is now
-       * outside the array, wrap it back.
-       */
-      if (
-        preparedVideos.length > 0 &&
-        nextVideoIndexRef.current >= preparedVideos.length
-      ) {
-        nextVideoIndexRef.current = 0;
-      }
-
-      /*
-       * If all signage media disappear,
-       * don't leave the rotation index
-       * pointing at something invalid.
-       */
-      if (preparedVideos.length === 0) {
-        nextVideoIndexRef.current = 0;
-      }
-    } catch (error) {
-      console.error("[SIGNAGE CHECK] Failed:", error);
+      const items = await fetchSignageMedia();
+      if (!isMounted.current) return;
+      setHasSignageMedia(items.length > 0);
+      console.log(`[SIGNAGE] ${items.length} item(s) ready`);
+    } catch (err) {
+      console.error("[SIGNAGE] Refresh failed:", err);
+      // Don't flip hasSignageMedia — keep showing whatever was last known
     }
   }, []);
 
+  // On mount: serve cached media immediately, then kick off first refresh
   useEffect(() => {
-    void checkSignageVideos();
+    isMounted.current = true;
 
-    const interval = setInterval(() => {
-      void checkSignageVideos();
-    }, 120000);
+    const init = async () => {
+      // Show cached items right away so there's no blank period on boot
+      const cached = await getCachedSignageMedia();
+      if (isMounted.current) setHasSignageMedia(cached.length > 0);
 
-    return () => clearInterval(interval);
-  }, [checkSignageVideos]);
+      // Then fetch fresh from Odoo in the background
+      await refreshSignageMedia();
+    };
 
-  // ---------------------------------------------------------------------------
-  // IMAGES → VIDEOS
-  // ---------------------------------------------------------------------------
+    void init();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [refreshSignageMedia]);
+
+  // Periodic re-fetch — interval comes from DB config
+  useEffect(() => {
+    if (refreshInterval <= 0) return;
+
+    const timer = setInterval(() => {
+      console.log(
+        `[SIGNAGE] Periodic refresh (every ${refreshInterval / 60000} min)`,
+      );
+      void refreshSignageMedia();
+    }, refreshInterval);
+
+    return () => clearInterval(timer);
+  }, [refreshInterval, refreshSignageMedia]);
+
+  // ── IMAGES → VIDEOS transition timer ───────────────────────────────────────
 
   useEffect(() => {
     if (mediaState !== "IMAGES") {
+      console.log("[MEDIA CHECK] Blocked — not in IMAGES state");
       return;
     }
-
     if (showError) {
+      console.log("[MEDIA CHECK] Blocked — error overlay active");
+      return;
+    }
+    if (!hasSignageMedia) {
+      console.log("[MEDIA CHECK] Blocked — no signage media available");
       return;
     }
 
-    if (!hasSignageVideos) {
-      console.log("[MEDIA CHECK] Blocked - no local signage videos");
-
-      return;
-    }
-
-    console.log(
-      `[MEDIA TIMER] Images → Videos in ${stateInterval / 1000} seconds`,
-    );
+    console.log(`[MEDIA TIMER] IMAGES → VIDEOS in ${stateInterval / 1000}s`);
 
     transitionTimerRef.current = setTimeout(() => {
-      console.log(
-        `[MEDIA TIMER] Switching to VIDEOS — video index ${nextVideoIndexRef.current}`,
-      );
-
-      transitionTimerRef.current = null;
-
+      console.log("[MEDIA TIMER] Switching to VIDEOS");
       setMediaState("VIDEOS");
     }, stateInterval);
 
     return () => {
-      if (transitionTimerRef.current) {
-        clearTimeout(transitionTimerRef.current);
-
-        transitionTimerRef.current = null;
-      }
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
     };
-  }, [mediaState, showError, hasSignageVideos, stateInterval]);
+  }, [mediaState, showError, hasSignageMedia, stateInterval]);
 
-  // ---------------------------------------------------------------------------
-  // Error overlay timeout
-  // ---------------------------------------------------------------------------
+  // ── Watchdog ────────────────────────────────────────────────────────────────
+
+  const clearWatchdog = () => {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  };
 
   useEffect(() => {
-    if (!showError) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      console.log("[WATCHDOG] Error dismissed - resuming images");
-
-      setShowError(false);
-      setRetryCount(0);
-    }, ERROR_DISPLAY_DURATION);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [showError]);
-
-  // ---------------------------------------------------------------------------
-  // Watchdog
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (mediaState !== "VIDEOS") {
-      return;
-    }
-
-    clearWatchdog();
+    if (mediaState !== "VIDEOS") return;
 
     console.log(
-      `[WATCHDOG] Waiting ${
-        WATCHDOG_TIMEOUT_MS / 1000
-      } seconds for video playback`,
+      `[WATCHDOG] Waiting ${WATCHDOG_TIMEOUT_MS / 1000}s for playback...`,
     );
 
     watchdogRef.current = setTimeout(() => {
-      const nextRetry = retryCount + 1;
-
-      console.warn(`[WATCHDOG] Playback failed — ${nextRetry}/${MAX_RETRIES}`);
-
-      if (nextRetry >= MAX_RETRIES) {
+      const next = retryCount + 1;
+      console.warn(`[WATCHDOG] No playback — retry ${next}/${MAX_RETRIES}`);
+      if (next >= MAX_RETRIES) {
+        console.error("[WATCHDOG] Max retries — showing error");
         setShowError(true);
-      } else {
-        setRetryCount(nextRetry);
       }
-
+      setRetryCount(next);
       setMediaState("IMAGES");
     }, WATCHDOG_TIMEOUT_MS);
 
-    return () => {
-      clearWatchdog();
-    };
-  }, [mediaState, retryCount, clearWatchdog]);
+    return () => clearWatchdog();
+  }, [mediaState]);
 
-  // ---------------------------------------------------------------------------
-  // Playback confirmed
-  // ---------------------------------------------------------------------------
+  // Auto-dismiss error after display duration
+  useEffect(() => {
+    if (!showError) return;
+    const timer = setTimeout(() => {
+      setShowError(false);
+      setRetryCount(0);
+    }, ERROR_DISPLAY_DURATION);
+    return () => clearTimeout(timer);
+  }, [showError]);
 
-  const handlePlaybackStarted = useCallback(() => {
-    console.log("[WATCHDOG] Playback confirmed");
+  // ── Playback callbacks ──────────────────────────────────────────────────────
 
+  const handlePlaybackStarted = () => {
+    console.log("[WATCHDOG] Playback confirmed — cancelled");
     clearWatchdog();
-
     setRetryCount(0);
-  }, [clearWatchdog]);
+  };
 
-  // ---------------------------------------------------------------------------
-  // ONE video finished
-  // ---------------------------------------------------------------------------
-
-  const handleVideoFinished = useCallback(() => {
-    console.log(
-      `[MEDIA TIMER] Video ${nextVideoIndexRef.current + 1} finished`,
-    );
-
+  const handleVideosFinished = () => {
+    console.log("[MEDIA TIMER] Videos finished — back to IMAGES");
     clearWatchdog();
+    setVideoIndex((prev) => prev + 1); // VideoComponent uses modulo internally
+    requestAnimationFrame(() => setMediaState("IMAGES"));
+  };
 
-    /*
-     * Advance the index BEFORE going back
-     * to IMAGES.
-     *
-     * Example:
-     *
-     * 0 finishes → next = 1
-     * 1 finishes → next = 2
-     * 2 finishes → next = 3
-     *
-     * Once we reach the end, wrap back
-     * around to video 0.
-     */
-    nextVideoIndexRef.current += 1;
-
-    if (hasSignageVideos) {
-      /*
-       * We don't know the exact count here,
-       * so load it from disk before wrapping.
-       */
-      void (async () => {
-        try {
-          const videos = await loadPreparedSignageVideos();
-
-          if (videos.length === 0) {
-            nextVideoIndexRef.current = 0;
-          } else {
-            nextVideoIndexRef.current =
-              nextVideoIndexRef.current % videos.length;
-          }
-        } catch {
-          nextVideoIndexRef.current = 0;
-        }
-
-        setMediaState("IMAGES");
-      })();
-
-      return;
-    }
-
-    nextVideoIndexRef.current = 0;
-    setMediaState("IMAGES");
-  }, [clearWatchdog, hasSignageVideos]);
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -310,8 +195,8 @@ export const MediaController = () => {
 
       {mediaState === "VIDEOS" && (
         <VideoComponent
-          videoIndex={nextVideoIndexRef.current}
-          onVideoFinished={handleVideoFinished}
+          videoIndex={videoIndex}
+          onVideoFinished={handleVideosFinished}
           onPlaybackStarted={handlePlaybackStarted}
         />
       )}
@@ -320,12 +205,10 @@ export const MediaController = () => {
         <View style={styles.errorOverlay}>
           <View style={styles.errorCard}>
             <Text style={styles.errorTitle}>Video Playback Unavailable</Text>
-
             <Text style={styles.errorMessage}>
               Videos could not be loaded after several attempts.{"\n"}
               Please restart the app in a few minutes.
             </Text>
-
             <Text style={styles.errorSub}>
               Promotion images will continue to display.
             </Text>

@@ -1,6 +1,6 @@
 import {
-  loadPreparedSignageVideos,
-  PreparedSignageVideo,
+  getCachedSignageMedia,
+  SignageItem,
 } from "@/frontend/services/MediaService";
 import { VideoStyles } from "@/styling/MediaStyles";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -23,7 +23,7 @@ export const VideoComponent = ({
   const { width, height } = useWindowDimensions();
   const styles = VideoStyles(width, height);
 
-  const [video, setVideo] = useState<PreparedSignageVideo | null>(null);
+  const [video, setVideo] = useState<SignageItem | null>(null);
 
   const isMounted = useRef(true);
   const hasSignaledPlayback = useRef(false);
@@ -54,7 +54,7 @@ export const VideoComponent = ({
       try {
         console.log(`[VIDEO] Loading signage video at index ${videoIndex}`);
 
-        const preparedVideos = await loadPreparedSignageVideos();
+        const preparedVideos = await getCachedSignageMedia();
 
         if (!isMounted.current) {
           return;
