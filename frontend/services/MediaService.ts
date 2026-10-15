@@ -17,12 +17,20 @@
 // -----------------------------------------------------------------------------
 
 export type {
-  MediaDownloadProgress, MediaDownloadState, MediaDownloadStatus, MediaFrequency, MediaPlayerConfigItem,
+  MediaDownloadProgress,
+  MediaDownloadState,
+  MediaDownloadStatus,
+  MediaFrequency,
+  MediaPlayerConfigItem,
   MediaPlayerConfigResponse,
   MediaPlayerLoginPayload,
-  MediaPlayerVersion, MediaType,
-  PlaylistItems, PlaylistMeta, PlaylistRefreshResult, PreparedSignageVideo,
-  SignageItem, SignageMeta, SignageVersion
+  MediaPlayerVersion,
+  MediaType,
+  PlaylistItems,
+  PlaylistMeta,
+  PlaylistRefreshResult,
+  PreparedSignageVideo,
+  SignageVersion
 } from "./media/MediaTypes";
 
 // -----------------------------------------------------------------------------
@@ -42,8 +50,10 @@ export {
 
 export {
   clearMediaPlayerCache,
-  deletePlaylistFiles, getMediaDownloadState,
-  isMediaReady, loadAvailablePlaylist,
+  deletePlaylistFiles,
+  getMediaDownloadState,
+  isMediaReady,
+  loadAvailablePlaylist,
   loadPreparedPlaylist
 } from "./media/MediaStorage";
 
@@ -61,9 +71,13 @@ export {
 // Signage
 // -----------------------------------------------------------------------------
 
+// Signage
 export {
-  clearSignageCache as clearVideoCache, fetchSignageVideos, getSignageVersion, getPreparedSignageVideos as loadPreparedSignageVideos, prepareSignageVideos
+  fetchSignageMedia,
+  getCachedSignageMedia
 } from "./media/SignageService";
+
+export type { SignageItem, SignageMeta } from "./media/SignageService";
 
 // -----------------------------------------------------------------------------
 // URL helper

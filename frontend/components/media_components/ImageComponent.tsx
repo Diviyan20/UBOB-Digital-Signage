@@ -38,7 +38,7 @@ export const ImageComponent: React.FC = React.memo(() => {
 
   const [displayDuration, setDisplayDuration] = useState(5000);
 
-  const [promotionRefresh, setPromotionRefresh] = useState(30000);
+  const [promotionRefresh, setPromotionRefresh] = useState(300000);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -66,8 +66,6 @@ export const ImageComponent: React.FC = React.memo(() => {
         console.log("[CONFIG] Config object:", data.config);
 
         const imageDuration = Number(data.data?.image_display_duration);
-
-        const promotionRefresh = Number(data.data?.refresh_status);
 
         console.log(`[CONFIG] image_display_duration = ${imageDuration}ms`);
 

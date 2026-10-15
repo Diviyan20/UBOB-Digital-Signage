@@ -4,7 +4,6 @@ import {
   MediaDownloadProgress,
   MediaPlayerLoginPayload,
   prepareMediaPlayerPlaylist,
-  prepareSignageVideos,
 } from "./MediaService";
 
 export type ScreenType = "signage" | "media";
@@ -178,22 +177,8 @@ export const loginOutlet = async (
 
       await AsyncStorage.setItem("outlet_id", outletId);
 
-      try {
-        console.log("[LOGIN] Preparing signage videos...");
-
-        await prepareSignageVideos(outletId);
-
-        console.log("[LOGIN] Signage videos prepared successfully");
-      } catch (error: any) {
-        console.error("[LOGIN] Signage video preparation failed:", error);
-
-        return {
-          success: false,
-          status: "error",
-          errorType: "network",
-          error: "Network connectivity issues, please try again",
-        };
-      }
+      // Remove the prepareSignageVideos try/catch block entirely —
+      // MediaController handles fetching and downloading on its own timer
 
       await saveOutletSession(
         outletId,
